@@ -30,7 +30,7 @@ try:
 except ImportError:
     SPEECH_RECOGNITION_AVAILABLE = False
     print("Warning: speech_recognition package not available. Audio transcription will not work.")
-from difflib import SequenceMatcher
+from difflib import SequenceMatcher 
 import json
 from mongo import mongo_db
 from config.constants import ROLES, MODULES, LEVELS, TEST_TYPES, GRAMMAR_CATEGORIES, CRT_CATEGORIES, QUESTION_TYPES, TEST_CATEGORIES, MODULE_CATEGORIES
@@ -1642,9 +1642,12 @@ def create_online_test_with_random_questions():
 def submit_practice_test():
     """Submit practice test with student audio recordings or MCQ answers"""
     try:
+        print("entered into submit practive test: ")
         current_user_id = get_jwt_identity()
+        print("user practive test: ",current_user_id)
         data = request.form.to_dict()
         files = request.files
+
         
         # Validate required fields
         if not data.get('test_id'):
@@ -1663,7 +1666,9 @@ def submit_practice_test():
             }), 404
         
         # Check if student has access to this test
-        student = mongo_db.students.find_one({'user_id': current_user_id})
+        test_user_id = ObjectId(current_user_id)
+        print(test_user_id)
+        student = mongo_db.students.find_one({'user_id': test_user_id})
         if not student:
             return jsonify({
                 'success': False,
@@ -1689,14 +1694,18 @@ def submit_practice_test():
         results = []
         total_score = 0
         correct_answers = 0
-        
+        print("data : ",data)
         for i, question in enumerate(test['questions']):
             if question.get('question_type') == 'mcq':
                 # Handle MCQ question
-                answer_key = f'answer_{i}'
+                print("question : ",question)
+                id = question.get('id') or question.get('_id')
+                answer_key = f'answer_{id}'
+                print("answerkey:", answer_key)
                 if answer_key in data:
                     student_answer = data[answer_key]
-                    correct_answer = question.get('correct_answer', '')
+                    correct_answer = question.get('answer', '')
+                    print("student_data : ",student_answer," Correct_answer : ",correct_answer)
                     is_correct = student_answer == correct_answer
                     score = 1 if is_correct else 0
                     
