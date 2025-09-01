@@ -1642,9 +1642,9 @@ def create_online_test_with_random_questions():
 def submit_practice_test():
     """Submit practice test with student audio recordings or MCQ answers"""
     try:
-        print("entered into submit practive test: ")
+
         current_user_id = get_jwt_identity()
-        print("user practive test: ",current_user_id)
+
         data = request.form.to_dict()
         files = request.files
 
@@ -1667,7 +1667,6 @@ def submit_practice_test():
         
         # Check if student has access to this test
         test_user_id = ObjectId(current_user_id)
-        print(test_user_id)
         student = mongo_db.students.find_one({'user_id': test_user_id})
         if not student:
             return jsonify({
@@ -1694,7 +1693,6 @@ def submit_practice_test():
         results = []
         total_score = 0
         correct_answers = 0
-        print("data : ",data)
         for i, question in enumerate(test['questions']):
             if question.get('question_type') == 'mcq':
                 # Handle MCQ question
