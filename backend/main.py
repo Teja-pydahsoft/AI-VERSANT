@@ -36,7 +36,7 @@ def create_app():
         print("⚠️  AWS S3 initialization failed - audio uploads may not work")
 
     # CORS configuration
-    default_origins = 'http://localhost:3000,http://localhost:5173,https://pydah-studyedge.vercel.app,https://versant-frontend.vercel.app,https://crt.pydahsoft.in,https://ai-versant-backend.onrender.com'
+    default_origins = 'http://localhost:3000,http://localhost:5173,https://pydah-studyedge.vercel.app,https://versant-frontend.vercel.app,https://crt.pydahsoft.in,https://ai-versant.onrender.com'
     cors_origins = os.getenv('CORS_ORIGINS', default_origins)
 
     # Enhanced CORS configuration to handle all possible origins
