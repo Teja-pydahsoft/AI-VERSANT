@@ -76,6 +76,16 @@ python-socketio>=5.10.0
 flask-socketio>=5.3.0
 eventlet>=0.33.0
 
+# Performance monitoring and optimization
+psutil>=5.9.0
+gunicorn[eventlet]>=22.0.0
+waitress>=2.1.0
+
+# Unix/Linux optimized workers for production
+gunicorn[gevent]>=22.0.0
+gevent>=23.0.0
+uvicorn[standard]>=0.24.0
+
 # Task scheduling
 apscheduler>=3.10.0
 

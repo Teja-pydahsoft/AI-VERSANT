@@ -10,15 +10,17 @@ import multiprocessing
 bind = f"0.0.0.0:{os.getenv('PORT', '5000')}"
 backlog = 2048
 
-# Worker processes
-workers = multiprocessing.cpu_count() * 2 + 1
+# Worker processes - optimized for high concurrency
+workers = min(multiprocessing.cpu_count() * 4, 16)  # Cap at 16 workers
 worker_class = "eventlet"
-max_requests = 1000
+max_requests = 500  # Reduced to prevent memory leaks
 max_requests_jitter = 50
+worker_connections = 1000  # Eventlet specific
 
-# Timeout
-timeout = 30
-keepalive = 2
+# Timeout - increased for complex operations
+timeout = 120
+keepalive = 5
+graceful_timeout = 30
 
 # Logging
 accesslog = "-"

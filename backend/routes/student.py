@@ -1062,14 +1062,14 @@ def submit_random_test(test_id):
             question_id = f'question_{i}'
             student_answer = answers.get(question_id, '')
             
-            # Get correct answer from question
+            # Get correct answer from question         
             correct_answer_letter = question.get('answer', '')  # A, B, C, or D
             correct_answer_text = ''
             
             # Map answer letter to actual option text
             if correct_answer_letter == 'A':
                 correct_answer_text = question.get('optionA', '')
-            elif correct_answer_letter == 'B':
+            elif correct_answer_letter == 'B':   
                 correct_answer_text = question.get('optionB', '')
             elif correct_answer_letter == 'C':
                 correct_answer_text = question.get('optionC', '')

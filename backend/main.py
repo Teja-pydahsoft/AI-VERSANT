@@ -247,5 +247,22 @@ def create_app():
 app, socketio = create_app()
 
 if __name__ == "__main__":
+    import platform
+    
     port = int(os.environ.get("PORT", 8000))
-    socketio.run(app, host="0.0.0.0", port=port)
+    debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+    
+    # Windows-specific optimizations
+    if platform.system().lower() == 'windows':
+        print("🪟 Windows detected - using optimized settings")
+        socketio.run(
+            app, 
+            host="0.0.0.0", 
+            port=port, 
+            debug=debug,
+            use_reloader=debug,
+            log_output=True
+        )
+    else:
+        # Unix/Linux settings
+        socketio.run(app, host="0.0.0.0", port=port)

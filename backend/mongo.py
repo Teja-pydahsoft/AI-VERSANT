@@ -24,8 +24,36 @@ class MongoDB:
         self.crt_topics = self.db.crt_topics
         self.test_results = self.db.test_results
         
-        # Create indexes for better performance
-        self._create_indexes()
+        # Create indexes for better performance (only once)
+        self._create_indexes_once()
+    
+    def _create_indexes_once(self):
+        """Create database indexes only once to avoid repeated operations"""
+        import threading
+        
+        # Use a class variable to track if indexes have been created
+        if not hasattr(MongoDB, '_indexes_created'):
+            MongoDB._indexes_created = False
+        
+        if MongoDB._indexes_created:
+            return  # Indexes already created
+        
+        # Use a lock to ensure only one thread creates indexes
+        if not hasattr(MongoDB, '_index_lock'):
+            MongoDB._index_lock = threading.Lock()
+        
+        with MongoDB._index_lock:
+            if MongoDB._indexes_created:
+                return  # Another thread already created them
+            
+            try:
+                print("🔄 Creating MongoDB indexes (first time only)...")
+                self._create_indexes()
+                MongoDB._indexes_created = True
+                print("✅ MongoDB indexes created successfully")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not create some indexes: {e}")
+                # Continue without failing the entire initialization
     
     def _create_indexes(self):
         """Create database indexes for better query performance"""
@@ -78,7 +106,6 @@ class MongoDB:
             self.test_results.create_index("submitted_at")
             self.test_results.create_index([("test_id", 1), ("student_id", 1)])
             
-            print("✅ MongoDB indexes created successfully")
         except Exception as e:
             print(f"⚠️ Warning: Could not create some indexes: {e}")
             # Continue without failing the entire initialization
@@ -494,5 +521,19 @@ class MongoDB:
         batch_ids = [b['_id'] for b in self.batches.find({'campus_id': campus_id})]
         return [i['_id'] for i in self.db.batch_course_instances.find({'batch_id': {'$in': batch_ids}})]
 
-# Global MongoDB instance
-mongo_db = MongoDB() 
+# Global MongoDB instance with lazy initialization
+_mongo_db_instance = None
+
+def get_mongo_db():
+    """Get MongoDB instance with lazy initialization"""
+    global _mongo_db_instance
+    if _mongo_db_instance is None:
+        _mongo_db_instance = MongoDB()
+    return _mongo_db_instance
+
+# For backward compatibility, create a property-like access
+class MongoDBAccessor:
+    def __getattr__(self, name):
+        return getattr(get_mongo_db(), name)
+
+mongo_db = MongoDBAccessor() 
