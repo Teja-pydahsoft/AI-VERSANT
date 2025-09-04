@@ -144,12 +144,12 @@ def run_comprehensive_test():
     # Test configurations
     test_configs = [
         {
-            'url': 'http://192.168.3.189:5000',
+            'url': 'https://ravi-check-versant.onrender.com',
             'name': 'Production Server (Waitress)',
             'port': 5000
         },
         {
-            'url': 'http://192.168.3.189:8000', 
+            'url': 'https://ravi-check-versant.onrender.com', 
             'name': 'Main Application (SocketIO)',
             'port': 8000
         }
