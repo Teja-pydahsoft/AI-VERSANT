@@ -5,9 +5,13 @@ Cloud-optimized Gunicorn configuration for platforms like Render, Heroku, etc.
 import os
 import multiprocessing
 
-# Server socket
-bind = f"0.0.0.0:{os.getenv('PORT', '5000')}"
+# Server socket - Use PORT environment variable for cloud platforms
+port = os.getenv('PORT', '5000')
+bind = f"0.0.0.0:{port}"
 backlog = 2048
+
+# Ensure we're using the correct port
+print(f"🌐 Binding to port: {port}")
 
 # Worker processes - optimized for cloud platforms
 # Cloud platforms typically have limited resources
@@ -45,9 +49,11 @@ group = None
 # Cloud-specific server hooks
 def on_starting(server):
     print("☁️ Starting VERSANT Backend on Cloud Platform...")
+    print(f"   Port: {port}")
     print(f"   Workers: {workers}")
     print(f"   Worker Class: {worker_class}")
     print(f"   Worker Connections: {worker_connections}")
+    print(f"   Bind Address: {bind}")
 
 def on_reload(server):
     print("🔄 Reloading VERSANT Backend on Cloud...")

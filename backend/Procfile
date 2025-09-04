@@ -1,10 +1,10 @@
 # Production deployment configuration for Render.com
 # This file tells the deployment platform how to run your application
 
-# Optimized for Render.com and similar cloud platforms
-web: gunicorn --config gunicorn_cloud_config.py application:application
+# Render.com optimized configuration
+web: gunicorn --config gunicorn_render_config.py application:application
 
 # Alternative configurations:
 # web: gunicorn --workers 4 --worker-class gevent --worker-connections 1000 --bind 0.0.0.0:$PORT application:application
+# web: gunicorn --config gunicorn_cloud_config.py application:application
 # web: gunicorn --config gunicorn_unix_config.py application:application
-# web: gunicorn --config gunicorn_config.py wsgi:application
