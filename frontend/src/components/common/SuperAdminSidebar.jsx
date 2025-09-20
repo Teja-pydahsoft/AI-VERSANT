@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
-import { Users, FilePlus, Building2, BarChart, LayoutDashboard, BookCopy, GraduationCap, Shield, Settings, Menu, X, FormInput, ClipboardList, BarChart3 } from 'lucide-react'
+import { Users, FilePlus, Building2, BarChart, LayoutDashboard, BookCopy, GraduationCap, Shield, Settings, Menu, X, FormInput, ClipboardList, BarChart3, TrendingUp, Activity } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { motion } from 'framer-motion'
 import { toast } from 'react-hot-toast'
@@ -176,6 +176,9 @@ const SuperAdminSidebar = () => {
         { name: 'Student Management', path: '/superadmin/students', icon: GraduationCap, module: 'student_management' },
         { name: 'Results Management', path: '/superadmin/results', icon: BarChart, module: 'results_management' },
         
+        // Analytics (hidden from menu - access via direct URL)
+        // { name: 'Real Analytics', path: '/superadmin/real-analytics', icon: Activity, module: 'analytics' },
+        
         // Form Portal
         { name: 'Form Management', path: '/superadmin/form-management', icon: ClipboardList, module: 'form_management' },
       ]
@@ -199,6 +202,9 @@ const SuperAdminSidebar = () => {
       { name: 'CRT Upload', path: '/superadmin/crt-upload', icon: FilePlus, module: 'crt_upload', isUpload: true },
       { name: 'Student Management', path: '/superadmin/students', icon: GraduationCap, module: 'student_management' },
       { name: 'Results Management', path: '/superadmin/results', icon: BarChart, module: 'results_management' },
+      
+      // Analytics (hidden from menu - access via direct URL)
+      // { name: 'Real Analytics', path: '/superadmin/real-analytics', icon: Activity, module: 'analytics' },
       
       // Form Portal
       { name: 'Form Management', path: '/superadmin/form-management', icon: ClipboardList, module: 'form_management' },

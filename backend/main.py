@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from scheduler import schedule_daily_notifications
 from config.aws_config import init_aws
 from connection_monitor import start_connection_monitoring, stop_connection_monitoring, get_connection_health
-from utils.push_service_final import initialize_push_service
+# Push service removed - will be reimplemented
 
 # Import Windows optimizations first
 try:
@@ -44,6 +44,15 @@ def create_app():
     jwt = JWTManager(app)
     bcrypt.init_app(app)
     socketio.init_app(app)
+    
+    # Initialize analytics middleware (must be done early)
+    from middleware.analytics_middleware import init_analytics_middleware
+    init_analytics_middleware(app)
+    
+    # Initialize real analytics middleware (must be done early)
+    from middleware.real_analytics_middleware import init_real_analytics_middleware
+    init_real_analytics_middleware(app)
+    print("✅ Analytics middleware initialized successfully")
     
     # Socket.IO authentication middleware
     @socketio.on('connect')
@@ -324,6 +333,13 @@ def create_app():
     # Register SMS management blueprint
     app.register_blueprint(sms_bp, url_prefix='/sms-management')
     
+    # Register Batch Processing blueprint
+    from routes.batch_processing import batch_processing_bp
+    app.register_blueprint(batch_processing_bp, url_prefix='/batch-processing')
+    
+    # Real Analytics (only analytics system we're using)
+    from routes.real_analytics import real_analytics_bp
+    app.register_blueprint(real_analytics_bp, url_prefix='/real-analytics')
     
     # Register Global Settings blueprint
     app.register_blueprint(global_settings_bp, url_prefix='/global-settings')
@@ -337,13 +353,7 @@ def create_app():
     app.register_blueprint(form_submissions_bp, url_prefix='/form-submissions')
     app.register_blueprint(form_analytics_bp, url_prefix='/form-analytics')
     
-    # Register Push Notifications blueprint
-    from routes.push_notifications import push_notifications_bp
-    app.register_blueprint(push_notifications_bp, url_prefix='/notifications')
     
-    # Register OneSignal Notifications blueprint
-    from routes.onesignal_notifications import onesignal_notifications_bp
-    app.register_blueprint(onesignal_notifications_bp, url_prefix='/onesignal')
     
     # Register async routes
     app.register_blueprint(async_auth_bp, url_prefix='/async-auth')
@@ -393,19 +403,10 @@ def create_app():
     except Exception as e:
         print(f"⚠️ Warning: Async system initialization failed: {e}")
     
-    # Initialize Push Notification Service
-    try:
-        vapid_private_key = os.getenv('VAPID_PRIVATE_KEY')
-        vapid_public_key = os.getenv('VAPID_PUBLIC_KEY')
-        vapid_email = os.getenv('VAPID_EMAIL', 'admin@crt.pydahsoft.in')
-        
-        if vapid_private_key and vapid_public_key:
-            initialize_push_service(vapid_private_key, vapid_public_key, vapid_email)
-            print("✅ Push Notification Service initialized")
-        else:
-            print("⚠️ Push Notification Service not initialized - VAPID keys not found")
-    except Exception as e:
-        print(f"❌ Error initializing Push Notification Service: {e}")
+    # Real analytics system is initialized above with middleware
+    
+    # TODO: Initialize Push Notification Service (removed for cleanup)
+    print("ℹ️ Push Notification Service will be reimplemented")
     
     # Add development routes if in development mode
     if os.environ.get("FLASK_DEBUG", "False").lower() == "true" or os.environ.get("DEV_MODE", "False").lower() == "true":
@@ -482,10 +483,30 @@ if __name__ == "__main__":
     print("🔍 Starting MongoDB connection monitor...")
     start_connection_monitoring()
     
+    # Start batch processor
+    print("🚀 Starting batch processor...")
+    from utils.batch_processor import start_batch_processor
+    start_batch_processor()
+    
+    # Start worker monitoring for hosting environments
+    print("🔍 Starting worker monitoring...")
+    from utils.hosting_worker_manager import start_worker_monitoring
+    start_worker_monitoring()
+    
+    # Start log analytics system
+    print("📊 Starting log analytics system...")
+    from utils.log_analytics import start_log_analytics, stop_log_analytics
+    start_log_analytics()
+    
     # Register cleanup function
     def cleanup():
         print("🧹 Cleaning up connections...")
         stop_connection_monitoring()
+        from utils.batch_processor import stop_batch_processor
+        stop_batch_processor()
+        from utils.hosting_worker_manager import stop_worker_monitoring
+        stop_worker_monitoring()
+        stop_log_analytics()
     
     atexit.register(cleanup)
     

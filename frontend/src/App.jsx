@@ -6,8 +6,6 @@ import { DashboardProvider } from './contexts/DashboardContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { FeatureProvider } from './contexts/FeatureContext'
 import { FormPortalProvider } from './contexts/FormPortalContext'
-import { PushNotificationProvider } from './components/common/PushNotificationManager'
-import { OneSignalProvider } from './components/common/OneSignalIntegration'
 
 // Auth Pages
 import Login from './pages/auth/Login'
@@ -51,8 +49,6 @@ import OnlineExams from './pages/student/OnlineExams'
 import TestHistory from './pages/student/TestHistory'
 
 // Test Pages
-import PushNotificationTest from './pages/test/PushNotificationTest'
-import HybridNotificationTest from './components/test/HybridNotificationTest'
 import ProgressTracker from './pages/student/ProgressTracker'
 import StudentProfile from './pages/student/Profile'
 import SuperAdminProfile from './pages/superadmin/Profile'
@@ -75,6 +71,9 @@ import CampusAdminSidebar from './components/common/CampusAdminSidebar'
 import CourseAdminSidebar from './components/common/CourseAdminSidebar'
 import StudentSidebar from './pages/student/StudentSidebar'
 
+// Analytics Pages
+import RealAnalytics from './pages/analytics/RealAnalytics'
+
 function App() {
   return (
     <ErrorBoundary>
@@ -83,8 +82,6 @@ function App() {
           <NotificationProvider>
             <FeatureProvider>
             <FormPortalProvider>
-            <PushNotificationProvider>
-            <OneSignalProvider>
             <div className="min-h-screen bg-gray-50">
               <Toaster 
                 position="top-right"
@@ -138,6 +135,7 @@ function App() {
                     {/* Form Portal Routes */}
                     <Route path="form-management" element={<FormManagement />} />
                     <Route path="form-submissions/:formId" element={<SubmissionViewer />} />
+                    <Route path="real-analytics" element={<RealAnalytics />} />
                     <Route path="profile" element={<SuperAdminProfile />} />
                   </Route>
 
@@ -184,15 +182,11 @@ function App() {
                 </Route>
 
                 {/* Test Routes */}
-                <Route path="/test/push-notifications" element={<PushNotificationTest />} />
-                <Route path="/test/hybrid-notifications" element={<HybridNotificationTest />} />
 
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>
-            </OneSignalProvider>
-            </PushNotificationProvider>
             </FormPortalProvider>
             </FeatureProvider>
           </NotificationProvider>

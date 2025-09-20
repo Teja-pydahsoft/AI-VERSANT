@@ -147,6 +147,7 @@ def create_audio_test():
 
         # Insert test
         result = mongo_db.tests.insert_one(test_doc)
+        test_id = str(result.inserted_id)
         
         # Update question usage count for questions from the bank
         if questions:
@@ -164,11 +165,41 @@ def create_audio_test():
                     except Exception as e:
                         current_app.logger.warning(f"Failed to update usage count for question {question.get('_id')}: {e}")
 
+        # Send test notifications to students in background
+        try:
+            from utils.test_student_selector import get_students_by_batch_course_combination
+            from utils.batch_processor import create_test_notification_batch_job
+            
+            # Get students for this test
+            students = get_students_by_batch_course_combination(batch_ids, course_ids)
+            
+            if students:
+                # Format start date for notification
+                start_date_str = startDateTime if test_type.lower() == 'online' else 'Immediately'
+                
+                # Create batch job for test notifications
+                batch_result = create_test_notification_batch_job(
+                    test_id=test_id,
+                    test_name=test_name,
+                    start_date=start_date_str,
+                    students=students,
+                    batch_size=100,
+                    interval_minutes=3
+                )
+                
+                current_app.logger.info(f"📧📱 Test notification batch created: {batch_result}")
+            else:
+                current_app.logger.warning(f"⚠️ No students found for test notification: batch_ids={batch_ids}, course_ids={course_ids}")
+                
+        except Exception as e:
+            current_app.logger.error(f"❌ Failed to create test notification batch: {e}")
+            # Don't fail test creation if notifications fail
+
         return jsonify({
             'success': True,
             'message': f'{module_id} test created successfully',
             'data': {
-                'test_id': str(result.inserted_id),
+                'test_id': test_id,
                 'question_count': len(processed_questions)
             }
         }), 201

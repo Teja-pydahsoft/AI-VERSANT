@@ -954,19 +954,7 @@ def submit_test(test_id):
             current_app.logger.error(f"Error saving to test_results collection: {e}", exc_info=True)
             # Don't fail the entire request if test_results saving fails
         
-        # Send push notification for test completion
-        try:
-            from utils.push_notification_helper import push_notification_helper
-            push_notification_helper.send_test_completion_notification(
-                test_id=test_id,
-                student_id=str(current_user_id),
-                test_name=test.get('name', 'Test'),
-                score=score,
-                total_marks=total_questions
-            )
-        except Exception as push_error:
-            current_app.logger.warning(f"Failed to send push notification for test completion: {push_error}")
-            # Don't fail the test submission if push notification fails
+        # TODO: Add push notification for test completion
         
         return jsonify({
             'success': True,

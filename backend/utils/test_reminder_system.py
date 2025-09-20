@@ -126,9 +126,6 @@ class TestReminderSystem:
             # Format start time
             start_time_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
             
-            # Create exam link (same as email service)
-            exam_link = f"https://crt.pydahsoft.in/student/exam/{test_id}"
-            
             # Send SMS to all students
             results = []
             for student in students:
@@ -138,7 +135,7 @@ class TestReminderSystem:
                             phone_number=student['mobile'],
                             test_name=test_name,
                             start_time=start_time_str,
-                            exam_link=exam_link
+                            test_id=test_id
                         )
                         results.append({
                             'student_id': str(student['_id']),
@@ -228,7 +225,7 @@ class TestReminderSystem:
                         result = send_test_reminder_sms(
                             phone_number=student['mobile'],
                             test_name=test_name,
-                            exam_link=exam_link
+                            test_id=test_id
                         )
                         results.append({
                             'student_id': str(student['_id']),

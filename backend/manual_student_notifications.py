@@ -452,7 +452,7 @@ class StudentNotificationManager:
                 phone_number=phone_number,
                 test_name=test['name'],
                 start_time=start_time,
-                exam_link=exam_link
+                test_id=test['id']
             )
             
             return sms_result
@@ -472,9 +472,9 @@ class StudentNotificationManager:
             exam_link = f"{self.login_url}?redirect=/student/online-exams/{test['id']}"
             
             sms_result = send_test_reminder_sms(
-                phone=phone_number,
+                phone_number=phone_number,
                 test_name=test['name'],
-                exam_link=exam_link
+                test_id=test['id']
             )
             
             return sms_result

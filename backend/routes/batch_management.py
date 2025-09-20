@@ -339,29 +339,7 @@ def create_batch():
             except Exception as e:
                 print(f"Failed to send welcome email to {student['email_id']}: {e}")
 
-        # Send push notification to all students in the new batch
-        try:
-            from utils.push_notification_helper import push_notification_helper
-            # Get campus and course names for the notification
-            campus = mongo_db.campuses.find_one({'_id': ObjectId(campus_id)})
-            course = mongo_db.courses.find_one({'_id': ObjectId(course_id)})
-            
-            campus_name = campus.get('name', 'Campus') if campus else 'Campus'
-            course_name = course.get('name', 'Course') if course else 'Course'
-            
-            # Get all student IDs in the new batch
-            student_ids = [str(student_doc['_id']) for student_doc in created_students]
-            
-            push_notification_helper.send_batch_creation_notification(
-                batch_name=batch_name,
-                campus_name=campus_name,
-                course_name=course_name,
-                target_students=student_ids
-            )
-            print(f"Push notification sent to {len(student_ids)} students for batch {batch_name}")
-        except Exception as push_error:
-            print(f"Failed to send push notification for batch creation: {push_error}")
-            # Don't fail the batch creation if push notification fails
+        # TODO: Add push notification for batch creation
 
         return jsonify({
             'success': True,
@@ -2848,100 +2826,56 @@ def send_batch_emails(batch_id):
         if total_students == 0:
             return jsonify({'success': False, 'message': 'No students with email addresses found in this batch'}), 400
 
-        # Create resilient services
-        resilient_services = create_resilient_services()
-        
-        # Track results
-        email_results = []
-        successful_emails = 0
-        failed_emails = 0
-
-        # Send emails with progress tracking
-        for index, student in enumerate(students_with_email):
-            student_name = student['name']
-            email = student['email']
-            username = student['username']
-            password = student['password']
-            
-            result = {
+        # Prepare students for batch processing
+        students_for_batch = []
+        for student in students_with_email:
+            student_data = {
                 'student_id': student['student_id'],
-                'name': student_name,
-                'email': email,
-                'email_sent': False,
-                'error': None
+                'name': student['name'],
+                'email': student['email'],
+                'mobile_number': student.get('mobile_number'),
+                'username': student['username'],
+                'password': student['password']
             }
+            students_for_batch.append(student_data)
+        
+        # Create batch job for email processing
+        try:
+            from utils.batch_processor import create_credentials_batch_job
             
-            try:
-                # Render email template
-                html_content = render_template(
-                    'student_credentials.html',
-                    params={
-                        'name': student_name,
-                        'username': username,
-                        'email': email,
-                        'password': password,
-                        'login_url': "https://crt.pydahsoft.in/login"
-                    }
-                )
-                
-                # Send email using resilient service
-                email_success = resilient_services['email'].send_email_resilient(
-                    to_email=email,
-                    to_name=student_name,
-                    subject="Welcome to Study Edge - Your Student Credentials",
-                    html_content=html_content
-                )
-                
-                result['email_sent'] = email_success
-                if email_success:
-                    successful_emails += 1
-                    current_app.logger.info(f"✅ Email sent to {email}")
-                else:
-                    failed_emails += 1
-                    result['error'] = 'Email sending failed after retries'
-                    current_app.logger.warning(f"⚠️ Email failed for {email}")
-                    
-            except Exception as e:
-                failed_emails += 1
-                result['error'] = str(e)
-                current_app.logger.error(f"❌ Email error for {email}: {e}")
+            batch_result = create_credentials_batch_job(
+                students=students_for_batch,
+                batch_size=100,
+                interval_minutes=3
+            )
             
-            email_results.append(result)
+            current_app.logger.info(f"📧📱 Email batch job created: {batch_result}")
             
             # Send progress update
-            percentage = int(((index + 1) / total_students) * 100)
             socketio.emit('email_progress', {
                 'user_id': current_user_id,
-                'status': 'sending_emails',
-                'total': total_students,
-                'processed': index + 1,
-                'percentage': percentage,
-                'message': f'Sending emails: {student_name} - {"✅" if result["email_sent"] else "❌"}',
-                'current_student': {
-                    'name': student_name,
-                    'email': email,
-                    'email_sent': result['email_sent']
-                }
-            }, room=str(current_user_id))
-
-        # Send completion notification
-        socketio.emit('email_progress', {
-            'user_id': current_user_id,
-            'status': 'completed',
+                'status': 'queued',
             'total': total_students,
             'processed': total_students,
             'percentage': 100,
-            'message': f'Email sending completed! {successful_emails} sent, {failed_emails} failed'
+                'message': f'Email batch job created successfully! {len(students_for_batch)} emails queued for background processing',
+                'batch_id': batch_result.get('batch_id'),
+                'estimated_completion': batch_result.get('estimated_completion')
         }, room=str(current_user_id))
+            
+        except Exception as e:
+            current_app.logger.error(f"❌ Failed to create email batch job: {e}")
+            # Fallback to individual email processing
+            self._process_emails_individually(students_with_email, current_user_id)
 
         return jsonify({
             'success': True,
-            'message': f'Email sending completed. {successful_emails} emails sent, {failed_emails} failed.',
+            'message': f'Email batch job created successfully. {len(students_for_batch)} emails queued for background processing.',
             'data': {
                 'total_students': total_students,
-                'successful_emails': successful_emails,
-                'failed_emails': failed_emails,
-                'email_results': email_results
+                'emails_queued': len(students_for_batch),
+                'batch_id': batch_result.get('batch_id') if 'batch_result' in locals() else None,
+                'estimated_completion': batch_result.get('estimated_completion') if 'batch_result' in locals() else None
             }
         }), 200
 

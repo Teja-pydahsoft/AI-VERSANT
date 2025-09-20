@@ -1,90 +1,128 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>New Module/Test Assigned</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #f8fafc; color: #222; }
-    .container { background: #fff; border-radius: 8px; padding: 32px; max-width: 600px; margin: 32px auto; box-shadow: 0 2px 8px #e0e7ef; }
-    .header { font-size: 1.5em; color: #2563eb; font-weight: bold; margin-bottom: 16px; }
-    .section { margin-bottom: 18px; }
-    .label { color: #64748b; font-weight: 500; }
-    .value { color: #22223b; font-weight: 600; }
-    .highlight { color: #059669; font-weight: bold; }
-    .footer { margin-top: 32px; color: #64748b; font-size: 0.95em; }
-    .details-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    .details-table td { padding: 6px 0; }
-    .details-table .label { width: 40%; }
-    .logo {
-      display: block;
-      margin: 0 auto 24px auto;
-      max-width: 200px;
-      height: auto;
-    }
-    .login-btn {
-      display: inline-block;
-      margin-top: 24px;
-      padding: 12px 28px;
-      background: #2563eb;
-      color: #fff;
-      border-radius: 6px;
-      text-decoration: none;
-      font-weight: bold;
-      font-size: 1.1em;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Test Scheduled</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 10px;
+        }
+        .test-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #007bff;
+        }
+        .test-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 10px;
+        }
+        .test-details {
+            margin: 10px 0;
+        }
+        .test-details strong {
+            color: #495057;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .cta-button:hover {
+            background-color: #0056b3;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .important {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <img src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_203,h_111,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png" alt="Study Edge Logo" class="logo" />
-    <div class="header">A New Module/Test Has Been Assigned to You!</div>
-    <div class="section">
-      <span class="label">Test Name:</span> <span class="value">{{ test_name or 'N/A' }}</span>
+    <div class="container">
+        <div class="header">
+            <div class="logo">Study Edge - Pydah College</div>
+            <h1>New Test Scheduled</h1>
+        </div>
+        
+        <p>Dear {{ name }},</p>
+        
+        <p>We are pleased to inform you that a new test has been scheduled for you.</p>
+        
+        <div class="test-info">
+            <div class="test-name">{{ test_name }}</div>
+            <div class="test-details">
+                <strong>Test ID:</strong> {{ test_id }}<br>
+                <strong>Start Date:</strong> {{ start_date }}<br>
+                <strong>Status:</strong> Ready to attempt
+            </div>
+        </div>
+        
+        <div class="important">
+            <strong>Important:</strong> Please ensure you have a stable internet connection and sufficient time to complete the test. The test will be available for 24 hours from the start date.
+        </div>
+        
+        <p>To attempt the test, please click the button below or visit the test URL directly:</p>
+        
+        <div style="text-align: center;">
+            <a href="{{ test_url }}" class="cta-button">Attempt Test Now</a>
+        </div>
+        
+        <p><strong>Test URL:</strong> <a href="{{ test_url }}">{{ test_url }}</a></p>
+        
+        <p>If you have any questions or face any technical issues, please contact your course administrator immediately.</p>
+        
+        <p>Good luck with your test!</p>
+        
+        <div class="footer">
+            <p>This is an automated notification from Study Edge - Pydah College</p>
+            <p>Please do not reply to this email</p>
+        </div>
     </div>
-    <table class="details-table">
-      <tr>
-        <td class="label">Module:</td>
-        <td class="value">{{ module_display_name or module or module_id or 'N/A' }}</td>
-      </tr>
-      <tr>
-        <td class="label">Level:</td>
-        <td class="value">{{ level_display_name or level or level_id or 'N/A' }}</td>
-      </tr>
-      <tr>
-        <td class="label">Type:</td>
-        <td class="value">{{ test_type or 'N/A' }}</td>
-      </tr>
-      <tr>
-        <td class="label">Total Questions:</td>
-        <td class="value">{{ question_count or 'N/A' }}</td>
-      </tr>
-      {% if is_online %}
-      <tr>
-        <td class="label">Start Date & Time:</td>
-        <td class="value">{{ start_dt or 'N/A' }}</td>
-      </tr>
-      <tr>
-        <td class="label">End Date & Time:</td>
-        <td class="value">{{ end_dt or 'N/A' }}</td>
-      </tr>
-      {% endif %}
-    </table>
-    <div class="section" style="margin-top: 18px;">
-      <span class="highlight">You have been assigned a new module/test. Click the button below to go directly to your test.</span>
-    </div>
-    <div style="text-align:center;">
-      {% if is_online %}
-        <a href="https://crt.pydahsoft.in/login?redirect=/student/online-exams/{{ test_id }}" class="login-btn">Go to Online Test</a>
-      {% else %}
-        <a href="https://crt.pydahsoft.in/login?redirect=/student/practice-modules/{{ test_id }}" class="login-btn">Go to Practice Test</a>
-      {% endif %}
-    </div>
-    <div class="footer">
-      If you have any questions, please contact your campus administrator.<br>
-      <br>
-      Good luck!<br>
-      <b>Study Edge Team</b>
-    </div>
-  </div>
 </body>
-</html> 
+</html>

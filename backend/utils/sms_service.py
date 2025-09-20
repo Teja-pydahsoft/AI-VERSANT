@@ -15,18 +15,16 @@ BULKSMS_SENDER_ID = os.getenv('BULKSMS_SENDER_ID', "PYDAHK")
 BULKSMS_ENGLISH_API_URL = os.getenv('BULKSMS_ENGLISH_API_URL', "https://www.bulksmsapps.com/api/apismsv2.aspx")
 BULKSMS_UNICODE_API_URL = os.getenv('BULKSMS_UNICODE_API_URL', "https://www.bulksmsapps.com/api/apibulkv2.aspx")
 
-# DLT Template IDs
-BULKSMS_DLT_TEMPLATE_ID = os.getenv('BULKSMS_DLT_TEMPLATE_ID', "1707175151835691501")
-BULKSMS_ENGLISH_DLT_TEMPLATE_ID = os.getenv('BULKSMS_ENGLISH_DLT_TEMPLATE_ID', "1707175151753778713")
-ADMIN_CREDENTIAL_TEMPLATE_ID = os.getenv('ADMIN_CREDENTIAL_TEMPLATE_ID', "1707175393810117693")
 
-# SMS Templates - Study Edge Apex
-ADMIN_CREDENTIAL_TEMPLATE = "Welcome to PYDAH HOSTEL. Your Account is created with UserID: {#var#} Password: {#var#} login with link: {#var#} -Pydah"
+
 
 # Study Edge Apex specific templates
 STUDENT_CREDENTIALS_TEMPLATE = "Welcome to Pydah Campus Recruitment Training, Your Credentials username: {#var#} password: {#var#} \nLogin with https://crt.pydahsoft.in/login - Pydah College"
-TEST_SCHEDULED_TEMPLATE = "A new test {#var#} has been scheduled at {#var#} for you. Please make sure to attempt it within 24hours.\nexam link: {#var#} - Pydah {#var#}"
-TEST_REMINDER_TEMPLATE = "you haven't attempted your scheduled test {#var#} yet. Please complete it as soon as possible. \nexam link: https://crt.pydahsoft.in/student/exam/{#var#} - Pydah College"
+TEST_SCHEDULED_TEMPLATE = "A new test {#var#} has been scheduled at {#var#} for you. Please make sure to attempt it within 24hours. exam link: https://crt.pydahsoft.in/student/exam/{#var#} - Pydah College"
+TEST_REMINDER_TEMPLATE = "you haven't attempted your scheduled test {#var#} yet. Please complete it as soon as possible. \nexam link: https://crt.pydahsoft.in/student/exam/{#var#} - Pydah College"
+
+# Result notification template
+VERSANT_RESULT_TEMPLATE = "Hello {#var#}, Your test {#var#} result is {#var#}%. Check your results at https://crt.pydahsoft.in/student/results - Pydah College"
 
 # Check if SMS service is available
 SMS_AVAILABLE = bool(BULKSMS_API_KEY and BULKSMS_SENDER_ID and BULKSMS_ENGLISH_API_URL)
@@ -136,7 +134,7 @@ def send_student_credentials_sms(phone: str, student_name: str, username: str, p
         logger.error(f"📱 Error sending student credentials SMS: {e}")
         return {'success': False, 'error': str(e)}
 
-def send_test_scheduled_sms(phone_number: str, test_name: str, start_time: str, exam_link: str) -> Dict:
+def send_test_scheduled_sms(phone_number: str, test_name: str, start_time: str, test_id: str) -> Dict:
     """Send test scheduled SMS to student"""
     try:
         if not SMS_AVAILABLE:
@@ -145,10 +143,10 @@ def send_test_scheduled_sms(phone_number: str, test_name: str, start_time: str, 
         
         logger.info(f"📱 Sending test scheduled SMS to: {phone_number}")
         
-        # Replace template variables: A new test {#var#} has been scheduled at {#var#} for you. Please make sure to attempt it within 24hours.\nexam link: {#var#} - Pydah {#var#}
+        # Replace template variables: A new test {#var#} has been scheduled at {#var#} for you. Please make sure to attempt it within 24hours.\nexam link: https://crt.pydahsoft.in/student/exam/{#var#} - Pydah College
         message = TEST_SCHEDULED_TEMPLATE.replace('{#var#}', test_name, 1) \
                                        .replace('{#var#}', start_time, 1) \
-                                       .replace('{#var#}', exam_link, 1)
+                                       .replace('{#var#}', test_id, 1)
         
         params = {
             'apikey': BULKSMS_API_KEY,
@@ -190,9 +188,8 @@ def send_credentials_sms(phone_number: str, username: str, password: str, login_
         logger.info(f"📱 Sending credentials SMS to: {phone_number}")
         
         # Replace template variables
-        message = VERSANT_CREDENTIALS_TEMPLATE.replace('{#var#}', username, 1) \
-                                             .replace('{#var#}', password, 1) \
-                                             .replace('{#var#}', login_url, 1)
+        message = STUDENT_CREDENTIALS_TEMPLATE.replace('{#var#}', username, 1) \
+                                             .replace('{#var#}', password, 1)
         
         params = {
             'apikey': BULKSMS_API_KEY,
@@ -224,7 +221,7 @@ def send_credentials_sms(phone_number: str, username: str, password: str, login_
         logger.error(f"📱 Error sending credentials SMS: {e}")
         return {'success': False, 'error': str(e)}
 
-def send_test_reminder_sms(phone_number: str, test_name: str, exam_link: str) -> Dict:
+def send_test_reminder_sms(phone_number: str, test_name: str, test_id: str) -> Dict:
     """Send test reminder SMS to student"""
     try:
         if not SMS_AVAILABLE:
@@ -233,10 +230,9 @@ def send_test_reminder_sms(phone_number: str, test_name: str, exam_link: str) ->
         
         logger.info(f"📱 Sending test reminder SMS to: {phone_number}")
         
-        # Replace template variables: you haven't attempted your scheduled test {#var#} yet. Please complete it as soon as possible.\nexam link:{#var#} - Pydah {#var#}
+        # Replace template variables: you haven't attempted your scheduled test {#var#} yet. Please complete it as soon as possible.\nexam link: https://crt.pydahsoft.in/student/exam/{#var#} - Pydah College
         message = TEST_REMINDER_TEMPLATE.replace('{#var#}', test_name, 1) \
-                                       .replace('{#var#}', exam_link, 1) \
-                                       .replace('{#var#}', 'Apex', 1)
+                                       .replace('{#var#}', test_id, 1)
         
         params = {
             'apikey': BULKSMS_API_KEY,

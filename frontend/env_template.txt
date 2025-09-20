@@ -1,10 +1,7 @@
 # Frontend Environment Variables
 # Add this to your frontend .env file
 
-# OneSignal Push Notifications
-VITE_ONESIGNAL_APP_ID=your_onesignal_app_id_here
-
-# Legacy VAPID (for fallback)
+# VAPID Push Notifications
 VITE_VAPID_PUBLIC_KEY=BGSDSV-nFQgxb060QUDjogGfL6sUEQCnzNO4x4ozffRY3kgmbGUv4e8nB1o72qP9veRl3sfmNclC5l--L--_WK4
 
 # API Base URL
