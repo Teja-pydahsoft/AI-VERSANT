@@ -917,11 +917,19 @@ def upload_students_to_batch():
                 }
                 students_for_notifications.append(student_data)
 
-        # Queue notifications in background
+        # Create batch job for credentials notifications (same as test creation)
         if students_for_notifications:
             try:
-                notification_results = queue_batch_notifications(students_for_notifications, 'welcome')
-                current_app.logger.info(f"📧📱 Queued {notification_results['queued_email']} emails and {notification_results['queued_sms']} SMS notifications")
+                from utils.batch_processor import create_credentials_batch_job
+                
+                # Create batch job for student credentials notifications
+                batch_result = create_credentials_batch_job(
+                    students=students_for_notifications,
+                    batch_size=100,
+                    interval_minutes=3
+                )
+                
+                current_app.logger.info(f"📧📱 Student credentials batch created: {batch_result}")
                 
                 # Update student results with notification status
                 for student_result in detailed_results:
@@ -930,10 +938,10 @@ def upload_students_to_batch():
                         student_result['email_queued'] = True  # Will be processed in background
                         student_result['sms_queued'] = True    # Will be processed in background
             except Exception as e:
-                current_app.logger.error(f"❌ Failed to queue notifications: {e}")
+                current_app.logger.error(f"❌ Failed to create credentials batch: {e}")
                 # Don't fail the upload if notifications fail
         else:
-            current_app.logger.warning("⚠️ No students available for notification queueing")
+            current_app.logger.warning("⚠️ No students available for notification batch creation")
 
         # Finalize all student results
         for student_result in detailed_results:
@@ -943,14 +951,14 @@ def upload_students_to_batch():
             student_result['sms_sent'] = student_result.get('sms_queued', False)
         
         # Send completion notification
-        current_app.logger.info("🎉 Student upload completed successfully with background notifications!")
+        current_app.logger.info("🎉 Student upload completed successfully with batch processing!")
         socketio.emit('upload_progress', {
             'user_id': user_id,
             'status': 'completed',
             'total': total_students,
             'processed': total_students,
             'percentage': 100,
-            'message': f'Upload completed! {len(students_for_notifications)} students queued for notifications.'
+            'message': f'Upload completed! {len(students_for_notifications)} students queued for batch processing.'
         }, room=str(user_id))
                     
         # Calculate summary statistics (only database registrations)
@@ -965,8 +973,8 @@ def upload_students_to_batch():
         upload_summary = {
             'total_students': total_students,
             'database_registered': successful_registrations,
-            'emails_sent': 0,  # No emails sent during upload
-            'sms_sent': 0,     # No SMS sent during upload
+            'emails_queued': len(students_for_notifications),  # Emails queued for batch processing
+            'sms_queued': len(students_for_notifications),     # SMS queued for batch processing
             'total_errors': total_errors,
             'database_only': database_only,
             'complete_failures': complete_failures,
@@ -989,7 +997,7 @@ def upload_students_to_batch():
             
             return jsonify({
                 'success': successful_registrations > 0, 
-                'message': f"Database upload completed with {total_errors} errors. {successful_registrations} students registered. Use Send Emails/SMS buttons to send credentials.", 
+                'message': f"Database upload completed with {total_errors} errors. {successful_registrations} students registered. Credentials notifications queued for batch processing.", 
                 'data': {
                     'detailed_results': detailed_results,
                     'summary': upload_summary,
@@ -1011,13 +1019,13 @@ def upload_students_to_batch():
             'total': total_students,
             'processed': total_students,
             'percentage': 100,
-            'message': f'Successfully uploaded {total_students} students to database! Use Send Emails/SMS buttons to send credentials.',
+            'message': f'Successfully uploaded {total_students} students to database! Credentials notifications queued for batch processing.',
             'summary': upload_summary
         }, room=str(user_id))
         
         return jsonify({
             'success': True, 
-            'message': f"Successfully uploaded {total_students} students to database. Use Send Emails/SMS buttons to send credentials.", 
+            'message': f"Successfully uploaded {total_students} students to database. Credentials notifications queued for batch processing.", 
             'data': {
                 'detailed_results': detailed_results,
                 'summary': upload_summary,
@@ -1375,7 +1383,7 @@ def authorize_student_module(student_id):
             # Method 4: Try as username in users collection, then find student
             if not student:
                 user = mongo_db.users.find_one({'username': student_id})
-                if user:
+            if user:
                     student = mongo_db.students.find_one({'user_id': user['_id']})
             
             # Method 5: Try as email in users collection, then find student
@@ -3219,11 +3227,11 @@ def send_batch_emails(batch_id):
             }
             students_for_batch.append(student_data)
         
-        # Create batch job for email processing
+        # Create batch job for email-only processing
         try:
-            from utils.batch_processor import create_credentials_batch_job
+            from utils.batch_processor import create_email_only_batch_job
             
-            batch_result = create_credentials_batch_job(
+            batch_result = create_email_only_batch_job(
                 students=students_for_batch,
                 batch_size=100,
                 interval_minutes=3

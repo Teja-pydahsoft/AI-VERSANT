@@ -9,8 +9,8 @@ if allow_all_origins:
     # Allow all origins for development/testing (matches Flask CORS)
     socketio = SocketIO(
         cors_allowed_origins="*",
-        logger=True,
-        engineio_logger=True,
+        logger=False,
+        engineio_logger=False,
         always_connect=True,
         ping_timeout=60,
         ping_interval=25
@@ -22,8 +22,8 @@ else:
     origins_list = [origin.strip() for origin in cors_origins.split(',')]
     socketio = SocketIO(
         cors_allowed_origins=origins_list,
-        logger=True,
-        engineio_logger=True,
+        logger=False,
+        engineio_logger=False,
         always_connect=True,
         ping_timeout=60,
         ping_interval=25

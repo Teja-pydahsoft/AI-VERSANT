@@ -3053,12 +3053,12 @@ def get_unlocked_modules():
                 module_levels = []
                 levels_for_module = [
                     (level_id, level) for level_id, level in LEVELS.items()
-                    if isinstance(level, dict) and level.get('module_id') == module_id
-                ]
-                
-                # Sort by order
+                if isinstance(level, dict) and level.get('module_id') == module_id
+            ]
+            
+            # Sort by order
                 levels_for_module.sort(key=lambda x: x[1].get('order', 999))
-                
+            
                 for level_id, level in levels_for_module:
                     is_unlocked = level_id in unlocked_levels
                     
@@ -3078,20 +3078,20 @@ def get_unlocked_modules():
                             elif isinstance(auth_level, str) and auth_level == level_id:
                                 unlock_source = 'legacy'  # Old format
                                 break
-                    module_levels.append({
-                        'level_id': level_id,
-                        'level_name': level['name'],
-                        'unlocked': is_unlocked,
+                        module_levels.append({
+                    'level_id': level_id,
+                    'level_name': level['name'],
+                    'unlocked': is_unlocked,
                         'score': score,
                         'unlock_source': unlock_source
-                    })
-                
-                modules_status.append({
-                    'module_id': module_id,
-                    'module_name': module_name,
-                    'unlocked': any(l['unlocked'] for l in module_levels),
-                    'levels': module_levels
                 })
+            
+            modules_status.append({
+                'module_id': module_id,
+                'module_name': module_name,
+                    'unlocked': any(l['unlocked'] for l in module_levels),
+                'levels': module_levels
+            })
         
         return jsonify({'success': True, 'data': modules_status}), 200
         

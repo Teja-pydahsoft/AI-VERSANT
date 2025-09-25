@@ -32,6 +32,7 @@ const OnlineExamTaking = () => {
   const [audioURLs, setAudioURLs] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExamFetched, setIsExamFetched] = useState(false);
+  const [alreadyAttempted, setAlreadyAttempted] = useState(false);
 
   // Security measures for exam taking
   useEffect(() => {
@@ -106,7 +107,41 @@ const OnlineExamTaking = () => {
       try {
         setLoading(true);
         setIsExamFetched(true);
-        // First, get the test details to check if it's a random assignment test
+        
+        // First, check if student has already attempted this test
+        try {
+          // Check completed exams first
+          const completedExamsRes = await api.get('/student/completed-exams');
+          const completedExamIds = completedExamsRes.data.data || [];
+          
+          if (completedExamIds.includes(examId)) {
+            setAlreadyAttempted(true);
+            return;
+          }
+          
+          // Try to start the test - this will give us attempt_id if not already attempted
+          // or fail if already attempted
+          try {
+            const startRes = await api.post(`/student/tests/${examId}/start`);
+            // Store the attempt_id from the response
+            setAttemptId(startRes.data.data.attempt_id);
+            console.log('✅ Test started successfully, attempt_id:', startRes.data.data.attempt_id);
+          } catch (startErr) {
+            if (startErr.response?.status === 409 || 
+                startErr.response?.data?.message?.includes('already attempted') ||
+                startErr.response?.data?.message?.includes('Test already attempted')) {
+              setAlreadyAttempted(true);
+              return;
+            }
+            // If it's a different error, continue with exam loading
+            console.warn('Test start failed:', startErr.response?.data?.message);
+          }
+        } catch (err) {
+          console.warn('Could not check completed exams:', err);
+          // Continue with exam loading if check fails
+        }
+        
+        // Get the test details to check if it's a random assignment test
         try {
           const testRes = await api.get(`/student/test/${examId}`);
           const testData = testRes.data.data;
@@ -137,13 +172,8 @@ const OnlineExamTaking = () => {
             setQuestions(testData.questions || []);
             setAssignmentId(null);
             
-            // Start the test to get attempt_id for regular tests
-            try {
-              const startRes = await api.post(`/student/tests/${examId}/start`);
-              setAttemptId(startRes.data.data.attempt_id);
-            } catch (startErr) {
-              showError('Failed to start test. Please try again.');
-            }
+            // Note: Test start was already called above and attempt_id is already stored
+            // If we reach here, the test is not already attempted and we have attempt_id
           }
         } catch (err) {
           throw err; // Re-throw to be caught by outer catch
@@ -505,14 +535,8 @@ const OnlineExamTaking = () => {
         // Submit using regular test endpoint (for tests without random questions)
         
         if (!attemptId) {
-          // If we don't have an attempt_id, try to start the test first
-          try {
-            const startRes = await api.post(`/student/tests/${examId}/start`);
-            setAttemptId(startRes.data.data.attempt_id);
-          } catch (startErr) {
-            showError('Failed to start test. Please try again.');
-            return;
-          }
+          showError('No attempt ID found. Please refresh the page and try again.');
+          return;
         }
         
         const payload = {
@@ -535,7 +559,113 @@ const OnlineExamTaking = () => {
     }
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (loading) return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.6 }}
+        className="text-center"
+      >
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="w-16 h-16 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6"
+        >
+          <LoadingSpinner />
+        </motion.div>
+        <motion.h3 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="text-xl font-semibold text-slate-800 mb-2"
+        >
+          Loading Exam
+        </motion.h3>
+        <motion.p 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="text-slate-600"
+        >
+          Checking access and preparing your test...
+        </motion.p>
+      </motion.div>
+    </div>
+  );
+
+  if (alreadyAttempted) return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.6 }}
+        className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 p-12 max-w-md mx-4 text-center"
+      >
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="w-20 h-20 bg-gradient-to-r from-amber-100 to-orange-100 rounded-full flex items-center justify-center mx-auto mb-6"
+        >
+          <svg className="w-10 h-10 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+        </motion.div>
+        
+        <motion.h2 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="text-2xl font-bold text-slate-800 mb-4"
+        >
+          Test Already Attempted
+        </motion.h2>
+        
+        <motion.p 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="text-slate-600 mb-8 leading-relaxed"
+        >
+          You have already completed this test. Each test can only be attempted once.
+        </motion.p>
+        
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+          className="space-y-4"
+        >
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => navigate('/student/exams')}
+            className="w-full px-8 py-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-2xl font-semibold shadow-lg hover:from-blue-600 hover:to-indigo-600 transition-all duration-300 flex items-center justify-center"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Go to Exams
+          </motion.button>
+          
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => navigate('/student/dashboard')}
+            className="w-full px-8 py-3 border-2 border-slate-300 text-slate-700 rounded-2xl font-medium hover:bg-slate-50 transition-all duration-300 flex items-center justify-center"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            Back to Dashboard
+          </motion.button>
+        </motion.div>
+      </motion.div>
+    </div>
+  );
+
   if (!exam) return <div className="text-center p-8">Exam not found or unavailable.</div>;
   if (questions.length === 0) return <div className="text-center p-8">This exam has no questions.</div>;
 

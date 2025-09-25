@@ -53,12 +53,25 @@ class BatchProcessor:
     def create_credentials_batch_job(self, students: List[Dict], 
                                    batch_size: int = 100, 
                                    interval_minutes: int = 3) -> Dict:
-        """Create a batch job for student credentials"""
+        """Create a batch job for student credentials (both email and SMS)"""
         batch_id = f"credentials_{uuid.uuid4().hex[:8]}"
         return self._create_batch_job(
             batch_id=batch_id,
             students=students,
             notification_type='credentials',
+            batch_size=batch_size,
+            interval_minutes=interval_minutes
+        )
+    
+    def create_email_only_batch_job(self, students: List[Dict], 
+                                  batch_size: int = 100, 
+                                  interval_minutes: int = 3) -> Dict:
+        """Create a batch job for email-only notifications"""
+        batch_id = f"email_only_{uuid.uuid4().hex[:8]}"
+        return self._create_batch_job(
+            batch_id=batch_id,
+            students=students,
+            notification_type='email_only',
             batch_size=batch_size,
             interval_minutes=interval_minutes
         )
@@ -244,10 +257,16 @@ class BatchProcessor:
                         password = student.get('password')
                         
                         if notification_type == 'credentials':
-                            # Process student credentials
+                            # Process student credentials (both email and SMS)
                             self._process_credentials_notification(
                                 name, email, phone, username, password,
                                 sms_queued, email_queued, sms_failed, email_failed
+                            )
+                        elif notification_type == 'email_only':
+                            # Process email-only notifications
+                            self._process_email_only_notification(
+                                name, email, username, password,
+                                email_queued, email_failed
                             )
                         elif notification_type == 'test_notification':
                             # Process test notification
@@ -308,13 +327,13 @@ class BatchProcessor:
                                         username: str, password: str,
                                         sms_queued: int, email_queued: int, 
                                         sms_failed: int, email_failed: int):
-        """Process student credentials notification"""
+        """Process student credentials notification (both email and SMS)"""
         # Queue SMS if phone exists
         if phone:
             sms_task_id = queue_sms(
                 phone=phone,
-                message=f"Welcome to Study Edge - Your Credentials username: {username} password: {password}",
-                notification_type='credentials',
+                message="",  # Will use template from sms_service
+                notification_type='student_credentials',
                 student_name=name,
                 username=username,
                 password=password
@@ -324,6 +343,30 @@ class BatchProcessor:
             else:
                 sms_failed += 1
         
+        # Queue email if email exists
+        if email:
+            email_task_id = queue_email(
+                email=email,
+                subject="Welcome to Campus Recruitment & Training - Your Student Credentials",
+                content="",  # Will be generated from template
+                template_name='student_credentials.html',
+                template_params={
+                    'name': name,
+                    'username': username,
+                    'email': email,
+                    'password': password,
+                    'login_url': "https://crt.pydahsoft.in/login"
+                }
+            )
+            if email_task_id:
+                email_queued += 1
+            else:
+                email_failed += 1
+    
+    def _process_email_only_notification(self, name: str, email: str, 
+                                       username: str, password: str,
+                                       email_queued: int, email_failed: int):
+        """Process email-only notification (no SMS)"""
         # Queue email if email exists
         if email:
             email_task_id = queue_email(
@@ -451,8 +494,14 @@ def stop_batch_processor():
 def create_credentials_batch_job(students: List[Dict], 
                                batch_size: int = 100, 
                                interval_minutes: int = 3) -> Dict:
-    """Create a new credentials batch job"""
+    """Create a new credentials batch job (both email and SMS)"""
     return batch_processor.create_credentials_batch_job(students, batch_size, interval_minutes)
+
+def create_email_only_batch_job(students: List[Dict], 
+                              batch_size: int = 100, 
+                              interval_minutes: int = 3) -> Dict:
+    """Create a new email-only batch job (no SMS)"""
+    return batch_processor.create_email_only_batch_job(students, batch_size, interval_minutes)
 
 def create_test_notification_batch_job(test_id: str, object_id: str, test_name: str, 
                                      start_date: str, students: List[Dict],

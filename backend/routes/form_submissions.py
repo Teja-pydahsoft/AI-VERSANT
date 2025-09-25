@@ -599,13 +599,7 @@ def submit_form():
                                 template_name=None
                             )
                         
-                        # Queue SMS notification if mobile exists
-                        if student_mobile:
-                            queue_sms(
-                                phone=student_mobile,
-                                message=f"Form submitted successfully. Thank you for your submission. - VERSANT Team",
-                                notification_type='custom'
-                            )
+                        # SMS notification removed as requested
                         
                         # TODO: Add push notification for form submission
                     except Exception as e:
@@ -657,13 +651,7 @@ def submit_form():
                                 template_name=None
                             )
                         
-                        # Queue SMS notification if mobile exists
-                        if student_mobile:
-                            queue_sms(
-                                phone=student_mobile,
-                                message=f"Form submitted successfully. Thank you for your submission. - VERSANT Team",
-                                notification_type='custom'
-                            )
+                        # SMS notification removed as requested
                         
                         # TODO: Add push notification for form submission
                     except Exception as e:
