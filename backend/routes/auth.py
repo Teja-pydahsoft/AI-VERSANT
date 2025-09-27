@@ -38,6 +38,8 @@ def login():
         # If not found, try by email
         if not user:
             user = mongo_db.users.find_one({'email': username})
+        if not user:
+            user = mongo_db.users.find_one({'mobile_number': username})
         
         if not user:
             print(f"❌ User not found: {username}", file=sys.stderr)
@@ -57,7 +59,7 @@ def login():
             }), 401
         
         # Verify password
-        if 'password_hash' not in user:
+        if 'password_hash' not in user and 'mobile_number' not in user:
             print(f"❌ CRITICAL: User document missing 'password_hash'. User object: {user}", file=sys.stderr)
             return jsonify({
                 'success': False,
@@ -66,7 +68,7 @@ def login():
 
         print(f"🔍 Verifying password for user: {username}", file=sys.stderr)
         
-        if not raw_bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+        if not raw_bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')) and user['mobile_number'] != password:
             print(f"❌ Password verification failed for user: {username}", file=sys.stderr)
             return jsonify({
                 'success': False,
