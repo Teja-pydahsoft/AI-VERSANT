@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/((?!api|_next|static|favicon.ico|OneSignalSDKWorker.js|OneSignalSDK.sw.js|sw.js).*)",
+      "source": "/((?!api|_next|static|favicon.ico).*)",
       "destination": "/index.html"
     }
   ],
@@ -20,27 +20,6 @@
         {
           "key": "X-XSS-Protection",
           "value": "1; mode=block"
-        }
-      ]
-    },
-    {
-      "source": "/(OneSignalSDKWorker.js|OneSignalSDK.sw.js|sw.js)",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/javascript"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        },
-        {
-          "key": "Pragma",
-          "value": "no-cache"
-        },
-        {
-          "key": "Expires",
-          "value": "0"
         }
       ]
     }

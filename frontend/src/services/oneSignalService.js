@@ -30,27 +30,11 @@ class OneSignalService {
       this.oneSignal = window.OneSignal;
 
       // Check if OneSignal is already initialized
-      if (this.oneSignal.Notifications && this.oneSignal.Notifications.permission !== undefined) {
-        console.log('✅ OneSignal already initialized, checking if fully functional...');
-        
-        // Check if OneSignal is actually functional
-        if (this.oneSignal.Notifications.requestPermission && this.oneSignal.User) {
-          console.log('✅ OneSignal is fully functional, skipping initialization');
-          this.isInitialized = true;
-          await this.checkSubscriptionStatus();
-          await this.ensureNotificationButtonVisible();
-          return true;
-        } else {
-          console.log('⚠️ OneSignal appears initialized but not fully functional, re-initializing...');
-        }
-      }
-
-      // Check if OneSignal is partially initialized but not fully ready
-      if (this.oneSignal.init && typeof this.oneSignal.init === 'function') {
-        console.log('OneSignal SDK loaded but not initialized, proceeding with initialization');
-      } else {
-        console.log('OneSignal SDK not ready, waiting...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      if (this.oneSignal.isPushSupported && this.oneSignal.getNotificationPermission) {
+        console.log('✅ OneSignal already initialized, skipping initialization');
+        this.isInitialized = true;
+        await this.checkSubscriptionStatus();
+        return true;
       }
 
       // Initialize OneSignal only if not already initialized
@@ -61,19 +45,6 @@ class OneSignalService {
         notifyButton: {
           enable: true,
           showCredit: false,
-          position: "bottom-right",
-          size: "medium",
-          theme: "default",
-          colors: {
-            "circle.background": "#ff4444",
-            "circle.foreground": "#ffffff",
-            "badge.background": "#ff4444",
-            "badge.foreground": "#ffffff",
-            "badge.bordercolor": "#ff4444",
-            "pulse.color": "#ff4444",
-            "dialog.button.background": "#ff4444",
-            "dialog.button.foreground": "#ffffff"
-          },
           text: {
             "tip.state.unsubscribed": "Subscribe to VERSANT notifications",
             "tip.state.subscribed": "You're subscribed to VERSANT notifications",
@@ -109,79 +80,10 @@ class OneSignalService {
       // Check subscription status
       await this.checkSubscriptionStatus();
 
-      // Ensure notification button is visible
-      await this.ensureNotificationButtonVisible();
-
       return true;
     } catch (error) {
       console.error('❌ OneSignal initialization failed:', error);
       return false;
-    }
-  }
-
-  /**
-   * Ensure notification button is visible
-   */
-  async ensureNotificationButtonVisible() {
-    try {
-      if (!this.oneSignal || !this.oneSignal.Notifications) {
-        console.log('OneSignal not ready for button visibility check');
-        return;
-      }
-
-      // Check if notification button should be shown
-      const permission = this.oneSignal.Notifications.permission;
-      
-      console.log('🔔 OneSignal permission status:', permission);
-      
-      if (permission === false) {
-        console.log('🔔 OneSignal notification button should be visible (permission denied)');
-        
-        // Force show the notification button by triggering a permission request
-        if (this.oneSignal.Notifications.requestPermission) {
-          console.log('🔔 Attempting to show notification prompt');
-          // Don't actually request permission, just trigger the button to appear
-        }
-      } else if (permission === true) {
-        console.log('🔔 OneSignal notification button should be visible (permission granted)');
-      } else {
-        console.log('🔔 OneSignal notification button should be visible (permission not set)');
-      }
-
-      // Force show the notification button
-      await this.forceShowNotificationButton();
-    } catch (error) {
-      console.error('❌ Error ensuring notification button visibility:', error);
-    }
-  }
-
-  /**
-   * Force show the notification button
-   */
-  async forceShowNotificationButton() {
-    try {
-      // Check if the notification button element exists
-      const buttonElement = document.querySelector('.onesignal-bell-launcher-button');
-      
-      if (buttonElement) {
-        console.log('🔔 OneSignal notification button found in DOM');
-        buttonElement.style.display = 'block';
-        buttonElement.style.visibility = 'visible';
-      } else {
-        console.log('🔔 OneSignal notification button not found in DOM, checking for other elements...');
-        
-        // Look for other possible OneSignal button elements
-        const possibleButtons = document.querySelectorAll('[class*="onesignal"], [class*="notification"], [id*="onesignal"]');
-        console.log('🔔 Found OneSignal elements:', possibleButtons);
-        
-        // Try to trigger the button to appear by calling OneSignal methods
-        if (this.oneSignal.Notifications && this.oneSignal.Notifications.requestPermission) {
-          console.log('🔔 Attempting to trigger notification button appearance...');
-          // This might trigger the button to appear
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error forcing notification button visibility:', error);
     }
   }
 
@@ -249,15 +151,14 @@ class OneSignalService {
       if (!this.oneSignal) return false;
 
       // Check if OneSignal is properly initialized
-      if (!this.oneSignal.Notifications) {
+      if (!this.oneSignal.getNotificationPermission) {
         console.log('OneSignal not fully initialized yet');
         return false;
       }
 
-      // Use the correct OneSignal v16 API
-      const isOptedIn = this.oneSignal.Notifications.permission;
+      const isOptedIn = await this.oneSignal.getNotificationPermission();
       
-      this.isSubscribed = isOptedIn === true;
+      this.isSubscribed = isOptedIn === 'granted';
       
       console.log('OneSignal subscription status:', {
         isOptedIn,
@@ -280,18 +181,18 @@ class OneSignalService {
     }
 
     try {
-      // Check current permission status using correct OneSignal v16 API
-      const currentPermission = this.oneSignal.Notifications.permission;
+      // Check current permission status
+      const currentPermission = await this.oneSignal.getNotificationPermission();
       
-      if (currentPermission === true) {
+      if (currentPermission === 'granted') {
         this.isSubscribed = true;
         console.log('✅ OneSignal already subscribed');
         return true;
       }
 
-      // Request permission using the correct OneSignal v16 method
-      if (this.oneSignal.Notifications.requestPermission) {
-        const permission = await this.oneSignal.Notifications.requestPermission();
+      // Request permission using the correct OneSignal method
+      if (this.oneSignal.showNativePrompt) {
+        const permission = await this.oneSignal.showNativePrompt();
         
         if (permission) {
           this.isSubscribed = true;
@@ -303,8 +204,8 @@ class OneSignalService {
         }
       } else {
         // Fallback: just check permission status
-        const permission = this.oneSignal.Notifications.permission;
-        this.isSubscribed = permission === true;
+        const permission = await this.oneSignal.getNotificationPermission();
+        this.isSubscribed = permission === 'granted';
         console.log('OneSignal permission status:', permission);
         return this.isSubscribed;
       }
@@ -323,17 +224,10 @@ class OneSignalService {
     }
 
     try {
-      // Use OneSignal v16 API for unsubscription
-      if (this.oneSignal.Notifications && this.oneSignal.Notifications.setConsentGiven) {
-        await this.oneSignal.Notifications.setConsentGiven(false);
-        this.isSubscribed = false;
-        console.log('✅ OneSignal unsubscription successful');
-        return true;
-      } else {
-        console.warn('OneSignal Notifications API not available for unsubscription');
-        this.isSubscribed = false;
-        return true;
-      }
+      await this.oneSignal.setSubscription(false);
+      this.isSubscribed = false;
+      console.log('✅ OneSignal unsubscription successful');
+      return true;
     } catch (error) {
       console.error('❌ OneSignal unsubscription failed:', error);
       throw error;
@@ -485,14 +379,8 @@ class OneSignalService {
     if (!this.isInitialized) return null;
 
     try {
-      // Use OneSignal v16 API to get user ID
-      if (this.oneSignal.User && this.oneSignal.User.onesignalId) {
-        const userId = this.oneSignal.User.onesignalId;
-        return userId;
-      } else {
-        console.warn('OneSignal User API not available');
-        return null;
-      }
+      const userId = await this.oneSignal.getUserId();
+      return userId;
     } catch (error) {
       console.error('❌ Error getting OneSignal user ID:', error);
       return null;
@@ -506,26 +394,9 @@ class OneSignalService {
     if (!this.isInitialized) return false;
 
     try {
-      // Use OneSignal v16 API for setting external user ID and tags
-      if (this.oneSignal.User && this.oneSignal.User.addAlias) {
-        // Set external user ID if provided
-        if (tags.userId) {
-          await this.oneSignal.User.addAlias('external_user_id', tags.userId);
-        }
-        
-        // Set other tags
-        const tagEntries = Object.entries(tags).filter(([key]) => key !== 'userId');
-        if (tagEntries.length > 0) {
-          const tagObject = Object.fromEntries(tagEntries);
-          await this.oneSignal.User.addTags(tagObject);
-        }
-        
-        console.log('✅ OneSignal user tags set:', tags);
-        return true;
-      } else {
-        console.warn('OneSignal User API not available');
-        return false;
-      }
+      await this.oneSignal.sendTags(tags);
+      console.log('✅ OneSignal user tags set:', tags);
+      return true;
     } catch (error) {
       console.error('❌ Error setting OneSignal user tags:', error);
       return false;
