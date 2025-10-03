@@ -10,11 +10,18 @@ def test_mime_type(url, expected_content_type="application/javascript"):
     """Test if a URL returns the expected MIME type"""
     try:
         response = requests.head(url, timeout=10)
+        status_code = response.status_code
         content_type = response.headers.get('content-type', '').split(';')[0].strip()
         
         print(f"URL: {url}")
+        print(f"Status Code: {status_code}")
         print(f"Expected: {expected_content_type}")
         print(f"Actual: {content_type}")
+
+        if status_code == 404:
+            print("Status: ❌ FAIL (404 Not Found - File is missing from your server's root!)")
+            print("-" * 50)
+            return False
         print(f"Status: {'✅ PASS' if content_type == expected_content_type else '❌ FAIL'}")
         print("-" * 50)
         
@@ -50,10 +57,10 @@ def main():
     print("\nOverall Result:")
     if all_passed:
         print("✅ All service worker files have correct MIME type!")
-        print("OneSignal subscription should work properly now.")
+        print("OneSignal subscription should now work properly.")
     else:
         print("❌ Some service worker files have incorrect MIME type.")
-        print("Please check your server configuration and redeploy.")
+        print("Please check your server configuration (e.g., Nginx) to ensure the files are in the public root directory and served correctly, then redeploy.")
     
     return 0 if all_passed else 1
 

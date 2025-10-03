@@ -1,6 +1,8 @@
 // Service Worker for VERSANT Application
 // This is a simple service worker that works with OneSignal
 
+importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
+
 console.log('VERSANT Service Worker: Starting...');
 
 // Handle push events
