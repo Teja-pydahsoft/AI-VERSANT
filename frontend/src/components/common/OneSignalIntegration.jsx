@@ -21,6 +21,9 @@ const OneSignalIntegration = () => {
 
   const initializeOneSignal = async () => {
     try {
+      // Wait a bit for OneSignal to be ready
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
       const initialized = await oneSignalService.initialize()
       setIsInitialized(initialized)
       
@@ -55,6 +58,7 @@ const OneSignalIntegration = () => {
       }
     } catch (error) {
       console.error('OneSignal subscription failed:', error)
+      // Don't show error notification for subscription failures
     }
   }
 

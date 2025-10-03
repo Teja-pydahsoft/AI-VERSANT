@@ -29,7 +29,15 @@ class OneSignalService {
 
       this.oneSignal = window.OneSignal;
 
-      // Initialize OneSignal
+      // Check if OneSignal is already initialized
+      if (this.oneSignal.isPushSupported && this.oneSignal.getNotificationPermission) {
+        console.log('✅ OneSignal already initialized, skipping initialization');
+        this.isInitialized = true;
+        await this.checkSubscriptionStatus();
+        return true;
+      }
+
+      // Initialize OneSignal only if not already initialized
       await this.oneSignal.init({
         appId: this.appId,
         autoResubscribe: true,
