@@ -35,11 +35,56 @@ const OneSignalIntegration = () => {
         
         // Don't auto-subscribe, let user click the button
         console.log('🔔 OneSignal ready - notification button should appear')
+        
+        // Force check for notification button after a delay
+        setTimeout(() => {
+          checkNotificationButton()
+        }, 3000)
       } else {
         console.log('❌ OneSignal initialization failed')
       }
     } catch (error) {
       console.error('OneSignal initialization failed:', error)
+    }
+  }
+
+  const checkNotificationButton = () => {
+    console.log('🔔 Checking for OneSignal notification button...')
+    
+    // Look for OneSignal button elements
+    const buttonSelectors = [
+      '.onesignal-bell-launcher-button',
+      '.onesignal-bell-launcher',
+      '[class*="onesignal"]',
+      '[id*="onesignal"]'
+    ]
+    
+    let buttonFound = false
+    buttonSelectors.forEach(selector => {
+      const element = document.querySelector(selector)
+      if (element) {
+        console.log('🔔 Found OneSignal button element:', selector, element)
+        buttonFound = true
+      }
+    })
+    
+    if (!buttonFound) {
+      console.log('🔔 OneSignal notification button not found, attempting to force show...')
+      
+      // Try to force show the button
+      if (window.OneSignal && window.OneSignal.Notifications) {
+        console.log('🔔 OneSignal available, checking permission status...')
+        const permission = window.OneSignal.Notifications.permission
+        console.log('🔔 Current permission status:', permission)
+        
+        if (permission === false) {
+          console.log('🔔 Permission denied - button should be visible')
+        } else if (permission === true) {
+          console.log('🔔 Permission granted - button should be visible')
+        } else {
+          console.log('🔔 Permission not set - button should be visible')
+        }
+      }
     }
   }
 
@@ -111,6 +156,29 @@ const OneSignalIntegration = () => {
 
   // This component doesn't render anything visible
   // It just handles OneSignal integration in the background
+  
+  // Add debug button for development
+  if (process.env.NODE_ENV === 'development') {
+    return (
+      <div style={{ position: 'fixed', top: '10px', right: '10px', zIndex: 9999 }}>
+        <button
+          onClick={checkNotificationButton}
+          style={{
+            background: '#ff4444',
+            color: 'white',
+            border: 'none',
+            padding: '10px',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '12px'
+          }}
+        >
+          🔔 Check OneSignal Button
+        </button>
+      </div>
+    )
+  }
+  
   return null
 }
 

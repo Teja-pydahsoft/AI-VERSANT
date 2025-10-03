@@ -31,10 +31,18 @@ class OneSignalService {
 
       // Check if OneSignal is already initialized
       if (this.oneSignal.Notifications && this.oneSignal.Notifications.permission !== undefined) {
-        console.log('✅ OneSignal already initialized, skipping initialization');
-        this.isInitialized = true;
-        await this.checkSubscriptionStatus();
-        return true;
+        console.log('✅ OneSignal already initialized, checking if fully functional...');
+        
+        // Check if OneSignal is actually functional
+        if (this.oneSignal.Notifications.requestPermission && this.oneSignal.User) {
+          console.log('✅ OneSignal is fully functional, skipping initialization');
+          this.isInitialized = true;
+          await this.checkSubscriptionStatus();
+          await this.ensureNotificationButtonVisible();
+          return true;
+        } else {
+          console.log('⚠️ OneSignal appears initialized but not fully functional, re-initializing...');
+        }
       }
 
       // Check if OneSignal is partially initialized but not fully ready
@@ -124,20 +132,56 @@ class OneSignalService {
       // Check if notification button should be shown
       const permission = this.oneSignal.Notifications.permission;
       
+      console.log('🔔 OneSignal permission status:', permission);
+      
       if (permission === false) {
         console.log('🔔 OneSignal notification button should be visible (permission denied)');
         
-        // Force show the notification button
-        if (this.oneSignal.Notifications.showNativePrompt) {
+        // Force show the notification button by triggering a permission request
+        if (this.oneSignal.Notifications.requestPermission) {
           console.log('🔔 Attempting to show notification prompt');
+          // Don't actually request permission, just trigger the button to appear
         }
       } else if (permission === true) {
         console.log('🔔 OneSignal notification button should be visible (permission granted)');
       } else {
         console.log('🔔 OneSignal notification button should be visible (permission not set)');
       }
+
+      // Force show the notification button
+      await this.forceShowNotificationButton();
     } catch (error) {
       console.error('❌ Error ensuring notification button visibility:', error);
+    }
+  }
+
+  /**
+   * Force show the notification button
+   */
+  async forceShowNotificationButton() {
+    try {
+      // Check if the notification button element exists
+      const buttonElement = document.querySelector('.onesignal-bell-launcher-button');
+      
+      if (buttonElement) {
+        console.log('🔔 OneSignal notification button found in DOM');
+        buttonElement.style.display = 'block';
+        buttonElement.style.visibility = 'visible';
+      } else {
+        console.log('🔔 OneSignal notification button not found in DOM, checking for other elements...');
+        
+        // Look for other possible OneSignal button elements
+        const possibleButtons = document.querySelectorAll('[class*="onesignal"], [class*="notification"], [id*="onesignal"]');
+        console.log('🔔 Found OneSignal elements:', possibleButtons);
+        
+        // Try to trigger the button to appear by calling OneSignal methods
+        if (this.oneSignal.Notifications && this.oneSignal.Notifications.requestPermission) {
+          console.log('🔔 Attempting to trigger notification button appearance...');
+          // This might trigger the button to appear
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error forcing notification button visibility:', error);
     }
   }
 
