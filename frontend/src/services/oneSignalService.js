@@ -30,7 +30,7 @@ class OneSignalService {
       this.oneSignal = window.OneSignal;
 
       // Check if OneSignal is already initialized
-      if (this.oneSignal.isPushSupported && this.oneSignal.getNotificationPermission) {
+      if (this.oneSignal.Notifications && this.oneSignal.Notifications.permission !== undefined) {
         console.log('✅ OneSignal already initialized, skipping initialization');
         this.isInitialized = true;
         await this.checkSubscriptionStatus();
@@ -151,14 +151,15 @@ class OneSignalService {
       if (!this.oneSignal) return false;
 
       // Check if OneSignal is properly initialized
-      if (!this.oneSignal.getNotificationPermission) {
+      if (!this.oneSignal.Notifications) {
         console.log('OneSignal not fully initialized yet');
         return false;
       }
 
-      const isOptedIn = await this.oneSignal.getNotificationPermission();
+      // Use the correct OneSignal v16 API
+      const isOptedIn = this.oneSignal.Notifications.permission;
       
-      this.isSubscribed = isOptedIn === 'granted';
+      this.isSubscribed = isOptedIn === true;
       
       console.log('OneSignal subscription status:', {
         isOptedIn,
@@ -181,18 +182,18 @@ class OneSignalService {
     }
 
     try {
-      // Check current permission status
-      const currentPermission = await this.oneSignal.getNotificationPermission();
+      // Check current permission status using correct OneSignal v16 API
+      const currentPermission = this.oneSignal.Notifications.permission;
       
-      if (currentPermission === 'granted') {
+      if (currentPermission === true) {
         this.isSubscribed = true;
         console.log('✅ OneSignal already subscribed');
         return true;
       }
 
-      // Request permission using the correct OneSignal method
-      if (this.oneSignal.showNativePrompt) {
-        const permission = await this.oneSignal.showNativePrompt();
+      // Request permission using the correct OneSignal v16 method
+      if (this.oneSignal.Notifications.requestPermission) {
+        const permission = await this.oneSignal.Notifications.requestPermission();
         
         if (permission) {
           this.isSubscribed = true;
@@ -204,8 +205,8 @@ class OneSignalService {
         }
       } else {
         // Fallback: just check permission status
-        const permission = await this.oneSignal.getNotificationPermission();
-        this.isSubscribed = permission === 'granted';
+        const permission = this.oneSignal.Notifications.permission;
+        this.isSubscribed = permission === true;
         console.log('OneSignal permission status:', permission);
         return this.isSubscribed;
       }
