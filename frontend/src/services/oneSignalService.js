@@ -30,7 +30,7 @@ class OneSignalService {
       this.oneSignal = window.OneSignal;
 
       // Check if OneSignal is already initialized
-      if (this.oneSignal.isPushSupported && this.oneSignal.getNotificationPermission) {
+      if (this.oneSignal.Notifications && this.oneSignal.User) {
         console.log('✅ OneSignal already initialized, skipping initialization');
         this.isInitialized = true;
         await this.checkSubscriptionStatus();
@@ -144,24 +144,49 @@ class OneSignalService {
   }
 
   /**
+   * Wait for OneSignal to be fully ready with all APIs
+   */
+  waitForOneSignalReady() {
+    return new Promise((resolve) => {
+      if (this.oneSignal && this.oneSignal.Notifications) {
+        resolve();
+        return;
+      }
+
+      const checkReady = () => {
+        if (this.oneSignal && this.oneSignal.Notifications) {
+          resolve();
+        } else {
+          setTimeout(checkReady, 100);
+        }
+      };
+
+      checkReady();
+    });
+  }
+
+  /**
    * Check subscription status
    */
   async checkSubscriptionStatus() {
     try {
       if (!this.oneSignal) return false;
 
+      // Wait for OneSignal to be fully ready
+      await this.waitForOneSignalReady();
+
       // Check if OneSignal is properly initialized
-      if (!this.oneSignal.getNotificationPermission) {
-        console.log('OneSignal not fully initialized yet');
+      if (!this.oneSignal.Notifications) {
+        console.log('OneSignal Notifications API not available yet');
         return false;
       }
 
-      const isOptedIn = await this.oneSignal.getNotificationPermission();
-      
-      this.isSubscribed = isOptedIn === 'granted';
+      // Use OneSignal v16 API
+      const permission = this.oneSignal.Notifications.permission;
+      this.isSubscribed = permission === true;
       
       console.log('OneSignal subscription status:', {
-        isOptedIn,
+        permission,
         isSubscribed: this.isSubscribed
       });
 
@@ -181,18 +206,26 @@ class OneSignalService {
     }
 
     try {
-      // Check current permission status
-      const currentPermission = await this.oneSignal.getNotificationPermission();
+      // Wait for OneSignal to be fully ready
+      await this.waitForOneSignalReady();
+
+      // Check if OneSignal Notifications API is available
+      if (!this.oneSignal.Notifications) {
+        throw new Error('OneSignal Notifications API not available');
+      }
+
+      // Check current permission status using OneSignal v16 API
+      const currentPermission = this.oneSignal.Notifications.permission;
       
-      if (currentPermission === 'granted') {
+      if (currentPermission === true) {
         this.isSubscribed = true;
         console.log('✅ OneSignal already subscribed');
         return true;
       }
 
-      // Request permission using the correct OneSignal method
-      if (this.oneSignal.showNativePrompt) {
-        const permission = await this.oneSignal.showNativePrompt();
+      // Request permission using OneSignal v16 API
+      if (this.oneSignal.Notifications.requestPermission) {
+        const permission = await this.oneSignal.Notifications.requestPermission();
         
         if (permission) {
           this.isSubscribed = true;
@@ -204,8 +237,8 @@ class OneSignalService {
         }
       } else {
         // Fallback: just check permission status
-        const permission = await this.oneSignal.getNotificationPermission();
-        this.isSubscribed = permission === 'granted';
+        const permission = this.oneSignal.Notifications.permission;
+        this.isSubscribed = permission === true;
         console.log('OneSignal permission status:', permission);
         return this.isSubscribed;
       }
@@ -224,10 +257,25 @@ class OneSignalService {
     }
 
     try {
-      await this.oneSignal.setSubscription(false);
-      this.isSubscribed = false;
-      console.log('✅ OneSignal unsubscription successful');
-      return true;
+      // Wait for OneSignal to be fully ready
+      await this.waitForOneSignalReady();
+
+      // Check if OneSignal Notifications API is available
+      if (!this.oneSignal.Notifications) {
+        throw new Error('OneSignal Notifications API not available');
+      }
+
+      // Use OneSignal v16 API for unsubscription
+      if (this.oneSignal.Notifications.setConsentGiven) {
+        await this.oneSignal.Notifications.setConsentGiven(false);
+        this.isSubscribed = false;
+        console.log('✅ OneSignal unsubscription successful');
+        return true;
+      } else {
+        console.warn('OneSignal setConsentGiven not available, marking as unsubscribed');
+        this.isSubscribed = false;
+        return true;
+      }
     } catch (error) {
       console.error('❌ OneSignal unsubscription failed:', error);
       throw error;
@@ -379,8 +427,20 @@ class OneSignalService {
     if (!this.isInitialized) return null;
 
     try {
-      const userId = await this.oneSignal.getUserId();
-      return userId;
+      // Wait for OneSignal to be fully ready
+      await this.waitForOneSignalReady();
+
+      // Use OneSignal v16 API to get user ID
+      if (this.oneSignal.User && this.oneSignal.User.onesignalId) {
+        const userId = this.oneSignal.User.onesignalId;
+        return userId;
+      } else if (this.oneSignal.getUserId) {
+        const userId = await this.oneSignal.getUserId();
+        return userId;
+      } else {
+        console.warn('OneSignal User API not available');
+        return null;
+      }
     } catch (error) {
       console.error('❌ Error getting OneSignal user ID:', error);
       return null;
@@ -394,9 +454,22 @@ class OneSignalService {
     if (!this.isInitialized) return false;
 
     try {
-      await this.oneSignal.sendTags(tags);
-      console.log('✅ OneSignal user tags set:', tags);
-      return true;
+      // Wait for OneSignal to be fully ready
+      await this.waitForOneSignalReady();
+
+      // Use OneSignal v16 API for setting tags
+      if (this.oneSignal.User && this.oneSignal.User.addTags) {
+        await this.oneSignal.User.addTags(tags);
+        console.log('✅ OneSignal user tags set:', tags);
+        return true;
+      } else if (this.oneSignal.sendTags) {
+        await this.oneSignal.sendTags(tags);
+        console.log('✅ OneSignal user tags set:', tags);
+        return true;
+      } else {
+        console.warn('OneSignal User API not available for setting tags');
+        return false;
+      }
     } catch (error) {
       console.error('❌ Error setting OneSignal user tags:', error);
       return false;
