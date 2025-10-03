@@ -22,9 +22,9 @@ class OneSignalService {
     }
 
     try {
-      // Wait for OneSignal to be available
+      // Load OneSignal SDK if not already loaded
       if (typeof window.OneSignal === 'undefined') {
-        await this.waitForOneSignal();
+        await this.loadOneSignalSDK();
       }
 
       this.oneSignal = window.OneSignal;
@@ -40,6 +40,7 @@ class OneSignalService {
       // Initialize OneSignal only if not already initialized
       await this.oneSignal.init({
         appId: this.appId,
+        safari_web_id: "web.onesignal.auto.ee224f6c-70c4-4414-900b-c283db5ea114",
         autoResubscribe: true,
         notifyButton: {
           enable: true,
@@ -87,7 +88,41 @@ class OneSignalService {
   }
 
   /**
-   * Wait for OneSignal SDK to load
+   * Load OneSignal SDK dynamically
+   */
+  loadOneSignalSDK() {
+    return new Promise((resolve, reject) => {
+      // Check if already loaded
+      if (typeof window.OneSignal !== 'undefined') {
+        resolve();
+        return;
+      }
+
+      // Check if script is already being loaded
+      if (document.querySelector('script[src*="OneSignalSDK.page.js"]')) {
+        this.waitForOneSignal().then(resolve).catch(reject);
+        return;
+      }
+
+      // Load the OneSignal SDK
+      const script = document.createElement('script');
+      script.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
+      script.defer = true;
+      script.onload = () => {
+        console.log('✅ OneSignal SDK loaded successfully');
+        this.waitForOneSignal().then(resolve).catch(reject);
+      };
+      script.onerror = () => {
+        console.error('❌ Failed to load OneSignal SDK');
+        reject(new Error('Failed to load OneSignal SDK'));
+      };
+
+      document.head.appendChild(script);
+    });
+  }
+
+  /**
+   * Wait for OneSignal SDK to be available
    */
   waitForOneSignal() {
     return new Promise((resolve) => {
