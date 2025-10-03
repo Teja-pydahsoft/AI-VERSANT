@@ -77,7 +77,7 @@ const BatchDetails = () => {
         } finally {
             setLoading(false);
         }
-    }, [batchId, error]);
+    }, [batchId]);
 
     useEffect(() => {
         fetchBatchDetails();

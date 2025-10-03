@@ -55,6 +55,7 @@ def dashboard():
             'message': f'Failed to get dashboard data: {str(e)}'
         }), 500
 
+
 @campus_admin_bp.route('/students', methods=['GET'])
 @jwt_required()
 @require_permission(module='student_management')
@@ -139,7 +140,7 @@ def get_student_progress():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        if not user or user.get('role') != 'campus_admin':
+        if not user or user.get('role') not in ['campus_admin', 'course_admin']:
             return jsonify({'success': False, 'message': 'Access denied'}), 403
         
         campus_id = user.get('campus_id')
@@ -236,8 +237,8 @@ def create_batch():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        if not user or user.get('role') != 'campus_admin':
-            return jsonify({'success': False, 'message': 'Access denied'}), 403
+        if not user or user.get('role') not in ['campus_admin', 'course_admin']:
+            return jsonify({'success': False, 'message': 'Access denied. Campus or Course Admin required.'}), 403
         
         campus_id = user.get('campus_id')
         data = request.get_json()
@@ -286,8 +287,8 @@ def delete_batch(batch_id):
     """Delete a batch (only if it belongs to the campus admin's campus)"""
     current_user_id = get_jwt_identity()
     user = mongo_db.find_user_by_id(current_user_id)
-    if not user or user.get('role') != 'campus_admin':
-        return jsonify({'success': False, 'message': 'Access denied'}), 403
+    if not user or user.get('role') not in ['campus_admin', 'course_admin']:
+        return jsonify({'success': False, 'message': 'Access denied. Campus or Course Admin required.'}), 403
     campus_id = user.get('campus_id')
     batch = mongo_db.batches.find_one({'_id': ObjectId(batch_id), 'campus_ids': ObjectId(campus_id)})
     if not batch:
@@ -354,8 +355,8 @@ def create_course():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        if not user or user.get('role') != 'campus_admin':
-            return jsonify({'success': False, 'message': 'Access denied'}), 403
+        if not user or user.get('role') not in ['campus_admin', 'course_admin']:
+            return jsonify({'success': False, 'message': 'Access denied. Campus or Course Admin required.'}), 403
         
         campus_id = user.get('campus_id')
         data = request.get_json()
@@ -382,8 +383,8 @@ def edit_course(course_id):
     """Edit a course (only if it belongs to the campus admin's campus)"""
     current_user_id = get_jwt_identity()
     user = mongo_db.find_user_by_id(current_user_id)
-    if not user or user.get('role') != 'campus_admin':
-        return jsonify({'success': False, 'message': 'Access denied'}), 403
+    if not user or user.get('role') not in ['campus_admin', 'course_admin']:
+        return jsonify({'success': False, 'message': 'Access denied. Campus or Course Admin required.'}), 403
     campus_id = user.get('campus_id')
     course = mongo_db.courses.find_one({'_id': ObjectId(course_id), 'campus_id': ObjectId(campus_id)})
     if not course:
@@ -406,8 +407,8 @@ def delete_course(course_id):
     """Delete a course (only if it belongs to the campus admin's campus)"""
     current_user_id = get_jwt_identity()
     user = mongo_db.find_user_by_id(current_user_id)
-    if not user or user.get('role') != 'campus_admin':
-        return jsonify({'success': False, 'message': 'Access denied'}), 403
+    if not user or user.get('role') not in ['campus_admin', 'course_admin']:
+        return jsonify({'success': False, 'message': 'Access denied. Campus or Course Admin required.'}), 403
     campus_id = user.get('campus_id')
     course = mongo_db.courses.find_one({'_id': ObjectId(course_id), 'campus_id': ObjectId(campus_id)})
     if not course:

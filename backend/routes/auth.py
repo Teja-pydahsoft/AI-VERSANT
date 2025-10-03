@@ -93,6 +93,21 @@ def login():
             'course_id': str(user['course_id']) if user.get('course_id') else None,
             'batch_id': str(user['batch_id']) if user.get('batch_id') else None
         }
+
+        
+        # Populate campus name if campus_id exists
+        if user.get('campus_id'):
+            try:
+                campus = mongo_db.campuses.find_one({'_id': user['campus_id']})
+                if campus:
+                    user_info['campus_name'] = campus.get('name', 'Unknown Campus')
+                else:
+                    user_info['campus_name'] = f"Campus {str(user['campus_id'])[-8:]}"
+            except Exception as e:
+                print(f"⚠️ Error fetching campus name: {e}", file=sys.stderr)
+                user_info['campus_name'] = f"Campus {str(user['campus_id'])[-8:]}"
+        else:
+            user_info['campus_name'] = "not listed campus"
         
         print(f"✅ Login successful for user: {username}", file=sys.stderr)
         
@@ -196,6 +211,18 @@ def get_current_user():
             'batch_id': str(user['batch_id']) if user.get('batch_id') else None,
             'is_active': user.get('is_active', True)
         }
+        
+        # Populate campus name if campus_id exists
+        if user.get('campus_id'):
+            try:
+                campus = mongo_db.campuses.find_one({'_id': user['campus_id']})
+                if campus:
+                    user_info['campus_name'] = campus.get('name', 'Unknown Campus')
+                else:
+                    user_info['campus_name'] = f"Campus {str(user['campus_id'])[-8:]}"
+            except Exception as e:
+                print(f"⚠️ Error fetching campus name in /me: {e}", file=sys.stderr)
+                user_info['campus_name'] = f"Campus {str(user['campus_id'])[-8:]}"
         return jsonify({
             'success': True,
             'message': 'User information retrieved successfully',

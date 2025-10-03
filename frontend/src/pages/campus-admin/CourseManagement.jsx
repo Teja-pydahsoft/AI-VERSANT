@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNotification } from '../../contexts/NotificationContext';
-import Header from '../../components/common/Header';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
 
@@ -71,7 +70,6 @@ const CourseManagement = () => {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <Header />
       <div className="flex-1 overflow-x-hidden overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
           <div className="flex items-center justify-between mb-6">

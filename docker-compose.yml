@@ -130,7 +130,7 @@ services:
       - production
 
   # ========================================
-  # REDIS CACHE (Optional)
+  # REDIS CACHE
   # ========================================
   redis:
     image: redis:7-alpine
@@ -142,13 +142,73 @@ services:
       - redis_data:/data
     networks:
       - ai-versant-network
-    profiles:
-      - production
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # ========================================
+  # NOTIFICATION SERVICE
+  # ========================================
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: ai-versant-notification-service
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      # Server
+      PORT: 3001
+      NODE_ENV: production
+      LOG_LEVEL: info
+      
+      # Database
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-password}@mongodb:27017/versant_notifications?authSource=admin
+      
+      # Redis
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      
+      # API Security
+      NOTIFICATION_API_KEYS: ${NOTIFICATION_API_KEYS:-versant-notification-api-key}
+      
+      # CORS
+      ALLOWED_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000,https://crt.pydahsoft.in}
+      
+      # Email Service (Brevo) - Using your existing variables
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      BREVO_SENDER_EMAIL: ${SENDER_EMAIL:-noreply@versant.com}
+      BREVO_SENDER_NAME: ${SENDER_NAME:-VERSANT System}
+      
+      # SMS Service (BulkSMS) - Only API key needed
+      BULKSMS_API_KEY: ${BULKSMS_API_KEY}
+      BULKSMS_SENDER_ID: ${BULKSMS_SENDER_ID:-VERSANT}
+      BULKSMS_API_URL: ${BULKSMS_API_URL:-https://www.bulksmsapps.com/api/apismsv2.aspx}
+      
+      # Push Notifications (VAPID)
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@versant.com}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-versant-network
+    volumes:
+      - notification_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   mongodb_data:
@@ -156,6 +216,8 @@ volumes:
   backend_logs:
     driver: local
   redis_data:
+    driver: local
+  notification_logs:
     driver: local
 
 networks:

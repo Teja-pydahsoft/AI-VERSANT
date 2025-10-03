@@ -349,6 +349,14 @@ def create_app():
     from routes.auto_release_settings import auto_release_settings_bp
     app.register_blueprint(auto_release_settings_bp, url_prefix='/auto-release-settings')
     
+    # Push Notifications
+    from routes.push_notifications import push_notifications_bp
+    app.register_blueprint(push_notifications_bp, url_prefix='/push-notifications')
+    
+    # OneSignal Push Notifications
+    from routes.onesignal_notifications import onesignal_notifications_bp
+    app.register_blueprint(onesignal_notifications_bp, url_prefix='/api/onesignal')
+    
     # Register Global Settings blueprint
     app.register_blueprint(global_settings_bp, url_prefix='/global-settings')
     

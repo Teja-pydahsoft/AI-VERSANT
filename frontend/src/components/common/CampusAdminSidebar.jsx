@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { 
   LayoutDashboard, BookCopy, GraduationCap, Users, 
-  FilePlus, BarChart, Activity, LogOut, Building2
+  FilePlus, BarChart, Activity, LogOut, Building2, Menu, X, Bell
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useFeatures } from '../../contexts/FeatureContext'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import api from '../../services/api'
 
 const CampusAdminSidebar = () => {
@@ -16,10 +16,37 @@ const CampusAdminSidebar = () => {
   const { generateNavLinks, loading: featuresLoading } = useFeatures()
   const [userPermissions, setUserPermissions] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024)
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth)
 
   useEffect(() => {
     fetchUserPermissions()
   }, [user])
+
+  // Generate navigation based on user features (same as StudentSidebar)
+  const navigationItems = generateNavLinks(user?.role || 'campus_admin')
+  
+  // Debug logging
+  console.log('🔍 Campus Admin User role:', user?.role)
+  console.log('📋 Campus Admin Navigation items:', navigationItems)
+  console.log('👤 Campus Admin User:', user)
+  console.log('⏳ Features loading state:', featuresLoading)
+
+  // Icon mapping for navigation items
+  const iconMap = {
+    'LayoutDashboard': LayoutDashboard,
+    'BookCopy': BookCopy,
+    'GraduationCap': GraduationCap,
+    'Users': Users,
+    'FilePlus': FilePlus,
+    'BarChart': BarChart,
+    'Activity': Activity,
+    'Building2': Building2,
+    'User': Users,
+    'Settings': Activity
+  }
 
   const fetchUserPermissions = async () => {
     if (!user) {
@@ -27,15 +54,7 @@ const CampusAdminSidebar = () => {
       return
     }
 
-    try {
-      // Get user's full permissions from the backend
-      const userResponse = await api.get(`/user-management/${user.id || user._id}`)
-      const permissions = userResponse.data.data?.permissions || {}
-      
-      setUserPermissions(permissions)
-    } catch (err) {
-      console.error('Failed to fetch permissions:', err)
-      // Use default permissions for campus admin
+    // Use default permissions for campus admin since we're using FeatureContext
       setUserPermissions({
         modules: ['dashboard', 'course_management', 'batch_management', 'student_management', 'test_management', 'results_management', 'analytics', 'reports'],
         can_create_campus: false,
@@ -45,190 +64,279 @@ const CampusAdminSidebar = () => {
         can_manage_tests: true,
         can_view_all_data: false
       })
-    } finally {
       setLoading(false)
-    }
   }
-
-  // Define navigation based on campus admin permissions and feature settings
-  const getNavigation = () => {
-    if (loading || !userPermissions || featuresLoading) {
-      return []
-    }
-
-    // Get feature-based navigation
-    const featureNavLinks = generateNavLinks('campus_admin')
-    
-    // Map icon names to actual components
-    const iconMap = {
-      LayoutDashboard,
-      BookCopy,
-      GraduationCap,
-      Users,
-      FilePlus,
-      BarChart,
-      Activity,
-      Building2
-    }
-    
-    const navigation = featureNavLinks.map(link => ({
-      ...link,
-      icon: iconMap[link.icon] || LayoutDashboard
-    }))
-
-    // Filter by permissions as well
-    return navigation.filter(link => {
-      const moduleMap = {
-        'dashboard': 'dashboard',
-        'student_management': 'student_management',
-        'test_management': 'test_management',
-        'batch_management': 'batch_management',
-        'reports': 'reports'
-      }
-      
-      const requiredModule = moduleMap[link.feature]
-      return !requiredModule || userPermissions.modules?.includes(requiredModule)
-    })
-  }
-
-  const navigation = getNavigation()
 
   const handleLogout = () => {
-    logout()
-    navigate('/login')
+    console.log('CampusAdminSidebar logout initiated')
+    try {
+      logout()
+      console.log('CampusAdminSidebar logout successful')
+      navigate('/login')
+    } catch (error) {
+      console.error('CampusAdminSidebar logout error:', error)
+      navigate('/login')
+    }
   }
 
-  const isActive = (path) => location.pathname.startsWith(path)
+  const isActive = (path) => {
+    if (path === '/campus-admin') {
+      return location.pathname === '/campus-admin' || location.pathname === '/campus-admin/'
+    }
+    return location.pathname.startsWith(path)
+  }
 
-  if (loading) {
+  const toggleSidebar = () => {
+    if (isDesktop) {
+      setIsCollapsed(!isCollapsed)
+    } else {
+      setIsMobileMenuOpen(!isMobileMenuOpen)
+    }
+  }
+
+  useEffect(() => {
+    const handleResize = () => {
+      const newIsDesktop = window.innerWidth >= 1024
+      setIsDesktop(newIsDesktop)
+      setWindowWidth(window.innerWidth)
+      if (newIsDesktop && isMobileMenuOpen) {
+        setIsMobileMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [isMobileMenuOpen])
+
     return (
       <div className="flex">
-        <div className="fixed top-0 left-0 h-screen w-64 bg-gradient-to-b from-white to-gray-50 shadow-2xl z-30 flex flex-col border-r border-gray-200">
-          <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-            <div className="animate-pulse">
-              <div className="h-8 bg-gray-300 rounded mb-2"></div>
-              <div className="h-4 bg-gray-300 rounded"></div>
-            </div>
-          </div>
-          <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
-          </div>
-        </div>
-        <div className="ml-64 flex-1 bg-gray-50 w-full">
-          <Outlet />
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex">
-      <motion.div
-        initial={{ x: -100, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 80, damping: 18 }}
-        className="fixed top-0 left-0 h-screen w-64 bg-gradient-to-b from-white to-gray-50 shadow-2xl z-30 flex flex-col border-r border-gray-200"
-      >
-        {/* Logo/Brand */}
-        <motion.div 
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.1, type: 'spring', stiffness: 100 }}
-          className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50"
+      {/* Mobile Menu Toggle */}
+      <div className="lg:hidden fixed top-4 left-4 z-50">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={toggleSidebar}
+          className="p-3 bg-white text-gray-700 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
         >
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-            Study Edge
-          </h1>
-          <p className="text-sm text-gray-600 font-medium">Campus Admin Portal</p>
-        </motion.div>
+          {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </motion.button>
+            </div>
 
-        <nav className="flex-1 flex flex-col justify-between">
-          <div className="flex flex-col space-y-1 px-4 mt-6">
-            {navigation.map((link, idx) => (
-              <motion.div
-                key={link.name}
-                initial={{ x: -30, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: 0.05 * idx, type: 'spring', stiffness: 80, damping: 18 }}
+      {/* Modern Collapsible Sidebar */}
+      <motion.div
+        initial={false}
+        animate={{ 
+          width: isDesktop ? (isCollapsed ? 70 : 260) : (isMobileMenuOpen ? Math.min(260, windowWidth * 0.8) : 0),
+          x: isDesktop ? 0 : (isMobileMenuOpen ? 0 : -Math.min(260, windowWidth * 0.8))
+        }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        className={`fixed top-0 left-0 h-screen z-50 flex flex-col min-h-0 ${
+          isDesktop ? 'translate-x-0' : (isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full')
+        }`}
+        style={{ 
+          background: '#fefefe',
+          boxShadow: 'inset -1px 0 0 rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+        }}
+      >
+        {/* Header with User Profile */}
+        <div className="p-2 sm:p-3 border-b border-gray-200/50 flex-shrink-0">
+          <div className="flex items-center space-x-2">
+            <motion.div 
+              whileHover={{ scale: 1.05 }}
+              className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg"
+            >
+              <Building2 className="w-6 h-6 text-white" />
+            </motion.div>
+            <AnimatePresence>
+              {!isCollapsed && (
+                <motion.div
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div>
+                    <p className="font-semibold text-gray-800 text-sm">{user?.name || 'Campus Admin'}</p>
+                    <p className="text-xs text-gray-500">Campus Admin</p>
+          </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Navigation Items */}
+        <div className="flex-1 overflow-y-auto py-1 px-1 min-h-0 space-y-1">
+          {featuresLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-xs text-gray-500">Loading menu...</div>
+        </div>
+          ) : (
+            <div className="space-y-0.5">
+              {navigationItems && navigationItems.length > 0 ? (
+                navigationItems.map((item, index) => (
+      <motion.div
+                    key={item.name}
+                    initial={{ x: -20, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+                    transition={{ 
+                      delay: index * 0.05,
+                      type: 'spring',
+                      stiffness: 100
+                    }}
+                  >
+                    <Link
+                      to={item.path}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`group flex items-center justify-center px-2 py-2 sm:py-3 mx-1 rounded-lg transition-all duration-300 relative ${
+                        isActive(item.path)
+                          ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                      }`}
+                    >
+                      {React.createElement(iconMap[item.icon] || LayoutDashboard, {
+                        className: `w-6 h-6 transition-all duration-300 ${
+                          isActive(item.path) ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'
+                        }`
+                      })}
+                      
+                      <AnimatePresence>
+                        {!isCollapsed && (
+        <motion.div 
+                            initial={{ opacity: 0, width: 0 }}
+                            animate={{ opacity: 1, width: 'auto' }}
+                            exit={{ opacity: 0, width: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="flex items-center justify-between flex-1 ml-3 overflow-hidden"
+                          >
+                            <span className="text-sm font-medium truncate">{item.name}</span>
+                            {item.badge && (
+                              <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                                {item.badge}
+                              </span>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </Link>
+        </motion.div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-xs text-gray-500">No menu items available</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+          
+        {/* Logout Button at Bottom */}
+        <div className="p-2 sm:p-3 border-t border-gray-200/50 flex-shrink-0">
+          <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-              >
-                <Link
-                  to={link.path}
-                  className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-300 relative overflow-hidden
-                    ${isActive(link.path)
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
-                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-100 hover:to-blue-50 hover:text-gray-900 hover:shadow-md'}
-                  `}
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 bg-red-500 text-white font-medium px-3 py-2 rounded-lg hover:bg-red-600 hover:shadow-lg transition-all duration-300 shadow-md"
+          >
+            <LogOut className="w-5 h-5" />
+            <AnimatePresence>
+              {!isCollapsed && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-sm font-medium overflow-hidden"
                 >
-                  {/* Active indicator */}
-                  {isActive(link.path) && (
-                    <motion.div
-                      layoutId="activeTab"
-                      className="absolute inset-0 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl"
-                      initial={false}
-                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                    />
-                  )}
-                  
-                  <link.icon className={`mr-3 h-5 w-5 transition-all duration-300 relative z-10
-                    ${isActive(link.path) 
-                      ? 'text-white' 
-                      : 'text-gray-500 group-hover:text-blue-600 group-hover:scale-110'
-                    }`} 
-                  />
-                  <span className="relative z-10 transition-all duration-300 group-hover:translate-x-1 font-semibold">
-                    {link.name}
-                  </span>
-                  
-                  {/* Hover effect */}
-                  {!isActive(link.path) && (
-                    <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-xl"
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      whileHover={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.2 }}
-                    />
-                  )}
-                </Link>
-              </motion.div>
-            ))}
-          </div>
-        </nav>
+                  Sign Out
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
+        </div>
+      </motion.div>
 
-        {/* User Info & Logout */}
-        <motion.div 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3, type: 'spring', stiffness: 100 }}
-          className="px-4 pb-6 mt-auto"
+      {/* External Collapse/Expand Button (Desktop Only) */}
+      {isDesktop && (
+        <motion.button
+                      initial={false}
+          animate={{ 
+            x: isCollapsed ? 0 : 0,
+            rotate: isCollapsed ? 0 : 180
+          }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="fixed top-1/2 -translate-y-1/2 z-40 w-6 h-6 bg-white rounded-full shadow-lg border border-gray-200 flex items-center justify-center text-gray-600 hover:text-gray-800 hover:shadow-xl transition-all duration-300"
+          style={{ left: isCollapsed ? '66px' : '256px' }}
         >
-          <div className="flex items-center mb-4 p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center shadow-md">
-              <Building2 className="h-4 w-4 text-white" />
+          <X className="w-3 h-3 rotate-45" />
+        </motion.button>
+      )}
+      
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+                    <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+      
+      {/* Main Content */}
+      <div className={`flex-1 bg-[#fefefe] transition-all duration-300 min-h-screen ${
+        isDesktop ? (isCollapsed ? 'ml-[70px]' : 'ml-[260px]') : 'ml-0'
+      }`}>
+        {/* Header */}
+        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm shadow-sm flex items-center h-16 px-4 border-b border-gray-200/70">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center space-x-4">
+              <button
+                className="lg:hidden p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100/50 transition-all duration-200"
+                onClick={toggleSidebar}
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              <div className="flex items-center space-x-3">
+                <div className="w-16 h-12 bg-transparent rounded-lg flex items-center justify-center">
+                  <img 
+                    src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_203,h_111,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png" 
+                    alt="Logo" 
+                    className="h-10 w-auto" 
+                  />
             </div>
-            <div className="ml-3">
-              <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
-              <p className="text-xs text-gray-600">Campus Admin</p>
+                <span className="text-lg font-semibold text-gray-800">
+                  <span className="hidden lg:inline">Campus Admin Portal</span>
+                  <span className="lg:hidden">Campus Admin</span>
+                </span>
             </div>
           </div>
           
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-gray-600 to-gray-700 text-white font-semibold px-4 py-3 rounded-xl hover:from-gray-700 hover:to-gray-800 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-          >
-            <motion.div
-              whileHover={{ rotate: 180 }}
-              transition={{ duration: 0.3 }}
-            >
-              <LogOut className="h-5 w-5" />
-            </motion.div>
-            Logout
+            <div className="flex items-center space-x-4">
+              <button className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100/50 transition-all duration-200">
+                <Bell className="h-5 w-5" />
           </button>
-        </motion.div>
-      </motion.div>
-      <div className="ml-64 flex-1 bg-gray-50 w-full">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <Building2 className="h-4 w-4 text-white" />
+                </div>
+                <span className="text-sm font-medium text-gray-700">{user?.name}</span>
+              </div>
+            </div>
+          </div>
+        </header>
+        
+        {/* Content Area */}
+        <div className="p-3 sm:p-4 lg:p-6 xl:p-8 min-h-screen w-full overflow-x-auto">
         <Outlet />
+        </div>
       </div>
     </div>
   )

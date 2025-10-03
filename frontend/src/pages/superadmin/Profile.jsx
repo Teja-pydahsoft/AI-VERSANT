@@ -1,22 +1,27 @@
 import React, { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext'
-import { User, Mail, Shield, Calendar, Building, BookOpen, Users } from 'lucide-react'
+import { User, Mail, Shield, Calendar, Building, BookOpen, Users, Edit, KeyRound } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import api from '../../services/api'
 
-const ProfileCard = ({ icon, title, value }) => (
-  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-    <div className="flex items-center space-x-3">
-      <div className="p-2 bg-blue-100 rounded-lg">
-        {icon}
-      </div>
-      <div>
-        <p className="text-sm font-medium text-gray-500">{title}</p>
-        <p className="text-lg font-semibold text-gray-900">{value || 'Not specified'}</p>
-      </div>
+const DetailItem = ({ icon, label, value, color = 'blue' }) => {
+  const colors = {
+    blue: 'bg-blue-100 text-blue-600',
+    green: 'bg-green-100 text-green-600',
+    purple: 'bg-purple-100 text-purple-600',
+    orange: 'bg-orange-100 text-orange-600',
+    indigo: 'bg-indigo-100 text-indigo-600',
+    teal: 'bg-teal-100 text-teal-600',
+    pink: 'bg-pink-100 text-pink-600',
+  };
+  return (
+    <div className="flex items-start space-x-4 py-4">
+      <div className={`flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl ${colors[color]}`}>{icon}</div>
+      <div className="flex-grow"><p className="text-sm font-medium text-gray-500">{label}</p><p className="text-lg font-semibold text-gray-800 break-words">{value || 'Not specified'}</p></div>
     </div>
-  </div>
-)
+  );
+};
 
 const SuperAdminProfile = () => {
   const { user } = useAuth()
@@ -61,94 +66,88 @@ const SuperAdminProfile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-gray-50 p-6 md:p-8">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8"
+        >
           <h1 className="text-3xl font-bold text-gray-900">Your Profile</h1>
           <p className="text-gray-600 mt-2">Manage your account information and settings</p>
-        </div>
+        </motion.div>
 
-        {/* Profile Overview */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
-          <div className="flex items-center space-x-6 mb-6">
-            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
-              <User className="h-10 w-10 text-white" />
-            </div>
-            <div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column: Profile Card */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="lg:col-span-1"
+          >
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center">
+              <div className="relative w-32 h-32 mx-auto mb-6">
+                <div className="w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center ring-4 ring-white shadow-md">
+                  <User className="h-16 w-16 text-white" />
+                </div>
+                <div className="absolute bottom-0 right-0 bg-white p-1.5 rounded-full shadow-md">
+                  <div className={`w-4 h-4 rounded-full ${profile.is_active ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                </div>
+              </div>
               <h2 className="text-2xl font-bold text-gray-900">{profile.name}</h2>
-              <p className="text-lg text-gray-600">{profile.email}</p>
-              <div className="flex items-center mt-2">
-                <Shield className="h-4 w-4 text-blue-500 mr-2" />
-                <span className="text-sm font-medium text-blue-600 capitalize">
-                  {profile.role?.replace('_', ' ')}
-                </span>
+              <p className="text-gray-600">{profile.email}</p>
+              <div className="mt-4 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                <Shield className="h-4 w-4 mr-1.5" />
+                <span className="capitalize">{profile.role?.replace('_', ' ')}</span>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
 
-        {/* Profile Details Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <ProfileCard 
-            icon={<User className="h-5 w-5 text-blue-500" />} 
-            title="Username" 
-            value={profile.username} 
-          />
-          <ProfileCard 
-            icon={<Mail className="h-5 w-5 text-green-500" />} 
-            title="Email" 
-            value={profile.email} 
-          />
-          <ProfileCard 
-            icon={<Shield className="h-5 w-5 text-purple-500" />} 
-            title="Role" 
-            value={profile.role?.replace('_', ' ')} 
-          />
-          <ProfileCard 
-            icon={<Calendar className="h-5 w-5 text-orange-500" />} 
-            title="Account Status" 
-            value={profile.is_active ? 'Active' : 'Inactive'} 
-          />
-          {profile.campus_id && (
-            <ProfileCard 
-              icon={<Building className="h-5 w-5 text-indigo-500" />} 
-              title="Campus ID" 
-              value={profile.campus_id} 
-            />
-          )}
-          {profile.course_id && (
-            <ProfileCard 
-              icon={<BookOpen className="h-5 w-5 text-teal-500" />} 
-              title="Course ID" 
-              value={profile.course_id} 
-            />
-          )}
-          {profile.batch_id && (
-            <ProfileCard 
-              icon={<Users className="h-5 w-5 text-pink-500" />} 
-              title="Batch ID" 
-              value={profile.batch_id} 
-            />
-          )}
-        </div>
+          {/* Right Column: Details and Actions */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="lg:col-span-2 space-y-8"
+          >
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">Account Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 divide-y md:divide-y-0">
+                <DetailItem icon={<User className="h-6 w-6" />} label="Username" value={profile.username} color="blue" />
+                <DetailItem icon={<Mail className="h-6 w-6" />} label="Email" value={profile.email} color="green" />
+                <DetailItem icon={<Shield className="h-6 w-6" />} label="Role" value={profile.role?.replace('_', ' ')} color="purple" />
+                <DetailItem icon={<Calendar className="h-6 w-6" />} label="Account Status" value={profile.is_active ? 'Active' : 'Inactive'} color="orange" />
+                {profile.campus_name && (
+                  <DetailItem icon={<Building className="h-6 w-6" />} label="Campus" value={profile.campus_name} color="indigo" />
+                )}
+                {profile.course_id && (
+                  <DetailItem icon={<BookOpen className="h-6 w-6" />} label="Course ID" value={profile.course_id} color="teal" />
+                )}
+                {profile.batch_id && (
+                  <DetailItem icon={<Users className="h-6 w-6" />} label="Batch ID" value={profile.batch_id} color="pink" />
+                )}
+              </div>
+            </div>
 
-        {/* Account Actions */}
-        <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Actions</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button className="flex items-center justify-center px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors">
-              <User className="h-4 w-4 mr-2" />
-              Edit Profile
-            </button>
-            <button className="flex items-center justify-center px-4 py-2 border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors">
-              <Shield className="h-4 w-4 mr-2" />
-              Change Password
-            </button>
-          </div>
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4">Account Actions</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                  <Edit className="h-5 w-5 mr-2" />
+                  Edit Profile (Soon)
+                </button>
+                <button className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+                  <KeyRound className="h-5 w-5 mr-2" />
+                  Change Password
+                </button>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </div>
-    </div>
+    </main>
   )
 }
 

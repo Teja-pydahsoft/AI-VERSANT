@@ -83,8 +83,8 @@ const TestManagement = () => {
   const [tests, setTests] = useState([])
   const [loading, setLoading] = useState(true)
   const [processingTests, setProcessingTests] = useState(new Set())
-  const { success, error, a } = useNotification()
-  const { loading: isAuthLoading } = useAuth()
+  const { success, error } = useNotification()
+  const { loading: isAuthLoading, user } = useAuth()
   const pollingIntervalRef = useRef(null)
   const [selectedTest, setSelectedTest] = useState(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
@@ -114,7 +114,7 @@ const TestManagement = () => {
     } finally {
       setLoading(false)
     }
-  }, [error])
+  }, [])
 
   useEffect(() => {
     if (!isAuthLoading && view === 'list') {
@@ -163,7 +163,7 @@ const TestManagement = () => {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [processingTests, success, error]);
+  }, [processingTests]);
 
   const handleTestCreated = (newTestId) => {
     setView('list')
@@ -296,7 +296,7 @@ const TestManagement = () => {
         return <ModuleQuestionUpload onBack={() => setView('list')} />
       case 'list':
       default:
-        return <TestListView tests={tests} loading={loading} setView={setView} onViewTest={handleViewTest} onDeleteTest={handleDeleteTest} onTestEmail={handleTestEmail} />
+        return <TestListView tests={tests} loading={loading} setView={setView} onViewTest={handleViewTest} onDeleteTest={handleDeleteTest} onTestEmail={handleTestEmail} onFixAudioUrls={handleFixAudioUrls} user={user} />
     }
   }
 
@@ -426,7 +426,7 @@ const TestManagement = () => {
   )
 }
 
-const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTestEmail }) => {
+const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTestEmail, onFixAudioUrls, user }) => {
   const [filters, setFilters] = useState({
     module: '',
     level: '',
@@ -467,28 +467,34 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
           <p className="mt-2 text-gray-500">Browse, manage, and create new tests.</p>
         </div>
         <div className="flex space-x-3">
-          <button
-            onClick={onTestEmail}
-            className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform transform hover:scale-105"
-          >
-            🔧 Fix Audio URLs
-          </button>
-          <button
-            onClick={onTestEmail}
-            className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-500 hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-transform transform hover:scale-105"
-          >
-            📧 Test Email
-          </button>
-          <button
-            onClick={() => {
-              setView('create');
-              setUploadedQuestions([]);
-            }}
-            className="inline-flex items-center justify-center px-5 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105"
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Create Test
-          </button>
+          {user?.role !== 'campus_admin' && (
+            <button
+              onClick={onFixAudioUrls}
+              className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform transform hover:scale-105"
+            >
+              🔧 Fix Audio URLs
+            </button>
+          )}
+          {user?.role !== 'campus_admin' && (
+            <button
+              onClick={onTestEmail}
+              className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-500 hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-transform transform hover:scale-105"
+            >
+              📧 Test Email
+            </button>
+          )}
+          {user?.role !== 'campus_admin' && (
+            <button
+              onClick={() => {
+                setView('create');
+                setUploadedQuestions([]);
+              }}
+              className="inline-flex items-center justify-center px-5 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Create Test
+            </button>
+          )}
         </div>
       </div>
 
@@ -1111,7 +1117,7 @@ const Step1TestDetails = ({ nextStep, prevStep, updateTestData, testData, step }
       }
     }
     fetchOptions()
-  }, [error])
+  }, [])
 
   // Filter levels based on selected module
   useEffect(() => {
@@ -1855,7 +1861,7 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData }
       }
     }
     fetchCampuses()
-  }, [error, user])
+  }, [user?.id])
 
   // Fetch Batches when Campus changes
   useEffect(() => {
@@ -1934,7 +1940,7 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData }
     }
 
     fetchCoursesForBatches(selectedBatchIds)
-  }, [selectedBatchIds, setValue, error, user])
+  }, [selectedBatchIds, setValue, user?.id])
 
   const onSubmit = (data) => {
     // Validate that we have the required selections based on user role
@@ -4303,7 +4309,7 @@ const ModuleQuestionUpload = ({ onBack }) => {
       }
     };
     fetchOptions();
-  }, [error]);
+  }, []);
 
   const handleModuleSelect = (module) => {
     setSelectedModule(module);
@@ -4581,4 +4587,4 @@ async function getTestIdForModuleLevel(moduleId, levelId) {
   }
 }
 
-export default TestManagement 
+export default TestManagement;

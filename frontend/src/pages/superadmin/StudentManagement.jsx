@@ -77,7 +77,7 @@ const StudentManagement = () => {
             }
         };
         fetchCampuses();
-    }, [error]);
+    }, []);
 
     // Fetch courses when campus changes
     useEffect(() => {
@@ -100,7 +100,7 @@ const StudentManagement = () => {
             }
         };
         fetchCourses();
-    }, [selectedCampus, error]);
+    }, [selectedCampus]);
 
     // Fetch batches when course changes
     useEffect(() => {
@@ -123,7 +123,7 @@ const StudentManagement = () => {
             }
         };
         fetchBatches();
-    }, [selectedCourse, error]);
+    }, [selectedCourse]);
 
     const fetchStudents = useCallback(async (page = 1, search = '') => {
         try {
@@ -168,13 +168,16 @@ const StudentManagement = () => {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [error, selectedCampus, selectedCourse, selectedBatch]);
+    }, [selectedCampus, selectedCourse, selectedBatch]);
 
     useEffect(() => {
         fetchStudents(1, searchTerm);
-        // Clear selection when filters change
+    }, [searchTerm, selectedCampus, selectedCourse, selectedBatch]);
+
+    // Clear selection when filters change
+    useEffect(() => {
         clearSelection();
-    }, [fetchStudents, searchTerm, selectedCampus, selectedCourse, selectedBatch]);
+    }, [selectedCampus, selectedCourse, selectedBatch]);
     
     const handleDeleteStudent = async (studentId) => {
         if (window.confirm('Are you sure you want to delete this student? This action is permanent.')) {

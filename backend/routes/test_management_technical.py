@@ -265,13 +265,45 @@ def create_technical_test():
 
 @technical_test_bp.route('/<test_id>', methods=['GET'])
 @jwt_required()
-@require_superadmin
 def get_technical_test(test_id):
     """Get technical test details"""
     try:
+        # Check user permissions
+        current_user_id = get_jwt_identity()
+        user = mongo_db.find_user_by_id(current_user_id)
+        
+        if not user:
+            return jsonify({'success': False, 'message': 'Access denied. Authentication required.'}), 401
+        
+        # Allow superadmin, campus_admin, and course_admin
+        allowed_roles = ['superadmin', 'campus_admin', 'course_admin']
+        if user.get('role') not in allowed_roles:
+            return jsonify({'success': False, 'message': 'Access denied. Admin privileges required.'}), 403
+        
         test = mongo_db.tests.find_one({'_id': ObjectId(test_id)})
         if not test:
             return jsonify({'success': False, 'message': 'Test not found'}), 404
+        
+        # Campus admin can only see tests for their campus
+        if user.get('role') == 'campus_admin':
+            campus_id = user.get('campus_id')
+            if campus_id:
+                test_campus_ids = test.get('campus_ids', [])
+                test_campus_id = test.get('campus_id')
+                
+                # Check both formats
+                if (test_campus_ids and ObjectId(campus_id) not in test_campus_ids) or \
+                   (test_campus_id and ObjectId(campus_id) != ObjectId(test_campus_id)) or \
+                   (not test_campus_ids and not test_campus_id):
+                    return jsonify({'success': False, 'message': 'This test does not belong to your campus.'}), 403
+            else:
+                return jsonify({'success': False, 'message': 'No campus assigned to this admin.'}), 403
+        
+        # Course admin can only see tests for their course
+        elif user.get('role') == 'course_admin':
+            course_id = user.get('course_id')
+            if course_id and ObjectId(course_id) not in test.get('course_ids', []):
+                return jsonify({'success': False, 'message': 'This test does not belong to your course.'}), 403
 
         # Validate it's a technical test (only CRT_TECHNICAL)
         if test.get('module_id') != 'CRT_TECHNICAL' and test.get('level_id') != 'TECHNICAL':

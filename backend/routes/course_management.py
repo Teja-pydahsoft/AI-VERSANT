@@ -122,7 +122,7 @@ def create_course(campus_id):
         user = mongo_db.find_user_by_id(current_user_id)
         
         # Check if user has permission to create courses
-        if not user or user.get('role') not in ['superadmin', 'campus_admin']:
+        if not user or user.get('role') not in ['superadmin', 'super_admin', 'campus_admin']:
             return jsonify({
                 'success': False,
                 'message': 'Access denied. Only super admin and campus admin can create courses.'

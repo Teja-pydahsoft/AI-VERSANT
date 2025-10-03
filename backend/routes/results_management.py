@@ -67,11 +67,17 @@ def migrate_existing_tests():
 
 @results_management_bp.route('/release/<test_id>', methods=['POST'])
 @jwt_required()
-@require_superadmin
 def release_test_results(test_id):
     """Release test results for students to view"""
     try:
         current_user_id = get_jwt_identity()
+        user = mongo_db.find_user_by_id(current_user_id)
+        allowed_roles = ['superadmin', 'campus_admin']
+        if not user or user.get('role') not in allowed_roles:
+            return jsonify({
+                'success': False,
+                'message': 'Access denied. Admin privileges required.'
+            }), 403
         
         # Find the test
         test = mongo_db.tests.find_one({'_id': ObjectId(test_id)})
@@ -124,11 +130,17 @@ def release_test_results(test_id):
 
 @results_management_bp.route('/unrelease/<test_id>', methods=['POST'])
 @jwt_required()
-@require_superadmin
 def unrelease_test_results(test_id):
     """Unrelease test results (hide from students)"""
     try:
         current_user_id = get_jwt_identity()
+        user = mongo_db.find_user_by_id(current_user_id)
+        allowed_roles = ['superadmin', 'campus_admin']
+        if not user or user.get('role') not in allowed_roles:
+            return jsonify({
+                'success': False,
+                'message': 'Access denied. Admin privileges required.'
+            }), 403
         
         # Find the test
         test = mongo_db.tests.find_one({'_id': ObjectId(test_id)})
@@ -181,10 +193,19 @@ def unrelease_test_results(test_id):
 
 @results_management_bp.route('/status/<test_id>', methods=['GET'])
 @jwt_required()
-@require_superadmin
 def get_test_release_status(test_id):
     """Get the release status of a test"""
     try:
+        # Check user permissions
+        current_user_id = get_jwt_identity()
+        user = mongo_db.find_user_by_id(current_user_id)
+        allowed_roles = ['superadmin', 'campus_admin']
+        if not user or user.get('role') not in allowed_roles:
+            return jsonify({
+                'success': False,
+                'message': 'Access denied. Admin privileges required.'
+            }), 403
+        
         # Find the test
         test = mongo_db.tests.find_one({'_id': ObjectId(test_id)})
         if not test:

@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "mongodb": "^6.20.0",
+    "onesignal-node": "^3.4.0",
+    "web-push": "^3.6.7"
+  }
+}

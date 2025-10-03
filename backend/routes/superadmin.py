@@ -71,25 +71,49 @@ def dashboard():
             }), 403
         
         user_role = user.get('role')
-        if user_role != 'superadmin':
+        if user_role not in ALLOWED_ADMIN_ROLES:
             return jsonify({
                 'success': False,
-                'message': f'Access denied. Super admin privileges required. User role: {user_role}'
+                'message': f'Access denied. Admin privileges required. User role: {user_role}'
             }), 403
         
-        total_users = mongo_db.users.count_documents({})
-        total_students = mongo_db.users.count_documents({'role': 'student'})
-        total_tests = mongo_db.tests.count_documents({})
+        # Filter by campus if user is campus admin
+        user_query = {}
+        test_query = {}
+        batch_query = {}
+        course_query = {}
+
+        if user_role == 'campus_admin' and user.get('campus_id'):
+            user_query['campus_id'] = user.get('campus_id')
+            test_query['campus_ids'] = user.get('campus_id')
+            batch_query['campus_ids'] = user.get('campus_id')
+            course_query['campus_id'] = user.get('campus_id')
+        elif user_role == 'course_admin' and user.get('course_id'):
+            user_query['course_id'] = user.get('course_id')
+            if user.get('campus_id'):
+                user_query['campus_id'] = user.get('campus_id')
+            test_query['course_ids'] = user.get('course_id')
+            batch_query['course_ids'] = user.get('course_id')
+            course_query['_id'] = user.get('course_id')
+
+        total_users = mongo_db.users.count_documents(user_query)
+        total_students = mongo_db.users.count_documents({**user_query, 'role': 'student'})
+        total_tests = mongo_db.tests.count_documents(test_query)
         # Optionally, count admins (super, campus, course)
-        total_admins = mongo_db.users.count_documents({'role': {'$in': [ROLES['SUPER_ADMIN'], ROLES['CAMPUS_ADMIN'], ROLES['COURSE_ADMIN']]}})
-        # Optionally, count active courses
-        total_courses = mongo_db.courses.count_documents({})
+        admin_query = {'role': {'$in': [ROLES['SUPER_ADMIN'], ROLES['CAMPUS_ADMIN'], ROLES['COURSE_ADMIN']]}}
+        if user_role == 'campus_admin' and user.get('campus_id'):
+            admin_query['campus_id'] = user.get('campus_id')
+        total_admins = mongo_db.users.count_documents(admin_query)
+        
+        total_courses = mongo_db.courses.count_documents(course_query)
+        total_batches = mongo_db.batches.count_documents(batch_query)
 
         dashboard_data = {
             'statistics': {
                 'total_users': total_users,
                 'total_students': total_students,
                 'total_tests': total_tests,
+                'total_batches': total_batches,
                 'total_admins': total_admins,
                 'active_courses': total_courses
             }
@@ -205,13 +229,18 @@ def get_users():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        if not user or user.get('role') != 'superadmin':
+        if not user or user.get('role') not in ALLOWED_ADMIN_ROLES:
             return jsonify({
                 'success': False,
-                'message': 'Access denied. Super admin privileges required.'
+                'message': 'Access denied. Admin privileges required.'
             }), 403
         
-        users = list(mongo_db.users.find().sort('created_at', -1))
+        # Filter by campus if user is campus admin
+        query = {}
+        if user.get('role') == 'campus_admin' and user.get('campus_id'):
+            query['campus_id'] = user.get('campus_id')
+        
+        users = list(mongo_db.users.find(query).sort('created_at', -1))
         
         users_data = []
         for user in users:
@@ -2305,12 +2334,18 @@ def get_online_tests_overview():
             }), 403
         
         # Use aggregation pipeline for better performance
+        match_stage = {
+            'test_type': 'online',
+            'status': 'completed'
+        }
+        
+        # Filter by campus if user is campus admin
+        if user.get('role') == 'campus_admin' and user.get('campus_id'):
+            match_stage['campus_id'] = user.get('campus_id')
+        
         pipeline = [
             {
-                '$match': {
-                    'test_type': 'online',
-                    'status': 'completed'
-                }
+                '$match': match_stage
             },
             {
                 '$group': {

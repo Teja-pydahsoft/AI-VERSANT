@@ -2,7 +2,7 @@
 # Add this to your frontend .env file
 
 # VAPID Push Notifications
-VITE_VAPID_PUBLIC_KEY=BGSDSV-nFQgxb060QUDjogGfL6sUEQCnzNO4x4ozffRY3kgmbGUv4e8nB1o72qP9veRl3sfmNclC5l--L--_WK4
+VITE_VAPID_PUBLIC_KEY=BNkzF4DPGqavbtyx3Dn6TPYoRyJpxBo0z7mHbghanK6xO77ae_XxtCao637aKNth3-OzBzuauC9sVIPTw2ij_og
 
 # API Base URL
 VITE_API_BASE_URL=http://localhost:8000

@@ -263,18 +263,53 @@ def get_single_test(test_id):
             }), 403
         
         current_app.logger.info(f"Fetching full details for test_id: {test_id}")
+        current_app.logger.info(f"User role: {user.get('role')}, User campus_id: {user.get('campus_id')}")
         test = mongo_db.tests.find_one({'_id': ObjectId(test_id)})
         if not test:
             current_app.logger.warning(f"Test not found for id: {test_id}")
             return jsonify({'success': False, 'message': 'Test not found'}), 404
         
+        current_app.logger.info(f"Test found - campus_ids: {test.get('campus_ids')}, campus_id: {test.get('campus_id')}")
+        
         # Check if user has permission to view this test
         if user.get('role') == 'campus_admin':
             campus_id = user.get('campus_id')
-            if campus_id and ObjectId(campus_id) not in test.get('campus_ids', []):
+            current_app.logger.info(f"Campus admin access check - User campus_id: {campus_id}")
+            if campus_id:
+                # Check both new format (campus_ids array) and old format (campus_id single)
+                test_campus_ids = test.get('campus_ids', [])
+                test_campus_id = test.get('campus_id')
+                
+                current_app.logger.info(f"Test campus data - campus_ids: {test_campus_ids}, campus_id: {test_campus_id}")
+                
+                # If test has campus_ids array, check if user's campus is in it
+                if test_campus_ids and ObjectId(campus_id) not in test_campus_ids:
+                    current_app.logger.warning(f"Access denied - User campus {campus_id} not in test campus_ids {test_campus_ids}")
+                    return jsonify({
+                        'success': False,
+                        'message': 'This test does not belong to your campus.'
+                    }), 403
+                # If test has old format campus_id, check if it matches user's campus
+                elif test_campus_id and ObjectId(campus_id) != ObjectId(test_campus_id):
+                    current_app.logger.warning(f"Access denied - User campus {campus_id} != test campus_id {test_campus_id}")
+                    return jsonify({
+                        'success': False,
+                        'message': 'This test does not belong to your campus.'
+                    }), 403
+                # If test has neither campus_ids nor campus_id, deny access
+                elif not test_campus_ids and not test_campus_id:
+                    current_app.logger.warning(f"Access denied - Test has no campus information")
+                    return jsonify({
+                        'success': False,
+                        'message': 'This test does not belong to your campus.'
+                    }), 403
+                else:
+                    current_app.logger.info(f"Access granted - Campus check passed")
+            else:
+                current_app.logger.warning(f"Access denied - User has no campus_id")
                 return jsonify({
                     'success': False,
-                    'message': 'Access denied. You can only view tests for your campus.'
+                    'message': 'No campus assigned to this admin.'
                 }), 403
         elif user.get('role') == 'course_admin':
             course_id = user.get('course_id')
@@ -285,26 +320,32 @@ def get_single_test(test_id):
                 }), 403
 
         module_id = test.get('module_id')
+        current_app.logger.info(f"Test module_id: {module_id}, routing to appropriate handler")
         
         # Route to appropriate test retrieval based on module type
         if module_id in ['GRAMMAR', 'VOCABULARY', 'READING']:
             # Redirect to MCQ test retrieval
+            current_app.logger.info(f"Routing to MCQ test handler for module: {module_id}")
             from routes.test_management_mcq import get_mcq_test
             return get_mcq_test(test_id)
         elif module_id in ['LISTENING', 'SPEAKING']:
             # Redirect to audio test retrieval
+            current_app.logger.info(f"Routing to Audio test handler for module: {module_id}")
             from routes.test_management_audio import get_audio_test
             return get_audio_test(test_id)
         elif module_id == 'WRITING':
             # Redirect to writing test retrieval
+            current_app.logger.info(f"Routing to Writing test handler for module: {module_id}")
             from routes.test_management_writing import get_writing_test
             return get_writing_test(test_id)
         elif module_id in ['CRT_APTITUDE', 'CRT_REASONING']:
             # Redirect to MCQ test retrieval for CRT Aptitude and Reasoning
+            current_app.logger.info(f"Routing to MCQ test handler for CRT module: {module_id}")
             from routes.test_management_mcq import get_mcq_test
             return get_mcq_test(test_id)
         elif module_id == 'CRT_TECHNICAL' or test.get('level_id') == 'TECHNICAL':
             # Redirect to technical test retrieval for CRT Technical only
+            current_app.logger.info(f"Routing to Technical test handler for module: {module_id}")
             from routes.test_management_technical import get_technical_test
             return get_technical_test(test_id)
         else:
@@ -474,7 +515,11 @@ def get_all_tests():
             # Campus admin can only see tests for their campus
             campus_id = user.get('campus_id')
             if campus_id:
-                match_stage['campus_ids'] = ObjectId(campus_id)
+                # Check both new format (campus_ids array) and old format (campus_id single)
+                match_stage['$or'] = [
+                    {'campus_ids': ObjectId(campus_id)},
+                    {'campus_id': ObjectId(campus_id)}
+                ]
             else:
                 return jsonify({
                     'success': False,

@@ -64,6 +64,7 @@ import ProtectedRoute from './components/common/ProtectedRoute'
 import LoadingSpinner from './components/common/LoadingSpinner'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import NotificationToast from './components/common/NotificationToast'
+import OneSignalIntegration from './components/common/OneSignalIntegration'
 
 // Admin Components
 import AdminSidebar from './components/common/AdminSidebar'
@@ -74,6 +75,9 @@ import StudentSidebar from './pages/student/StudentSidebar'
 
 // Analytics Pages
 import RealAnalytics from './pages/analytics/RealAnalytics'
+
+// Admin Pages
+import PushNotificationTest from './pages/admin/PushNotificationTest'
 
 function App() {
   return (
@@ -109,6 +113,7 @@ function App() {
                 }}
               />
               <NotificationToast />
+              <OneSignalIntegration />
               <Routes>
                 {/* Public Routes */}
                 <Route path="/" element={<GetStarted />} />
@@ -138,6 +143,7 @@ function App() {
                     <Route path="form-management" element={<FormManagement />} />
                     <Route path="form-submissions/:formId" element={<SubmissionViewer />} />
                     <Route path="real-analytics" element={<RealAnalytics />} />
+                    <Route path="push-notification-test" element={<PushNotificationTest />} />
                     <Route path="profile" element={<SuperAdminProfile />} />
                   </Route>
 

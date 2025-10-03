@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNotification } from '../../contexts/NotificationContext';
-import Header from '../../components/common/Header';
-import CampusAdminSidebar from '../../components/common/CampusAdminSidebar';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
 import { 
@@ -91,11 +89,10 @@ const CampusCourseManagement = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <CampusAdminSidebar />
-      <div className="flex-1">
-        <Header />
-        <main className="px-6 lg:px-10 py-12 bg-background min-h-screen">
+    <>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 overflow-x-hidden overflow-y-auto">
+        <div className="px-6 lg:px-10 py-12 bg-background min-h-screen">
           <motion.div 
             initial={{ opacity: 0, y: 20 }} 
             animate={{ opacity: 1, y: 0 }} 
@@ -288,10 +285,11 @@ const CampusCourseManagement = () => {
               </div>
             )}
           </motion.div>
-        </main>
-      </div>
+        </div>
+      </main>
+    </div>
 
-      {/* Create Course Modal */}
+    {/* Create Course Modal */}
       <AnimatePresence>
         {isCreateModalOpen && (
           <CourseModal
@@ -323,7 +321,7 @@ const CampusCourseManagement = () => {
           />
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 };
 

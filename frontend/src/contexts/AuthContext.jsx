@@ -148,6 +148,19 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  const refreshUser = async () => {
+    try {
+      const userData = await authService.getCurrentUser()
+      const freshUser = userData.data?.user || userData.data?.data || userData.data || userData
+      setUser(freshUser)
+      localStorage.setItem('user', JSON.stringify(freshUser))
+      return freshUser
+    } catch (error) {
+      console.error('Failed to refresh user data:', error)
+      throw error
+    }
+  }
+
   // Remove forgotPassword and resetPassword functions
   const value = {
     user,
@@ -156,6 +169,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     refreshToken,
+    refreshUser,
     isAuthenticated: !!user,
   }
 
