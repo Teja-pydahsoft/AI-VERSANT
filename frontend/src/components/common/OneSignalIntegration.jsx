@@ -22,19 +22,21 @@ const OneSignalIntegration = () => {
   const initializeOneSignal = async () => {
     try {
       // Wait a bit for OneSignal to be ready
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise(resolve => setTimeout(resolve, 2000))
       
+      console.log('🔔 Initializing OneSignal...')
       const initialized = await oneSignalService.initialize()
       setIsInitialized(initialized)
       
       if (initialized) {
+        console.log('🔔 OneSignal initialized successfully')
         const status = oneSignalService.getSubscriptionStatus()
         setIsSubscribed(status.isSubscribed)
         
-        // Subscribe user if not already subscribed
-        if (!status.isSubscribed) {
-          await subscribeUser()
-        }
+        // Don't auto-subscribe, let user click the button
+        console.log('🔔 OneSignal ready - notification button should appear')
+      } else {
+        console.log('❌ OneSignal initialization failed')
       }
     } catch (error) {
       console.error('OneSignal initialization failed:', error)

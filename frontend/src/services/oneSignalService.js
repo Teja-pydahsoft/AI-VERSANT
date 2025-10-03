@@ -37,6 +37,14 @@ class OneSignalService {
         return true;
       }
 
+      // Check if OneSignal is partially initialized but not fully ready
+      if (this.oneSignal.init && typeof this.oneSignal.init === 'function') {
+        console.log('OneSignal SDK loaded but not initialized, proceeding with initialization');
+      } else {
+        console.log('OneSignal SDK not ready, waiting...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
       // Initialize OneSignal only if not already initialized
       await this.oneSignal.init({
         appId: this.appId,
@@ -45,6 +53,19 @@ class OneSignalService {
         notifyButton: {
           enable: true,
           showCredit: false,
+          position: "bottom-right",
+          size: "medium",
+          theme: "default",
+          colors: {
+            "circle.background": "#ff4444",
+            "circle.foreground": "#ffffff",
+            "badge.background": "#ff4444",
+            "badge.foreground": "#ffffff",
+            "badge.bordercolor": "#ff4444",
+            "pulse.color": "#ff4444",
+            "dialog.button.background": "#ff4444",
+            "dialog.button.foreground": "#ffffff"
+          },
           text: {
             "tip.state.unsubscribed": "Subscribe to VERSANT notifications",
             "tip.state.subscribed": "You're subscribed to VERSANT notifications",
@@ -80,10 +101,43 @@ class OneSignalService {
       // Check subscription status
       await this.checkSubscriptionStatus();
 
+      // Ensure notification button is visible
+      await this.ensureNotificationButtonVisible();
+
       return true;
     } catch (error) {
       console.error('❌ OneSignal initialization failed:', error);
       return false;
+    }
+  }
+
+  /**
+   * Ensure notification button is visible
+   */
+  async ensureNotificationButtonVisible() {
+    try {
+      if (!this.oneSignal || !this.oneSignal.Notifications) {
+        console.log('OneSignal not ready for button visibility check');
+        return;
+      }
+
+      // Check if notification button should be shown
+      const permission = this.oneSignal.Notifications.permission;
+      
+      if (permission === false) {
+        console.log('🔔 OneSignal notification button should be visible (permission denied)');
+        
+        // Force show the notification button
+        if (this.oneSignal.Notifications.showNativePrompt) {
+          console.log('🔔 Attempting to show notification prompt');
+        }
+      } else if (permission === true) {
+        console.log('🔔 OneSignal notification button should be visible (permission granted)');
+      } else {
+        console.log('🔔 OneSignal notification button should be visible (permission not set)');
+      }
+    } catch (error) {
+      console.error('❌ Error ensuring notification button visibility:', error);
     }
   }
 
@@ -225,10 +279,17 @@ class OneSignalService {
     }
 
     try {
-      await this.oneSignal.setSubscription(false);
-      this.isSubscribed = false;
-      console.log('✅ OneSignal unsubscription successful');
-      return true;
+      // Use OneSignal v16 API for unsubscription
+      if (this.oneSignal.Notifications && this.oneSignal.Notifications.setConsentGiven) {
+        await this.oneSignal.Notifications.setConsentGiven(false);
+        this.isSubscribed = false;
+        console.log('✅ OneSignal unsubscription successful');
+        return true;
+      } else {
+        console.warn('OneSignal Notifications API not available for unsubscription');
+        this.isSubscribed = false;
+        return true;
+      }
     } catch (error) {
       console.error('❌ OneSignal unsubscription failed:', error);
       throw error;
@@ -380,8 +441,14 @@ class OneSignalService {
     if (!this.isInitialized) return null;
 
     try {
-      const userId = await this.oneSignal.getUserId();
-      return userId;
+      // Use OneSignal v16 API to get user ID
+      if (this.oneSignal.User && this.oneSignal.User.onesignalId) {
+        const userId = this.oneSignal.User.onesignalId;
+        return userId;
+      } else {
+        console.warn('OneSignal User API not available');
+        return null;
+      }
     } catch (error) {
       console.error('❌ Error getting OneSignal user ID:', error);
       return null;
@@ -395,9 +462,26 @@ class OneSignalService {
     if (!this.isInitialized) return false;
 
     try {
-      await this.oneSignal.sendTags(tags);
-      console.log('✅ OneSignal user tags set:', tags);
-      return true;
+      // Use OneSignal v16 API for setting external user ID and tags
+      if (this.oneSignal.User && this.oneSignal.User.addAlias) {
+        // Set external user ID if provided
+        if (tags.userId) {
+          await this.oneSignal.User.addAlias('external_user_id', tags.userId);
+        }
+        
+        // Set other tags
+        const tagEntries = Object.entries(tags).filter(([key]) => key !== 'userId');
+        if (tagEntries.length > 0) {
+          const tagObject = Object.fromEntries(tagEntries);
+          await this.oneSignal.User.addTags(tagObject);
+        }
+        
+        console.log('✅ OneSignal user tags set:', tags);
+        return true;
+      } else {
+        console.warn('OneSignal User API not available');
+        return false;
+      }
     } catch (error) {
       console.error('❌ Error setting OneSignal user tags:', error);
       return false;
