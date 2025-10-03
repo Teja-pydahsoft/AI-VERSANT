@@ -14,16 +14,30 @@
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
       window.OneSignalDeferred = window.OneSignalDeferred || [];
-      OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.init({
+      OneSignalDeferred.push(function(OneSignal) {
+        OneSignal.init({
           appId: "ee224f6c-70c4-4414-900b-c283db5ea114",
-          autoResubscribe: true,
+          safari_web_id: "web.onesignal.auto.ee224f6c-70c4-4414-900b-c283db5ea114",
           notifyButton: {
-            enable: true,
-            showCredit: false
-          }
+            enable: true, // Shows the OneSignal bell icon
+          },
         });
       });
+    </script>
+    
+    <!-- Register Service Worker -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function(registration) {
+              console.log('Service Worker registered successfully:', registration);
+            })
+            .catch(function(error) {
+              console.log('Service Worker registration failed:', error);
+            });
+        });
+      }
     </script>
   </head>
   <body>
