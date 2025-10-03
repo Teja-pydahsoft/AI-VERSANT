@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotification } from '../../contexts/NotificationContext'
 import oneSignalService from '../../services/oneSignalService'
-import { debugOneSignalAPI, testOneSignalMethods } from '../../utils/oneSignalDebug'
 
 const OneSignalIntegration = () => {
   const { user } = useAuth()
@@ -22,19 +21,13 @@ const OneSignalIntegration = () => {
 
   const initializeOneSignal = async () => {
     try {
-      // Debug OneSignal API availability
-      debugOneSignalAPI()
-      
       // Wait a bit for OneSignal to be ready
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      await new Promise(resolve => setTimeout(resolve, 1000))
       
       const initialized = await oneSignalService.initialize()
       setIsInitialized(initialized)
       
       if (initialized) {
-        // Test OneSignal methods
-        await testOneSignalMethods()
-        
         const status = oneSignalService.getSubscriptionStatus()
         setIsSubscribed(status.isSubscribed)
         

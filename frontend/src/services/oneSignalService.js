@@ -30,7 +30,7 @@ class OneSignalService {
       this.oneSignal = window.OneSignal;
 
       // Check if OneSignal is already initialized
-      if (this.oneSignal.Notifications && this.oneSignal.User) {
+      if (this.oneSignal.isPushSupported && this.oneSignal.getNotificationPermission) {
         console.log('✅ OneSignal already initialized, skipping initialization');
         this.isInitialized = true;
         await this.checkSubscriptionStatus();
@@ -144,40 +144,15 @@ class OneSignalService {
   }
 
   /**
-   * Wait for OneSignal to be fully ready with all APIs
-   */
-  waitForOneSignalReady() {
-    return new Promise((resolve) => {
-      if (this.oneSignal && this.oneSignal.Notifications) {
-        resolve();
-        return;
-      }
-
-      const checkReady = () => {
-        if (this.oneSignal && this.oneSignal.Notifications) {
-          resolve();
-        } else {
-          setTimeout(checkReady, 100);
-        }
-      };
-
-      checkReady();
-    });
-  }
-
-  /**
    * Check subscription status
    */
   async checkSubscriptionStatus() {
     try {
       if (!this.oneSignal) return false;
 
-      // Wait for OneSignal to be fully ready
-      await this.waitForOneSignalReady();
-
       // Check if OneSignal is properly initialized
       if (!this.oneSignal.Notifications) {
-        console.log('OneSignal Notifications API not available yet');
+        console.log('OneSignal not fully initialized yet');
         return false;
       }
 
@@ -206,9 +181,6 @@ class OneSignalService {
     }
 
     try {
-      // Wait for OneSignal to be fully ready
-      await this.waitForOneSignalReady();
-
       // Check if OneSignal Notifications API is available
       if (!this.oneSignal.Notifications) {
         throw new Error('OneSignal Notifications API not available');
@@ -257,9 +229,6 @@ class OneSignalService {
     }
 
     try {
-      // Wait for OneSignal to be fully ready
-      await this.waitForOneSignalReady();
-
       // Check if OneSignal Notifications API is available
       if (!this.oneSignal.Notifications) {
         throw new Error('OneSignal Notifications API not available');
@@ -427,9 +396,6 @@ class OneSignalService {
     if (!this.isInitialized) return null;
 
     try {
-      // Wait for OneSignal to be fully ready
-      await this.waitForOneSignalReady();
-
       // Use OneSignal v16 API to get user ID
       if (this.oneSignal.User && this.oneSignal.User.onesignalId) {
         const userId = this.oneSignal.User.onesignalId;
@@ -454,9 +420,6 @@ class OneSignalService {
     if (!this.isInitialized) return false;
 
     try {
-      // Wait for OneSignal to be fully ready
-      await this.waitForOneSignalReady();
-
       // Use OneSignal v16 API for setting tags
       if (this.oneSignal.User && this.oneSignal.User.addTags) {
         await this.oneSignal.User.addTags(tags);
