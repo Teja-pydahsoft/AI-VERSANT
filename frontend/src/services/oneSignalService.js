@@ -150,13 +150,17 @@ class OneSignalService {
     try {
       if (!this.oneSignal) return false;
 
-      const isPushEnabled = await this.oneSignal.isPushSupported();
+      // Check if OneSignal is properly initialized
+      if (!this.oneSignal.getNotificationPermission) {
+        console.log('OneSignal not fully initialized yet');
+        return false;
+      }
+
       const isOptedIn = await this.oneSignal.getNotificationPermission();
       
-      this.isSubscribed = isPushEnabled && isOptedIn === 'granted';
+      this.isSubscribed = isOptedIn === 'granted';
       
       console.log('OneSignal subscription status:', {
-        isPushEnabled,
         isOptedIn,
         isSubscribed: this.isSubscribed
       });
@@ -177,16 +181,33 @@ class OneSignalService {
     }
 
     try {
-      // Request permission
-      const permission = await this.oneSignal.showNativePrompt();
+      // Check current permission status
+      const currentPermission = await this.oneSignal.getNotificationPermission();
       
-      if (permission) {
+      if (currentPermission === 'granted') {
         this.isSubscribed = true;
-        console.log('✅ OneSignal subscription successful');
+        console.log('✅ OneSignal already subscribed');
         return true;
+      }
+
+      // Request permission using the correct OneSignal method
+      if (this.oneSignal.showNativePrompt) {
+        const permission = await this.oneSignal.showNativePrompt();
+        
+        if (permission) {
+          this.isSubscribed = true;
+          console.log('✅ OneSignal subscription successful');
+          return true;
+        } else {
+          console.log('❌ OneSignal subscription denied');
+          return false;
+        }
       } else {
-        console.log('❌ OneSignal subscription denied');
-        return false;
+        // Fallback: just check permission status
+        const permission = await this.oneSignal.getNotificationPermission();
+        this.isSubscribed = permission === 'granted';
+        console.log('OneSignal permission status:', permission);
+        return this.isSubscribed;
       }
     } catch (error) {
       console.error('❌ OneSignal subscription failed:', error);
