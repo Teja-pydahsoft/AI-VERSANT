@@ -29,6 +29,7 @@ import {
     Settings
 } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
+import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -36,6 +37,7 @@ import html2canvas from 'html2canvas';
 import AutoReleaseSettingsModal from '../../components/common/AutoReleaseSettingsModal';
 import { autoReleaseSettingsAPI } from '../../services/autoReleaseSettings';
 
+// Import the same TestDetailsView component structure from CampusReports
 // Test Details View Component
 const TestDetailsView = ({ 
     test, 
@@ -614,16 +616,16 @@ const TestDetailsView = ({
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {student.student_email || '-'}
+                                            {student.student_email || 'N/A'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {student.campus_name || '-'}
+                                            {student.campus_name || 'N/A'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {student.course_name || '-'}
+                                            {student.course_name || 'N/A'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {student.batch_name || '-'}
+                                            {student.batch_name || 'N/A'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {student.has_attempted ? student.total_questions : '-'}
@@ -631,38 +633,24 @@ const TestDetailsView = ({
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {student.has_attempted ? student.correct_answers : '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <td className="px-6 py-4 whitespace-nowrap">
                                             {student.has_attempted ? (
-                                                <span className={`${
-                                                    student.highest_score >= 70 ? 'text-green-600' :
-                                                    student.highest_score >= 50 ? 'text-yellow-600' : 'text-red-600'
+                                                <span className={`text-sm font-semibold ${
+                                                    student.highest_score >= 50 ? 'text-green-600' : 'text-red-600'
                                                 }`}>
-                                                    {student.highest_score.toFixed(1)}%
+                                                    {student.highest_score?.toFixed(1)}%
                                                 </span>
                                             ) : (
-                                                <span className="text-gray-400">-</span>
+                                                <span className="text-sm text-gray-400">-</span>
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {student.attempts_count}
+                                            {student.has_attempted ? student.attempts : '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {student.has_attempted ? (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onStudentClick(student.student_id, test.test_id);
-                                                    }}
-                                                    className="text-blue-600 hover:text-blue-800 transition-colors"
-                                                    title="View Details"
-                                                >
-                                                    <Eye className="w-4 h-4" />
-                                                </button>
-                                            ) : (
-                                                <span className="text-gray-400" title="No attempts to view">
-                                                    <Eye className="w-4 h-4" />
-                                                </span>
-                                            )}
+                                            {student.has_attempted && student.latest_attempt_date
+                                                ? new Date(student.latest_attempt_date).toLocaleDateString()
+                                                : '-'}
                                         </td>
                                     </motion.tr>
                                 ))}
@@ -670,15 +658,17 @@ const TestDetailsView = ({
                         </table>
                     )}
                 </div>
-                
-                {/* Pagination Controls */}
+
+                {/* Pagination */}
                 {totalPages > 1 && (
-                    <div className="bg-white px-6 py-4 border-t border-gray-200">
+                    <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
                         <div className="flex items-center justify-between">
                             <div className="text-sm text-gray-700">
-                                Showing {startIndex + 1} to {Math.min(endIndex, filteredAttempts.length)} of {filteredAttempts.length} students
+                                Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
+                                <span className="font-medium">{Math.min(endIndex, filteredAttempts.length)}</span> of{' '}
+                                <span className="font-medium">{filteredAttempts.length}</span> results
                             </div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                     disabled={currentPage === 1}
@@ -687,7 +677,7 @@ const TestDetailsView = ({
                                     Previous
                                 </button>
                                 
-                                <div className="flex space-x-1">
+                                <div className="flex gap-1">
                                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                                         let pageNum;
                                         if (totalPages <= 5) {
@@ -732,26 +722,25 @@ const TestDetailsView = ({
     );
 };
 
-const ResultsManagement = () => {
+// Main CourseReports Component - Similar structure to CampusReports
+const CourseReports = () => {
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
     const [tests, setTests] = useState([]);
-    const [expandedTest, setExpandedTest] = useState(null);
     const [testAttempts, setTestAttempts] = useState({});
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [studentAttemptDetails, setStudentAttemptDetails] = useState(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [exportLoading, setExportLoading] = useState(false);
-    const [currentView, setCurrentView] = useState('list'); // 'list' or 'test-details'
+    const [currentView, setCurrentView] = useState('list');
     const [selectedTest, setSelectedTest] = useState(null);
-    const [studentExportLoading, setStudentExportLoading] = useState(false);
-    const [releaseStatus, setReleaseStatus] = useState({}); // Track release status for each test
-    const [releaseLoading, setReleaseLoading] = useState({}); // Track loading state for release actions
-    const [migrationLoading, setMigrationLoading] = useState(false); // Track migration loading state
-    const [showAutoReleaseModal, setShowAutoReleaseModal] = useState(false); // Auto-release settings modal
-    const [autoReleaseSettings, setAutoReleaseSettings] = useState(null); // Auto-release settings
-    const [autoReleaseSchedules, setAutoReleaseSchedules] = useState({}); // Auto-release schedules for tests
+    const [releaseStatus, setReleaseStatus] = useState({});
+    const [releaseLoading, setReleaseLoading] = useState({});
+    const [showAutoReleaseModal, setShowAutoReleaseModal] = useState(false);
+    const [autoReleaseSettings, setAutoReleaseSettings] = useState(null);
+    const [autoReleaseSchedules, setAutoReleaseSchedules] = useState({});
     const { error, success } = useNotification();
+    const { user } = useAuth();
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -764,7 +753,8 @@ const ResultsManagement = () => {
             setLoading(true);
             setErrorMsg("");
             
-            const response = await api.get('/superadmin/online-tests-overview');
+            // Use course-specific endpoint
+            const response = await api.get(`/superadmin/online-tests-overview?course_id=${user?.course_id || ''}`);
             if (response.data.success) {
                 setTests(response.data.data || []);
             } else {
@@ -782,11 +772,24 @@ const ResultsManagement = () => {
 
     const fetchTestAttempts = async (testId) => {
         try {
-            const response = await api.get(`/superadmin/test-attempts/${testId}`);
+            // Pass course_id as query parameter to filter on backend
+            const courseParam = user?.course_id ? `?course_id=${user.course_id}` : '';
+            const response = await api.get(`/superadmin/test-attempts/${testId}${courseParam}`);
+            
             if (response.data.success) {
+                const attempts = response.data.data || [];
+                
+                console.log('Course Admin - Test Attempts:', {
+                    testId,
+                    userCourseId: user?.course_id,
+                    userCourseName: user?.course_name,
+                    attemptsReceived: attempts.length,
+                    sampleAttempt: attempts[0]
+                });
+                
                 setTestAttempts(prev => ({
                     ...prev,
-                    [testId]: response.data.data || []
+                    [testId]: attempts
                 }));
             } else {
                 error('Failed to fetch test attempts.');
@@ -805,7 +808,6 @@ const ResultsManagement = () => {
             if (!testAttempts[testId]) {
                 await fetchTestAttempts(testId);
             }
-            // Fetch auto-release schedule for this test
             await fetchAutoReleaseSchedule(testId);
         }
     };
@@ -813,14 +815,12 @@ const ResultsManagement = () => {
     const handleBackToList = () => {
         setCurrentView('list');
         setSelectedTest(null);
-        setExpandedTest(null);
     };
 
     const handleStudentClick = async (studentId, testId) => {
         try {
             const response = await api.get(`/superadmin/student-attempts/${studentId}/${testId}`);
             if (response.data.success) {
-                console.log("student attempt details",response.data);
                 setStudentAttemptDetails(response.data.data);
                 setSelectedStudent(studentId);
                 setShowDetailsModal(true);
@@ -839,409 +839,10 @@ const ResultsManagement = () => {
         setSelectedStudent(null);
     };
 
-    // Export functions for student attempt details
-    const exportStudentAttemptToExcel = async () => {
-        if (!studentAttemptDetails || studentAttemptDetails.length === 0) {
-            error('No attempt details available to export');
-            return;
-        }
-
-        setStudentExportLoading(true);
-        try {
-            // Get student information from the first attempt
-            const firstAttempt = studentAttemptDetails[0];
-            const studentInfo = {
-                'Student Name': firstAttempt.student_name || 'N/A',
-                'Roll Number': firstAttempt.roll_number || 'N/A',
-                'Email': firstAttempt.email || 'N/A',
-                'Test Name': firstAttempt.test_name || 'N/A',
-                'Total Attempts': studentAttemptDetails.length,
-                'Export Date': new Date().toLocaleString()
-            };
-
-            // Prepare comprehensive question-wise data
-            const questionData = [];
-            let totalCorrect = 0;
-            let totalIncorrect = 0;
-            let totalScore = 0;
-            let totalQuestions = 0;
-
-            studentAttemptDetails.forEach((attempt, attemptIndex) => {
-                if (attempt.detailed_results && attempt.detailed_results.length > 0) {
-                    totalQuestions = attempt.detailed_results.length; // Get total questions from first attempt
-                    
-                    attempt.detailed_results.forEach((result, questionIndex) => {
-                        const marksObtained = result.marks_obtained || (result.is_correct ? 1 : 0);
-                        
-                        questionData.push({
-                            'Attempt': attemptIndex + 1,
-                            'Question #': questionIndex + 1,
-                            'Question Text': String(result.question_text || 'N/A'),
-                            'Question Type': String(result.question_type || 'N/A'),
-                            'Student Answer': String(result.student_answer || result.selected_answer || 'No answer provided'),
-                            'Correct Answer': String(result.correct_answer_text || result.correct_answer || 'N/A'),
-                            'Status': result.is_correct ? 'Correct' : 'Incorrect',
-                            'Marks Obtained': marksObtained,
-                            'Max Marks': result.max_marks || 1,
-                            'Similarity Score': result.similarity_score ? `${result.similarity_score.toFixed(1)}%` : 'N/A',
-                            'Student Transcript': String(result.student_text || 'N/A'),
-                            'Original Text': String(result.original_text || 'N/A'),
-                            'Submitted At': attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : 'N/A',
-                            'Time Taken': attempt.time_taken ? `${attempt.time_taken} min` : 'N/A',
-                            'Attempt Score': attempt.score_percentage ? `${attempt.score_percentage.toFixed(1)}%` : '0%'
-                        });
-
-                        if (result.is_correct) totalCorrect++;
-                        else totalIncorrect++;
-                        totalScore += marksObtained;
-                    });
-                }
-            });
-
-            // Calculate summary statistics
-            const totalAttempts = studentAttemptDetails.length;
-            const averageScore = totalAttempts > 0 ? (totalScore / totalAttempts).toFixed(1) : 0;
-            const accuracy = totalQuestions > 0 ? ((totalCorrect / (totalQuestions * totalAttempts)) * 100).toFixed(1) : 0;
-
-            // Summary data
-            const summaryData = [
-                { 'Metric': 'Total Questions', 'Value': totalQuestions },
-                { 'Metric': 'Total Attempts', 'Value': totalAttempts },
-                { 'Metric': 'Total Correct Answers', 'Value': totalCorrect },
-                { 'Metric': 'Total Incorrect Answers', 'Value': totalIncorrect },
-                { 'Metric': 'Total Score', 'Value': totalScore },
-                { 'Metric': 'Average Score per Attempt', 'Value': averageScore },
-                { 'Metric': 'Overall Accuracy', 'Value': `${accuracy}%` },
-                { 'Metric': 'Export Date', 'Value': new Date().toLocaleString() }
-            ];
-
-            // Create workbook
-            const wb = XLSX.utils.book_new();
-            
-            // Add student info sheet
-            const studentInfoWS = XLSX.utils.json_to_sheet([studentInfo]);
-            XLSX.utils.book_append_sheet(wb, studentInfoWS, 'Student Information');
-
-            // Add questions sheet with better formatting
-            const questionsWS = XLSX.utils.json_to_sheet(questionData);
-            
-            // Set column widths
-            const colWidths = [
-                { wch: 8 },   // Attempt
-                { wch: 10 },  // Question #
-                { wch: 50 },  // Question Text
-                { wch: 15 },  // Question Type
-                { wch: 30 },  // Student Answer
-                { wch: 30 },  // Correct Answer
-                { wch: 12 },  // Status
-                { wch: 12 },  // Marks Obtained
-                { wch: 10 },  // Max Marks
-                { wch: 15 },  // Similarity Score
-                { wch: 30 },  // Student Transcript
-                { wch: 30 },  // Original Text
-                { wch: 20 },  // Submitted At
-                { wch: 12 },  // Time Taken
-                { wch: 15 }   // Attempt Score
-            ];
-            questionsWS['!cols'] = colWidths;
-            
-            XLSX.utils.book_append_sheet(wb, questionsWS, 'Question Details');
-
-            // Add summary sheet
-            const summaryWS = XLSX.utils.json_to_sheet(summaryData);
-            XLSX.utils.book_append_sheet(wb, summaryWS, 'Summary');
-
-            // Generate filename
-            const studentName = (firstAttempt.student_name || 'Student').replace(/[^a-zA-Z0-9]/g, '_');
-            const testName = (firstAttempt.test_name || 'Test').replace(/[^a-zA-Z0-9]/g, '_');
-            const filename = `${studentName}_${testName}_AttemptDetails_${new Date().toISOString().split('T')[0]}.xlsx`;
-
-            // Save file
-            XLSX.writeFile(wb, filename);
-            success('Excel file exported successfully!');
-        } catch (err) {
-            console.error('Error exporting to Excel:', err);
-            error('Failed to export Excel file');
-        } finally {
-            setStudentExportLoading(false);
-        }
-    };
-
-    const exportStudentAttemptToPDF = async () => {
-        if (!studentAttemptDetails || studentAttemptDetails.length === 0) {
-            error('No attempt details available to export');
-            return;
-        }
-    
-        setStudentExportLoading(true);
-        try {
-            const firstAttempt = studentAttemptDetails[0];
-            const studentName = firstAttempt.student_name || 'N/A';
-            const testName = firstAttempt.test_name || 'N/A';
-            
-            // Create PDF in portrait orientation
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pageWidth = pdf.internal.pageSize.getWidth();
-            const pageHeight = pdf.internal.pageSize.getHeight();
-            let yPosition = 20;
-    
-            // Color scheme: Green, White, Black
-            const colors = {
-                primary: [34, 139, 34],      // Forest Green
-                secondary: [240, 248, 240],  // Light Green
-                accent: [0, 100, 0],         // Dark Green
-                text: [0, 0, 0],             // Black
-                white: [255, 255, 255],      // White
-                lightGray: [245, 245, 245]   // Light Gray
-            };
-    
-            // Helper function to add text with word wrap and alignment
-            const addText = (text, x, y, maxWidth = pageWidth - 40, color = colors.text, fontSize = 10, fontStyle = 'normal', align = 'left') => {
-                pdf.setFontSize(fontSize);
-                pdf.setFont('helvetica', fontStyle);
-                pdf.setTextColor(color[0], color[1], color[2]);
-                
-                // For center alignment, calculate text width directly
-                if (align === 'center') {
-                    const textWidth = pdf.getStringUnitWidth(String(text)) * fontSize / pdf.internal.scaleFactor;
-                    const centerX = x - (textWidth / 2);
-                    pdf.text(String(text), centerX, y);
-                    return y + (fontSize * 0.35);
-                }
-                
-                const lines = pdf.splitTextToSize(String(text), maxWidth);
-                
-                // Handle text alignment
-                lines.forEach((line, index) => {
-                    let textX = x;
-                    if (align === 'right') {
-                        const textWidth = pdf.getStringUnitWidth(line) * fontSize / pdf.internal.scaleFactor;
-                        textX = x + (maxWidth - textWidth);
-                    }
-                    
-                    pdf.text(line, textX, y + (index * (fontSize * 0.35)));
-                });
-                
-                return y + (lines.length * (fontSize * 0.35));
-            };
-    
-            // Helper function to add a new page if needed
-            const checkNewPage = (requiredSpace = 20) => {
-                if (yPosition + requiredSpace > pageHeight - 20) {
-                    pdf.addPage();
-                    yPosition = 20;
-                    return true;
-                }
-                return false;
-            };
-    
-            // Helper function to draw a rectangle with color
-            const drawRect = (x, y, width, height, fillColor = colors.white, strokeColor = colors.primary) => {
-                pdf.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
-                pdf.setDrawColor(strokeColor[0], strokeColor[1], strokeColor[2]);
-                pdf.rect(x, y, width, height, 'FD');
-            };
-    
-            // Helper function to draw a table cell with proper alignment
-            const drawTableCell = (x, y, width, height, text, textColor = colors.text, fontSize = 9, fontStyle = 'normal', align = 'left', fillColor = colors.white) => {
-                drawRect(x, y, width, height, fillColor, colors.primary);
-                
-                const textY = y + height/2 + fontSize/3;
-                
-                if (align === 'center') {
-                    const textWidth = pdf.getStringUnitWidth(String(text)) * fontSize / pdf.internal.scaleFactor;
-                    const centerX = x + (width - textWidth) / 2;
-                    pdf.setFontSize(fontSize);
-                    pdf.setFont('helvetica', fontStyle);
-                    pdf.setTextColor(textColor[0], textColor[1], textColor[2]);
-                    pdf.text(String(text), centerX, textY);
-                } else {
-                    const textX = align === 'right' ? x + width - 3 : x + 3;
-                    addText(text, textX, textY, width - 6, textColor, fontSize, fontStyle, align);
-                }
-            };
-    
-            // Helper function to calculate required row height based on text length
-            const calculateRowHeight = (text, maxWidth, fontSize = 6) => {
-                const lines = pdf.splitTextToSize(String(text), maxWidth);
-                return Math.max(8, lines.length * (fontSize * 0.4) + 4);
-            };
-    
-            // Title with green background - properly centered
-            drawRect(10, 10, pageWidth - 20, 15, colors.primary);
-            addText(`${studentName}'s TEST ATTEMPT DETAILS`, pageWidth/2, 12, undefined, colors.white, 14, 'bold', 'center');
-            yPosition = 30;
-    
-            // Student Information Box - optimized for A4 portrait
-            const margin = 15; // Standard margin for A4 portrait
-            const infoBoxHeight = 35;
-            drawRect(margin, yPosition, pageWidth - (margin * 2), infoBoxHeight, colors.secondary);
-            
-            // Student Information Title - centered
-            addText('STUDENT INFORMATION', pageWidth/2, yPosition + 8, undefined, colors.accent, 12, 'bold', 'center');
-            
-            // Student details in two columns for portrait (better fit)
-            const colWidth = (pageWidth - (margin * 2) - 20) / 2;
-            const col1 = margin + 10;
-            const col2 = col1 + colWidth;
-            
-            // First row of details
-            addText(`Student Name: ${studentName}`, col1, yPosition + 18, colWidth - 5, colors.text, 10);
-            addText(`Roll Number: ${firstAttempt.roll_number || 'N/A'}`, col2, yPosition + 18, colWidth - 5, colors.text, 10);
-            
-            // Second row of details
-            addText(`Email: ${firstAttempt.email || 'N/A'}`, col1, yPosition + 25, colWidth - 5, colors.text, 10);
-            addText(`Test Name: ${testName}`, col2, yPosition + 25, colWidth - 5, colors.text, 10);
-            
-            // Third row of details
-            addText(`Total Attempts: ${studentAttemptDetails.length}`, col1, yPosition + 32, colWidth - 5, colors.text, 10);
-            addText(`Export Date: ${new Date().toLocaleString()}`, col2, yPosition + 32, colWidth - 5, colors.text, 10);
-            
-            yPosition += infoBoxHeight + 10;
-    
-            // Process each attempt
-            let totalCorrect = 0;
-            let totalIncorrect = 0;
-            let totalScore = 0;
-            let totalQuestions = 0;
-    
-            studentAttemptDetails.forEach((attempt, attemptIndex) => {
-                checkNewPage(40);
-                
-                 // Attempt header with green background - A4 portrait optimized
-                 drawRect(margin, yPosition, pageWidth - (margin * 2), 12, colors.primary);
-                 addText(`ATTEMPT ${attemptIndex + 1}`, pageWidth/2, yPosition + 7, pageWidth - (margin * 2), colors.white, 12, 'bold', 'center');
-                 yPosition += 15;
-    
-                // Attempt details - A4 portrait optimized margins
-                addText(`Submitted: ${attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : 'N/A'}`, margin + 5, yPosition, pageWidth - (margin * 2) - 10, colors.text, 10);
-                yPosition += 6;
-                addText(`Time Taken: ${attempt.time_taken || 'N/A'} min`, margin + 5, yPosition, pageWidth - (margin * 2) - 10, colors.text, 10);
-                yPosition += 6;
-                addText(`Score: ${attempt.score_percentage?.toFixed(1) || 0}%`, margin + 5, yPosition, pageWidth - (margin * 2) - 10, colors.text, 10);
-                yPosition += 12;
-    
-                if (attempt.detailed_results && attempt.detailed_results.length > 0) {
-                    totalQuestions = attempt.detailed_results.length;
-                    
-                    // Questions table - optimized for A4 portrait
-                    const tableX = margin;
-                    const tableWidth = pageWidth - (margin * 2);
-                    
-                    // Column widths for portrait (210mm total width - 30mm margins = 180mm available)
-                    const colWidths = [
-                        15,  // Q# (15mm)
-                        80,  // Question (80mm)
-                        40,  // Student Answer (40mm)
-                        40,  // Correct Answer (40mm)
-                        5    // Status (5mm)
-                    ]; // Total: 180mm
-                    
-                    const headerRowHeight = 10;
-                    const rowHeight = 12;
-                    
-                    // Table header
-                    checkNewPage(headerRowHeight + (attempt.detailed_results.length * rowHeight) + 10);
-                    
-                    drawRect(tableX, yPosition, tableWidth, headerRowHeight, colors.accent);
-                    addText('Q#', tableX + colWidths[0]/2, yPosition + 6, colWidths[0], colors.white, 8, 'bold', 'center');
-                    addText('Question', tableX + colWidths[0] + colWidths[1]/2, yPosition + 6, colWidths[1], colors.white, 8, 'bold', 'center');
-                    addText('Student Answer', tableX + colWidths[0] + colWidths[1] + colWidths[2]/2, yPosition + 6, colWidths[2], colors.white, 8, 'bold', 'center');
-                    addText('Correct Answer', tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3]/2, yPosition + 6, colWidths[3], colors.white, 8, 'bold', 'center');
-                    addText('✓/✗', tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4]/2, yPosition + 6, colWidths[4], colors.white, 8, 'bold', 'center');
-                    
-                    yPosition += headerRowHeight;
-    
-                    // Process each question in table format
-                    attempt.detailed_results.forEach((result, questionIndex) => {
-                        const isCorrect = result.is_correct;
-                        const score = isCorrect ? 1 : 0;
-                        
-                        // Check if we need a new page
-                        checkNewPage(rowHeight + 5);
-                        
-                        // Row background color based on correctness
-                        const rowFillColor = isCorrect ? [240, 255, 240] : [255, 240, 240]; // Light green/red
-                        const textColor = isCorrect ? [0, 100, 0] : [150, 0, 0];
-                        
-                        // Question number (centered)
-                        drawTableCell(tableX, yPosition, colWidths[0], rowHeight, 
-                                     (questionIndex + 1).toString(), colors.text, 8, 'bold', 'center', rowFillColor);
-                        
-                        // Question text (left aligned, wrapped)
-                        const questionText = String(result.question_text || 'N/A');
-                        drawTableCell(tableX + colWidths[0], yPosition, colWidths[1], rowHeight, 
-                                     questionText, colors.text, 7, 'normal', 'left', rowFillColor);
-                        
-                        // Student answer (left aligned, wrapped)
-                        const studentAnswer = String(result.student_answer || result.selected_answer || 'No answer');
-                        drawTableCell(tableX + colWidths[0] + colWidths[1], yPosition, colWidths[2], rowHeight, 
-                                     studentAnswer, textColor, 7, 'normal', 'left', rowFillColor);
-                        
-                        // Correct answer (left aligned, wrapped)
-                        const correctAnswer = String(result.correct_answer_text || result.correct_answer || 'N/A');
-                        drawTableCell(tableX + colWidths[0] + colWidths[1] + colWidths[2], yPosition, colWidths[3], rowHeight, 
-                                     correctAnswer, colors.text, 7, 'normal', 'left', rowFillColor);
-                        
-                        // Status (centered)
-                        const statusSymbol = isCorrect ? '✓' : '✗';
-                        drawTableCell(tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], yPosition, colWidths[4], rowHeight, 
-                                     statusSymbol, textColor, 10, 'bold', 'center', rowFillColor);
-                        
-                        yPosition += rowHeight;
-    
-                        if (isCorrect) totalCorrect++;
-                        else totalIncorrect++;
-                        totalScore += score;
-                    });
-                }
-                yPosition += 15;
-            });
-    
-            // Summary section with green background
-            checkNewPage(40);
-            drawRect(margin, yPosition, pageWidth - (margin * 2), 12, colors.primary);
-            addText('SUMMARY', pageWidth/2, yPosition + 7, undefined, colors.white, 12, 'bold', 'center');
-            yPosition += 15;
-    
-            // Summary details in a nice box
-            const summaryBoxHeight = 40;
-            drawRect(margin, yPosition, pageWidth - (margin * 2), summaryBoxHeight, colors.secondary);
-            
-            const totalAttempts = studentAttemptDetails.length;
-            const averageScore = totalAttempts > 0 ? (totalScore / (totalQuestions * totalAttempts) * 100).toFixed(1) : 0;
-            const accuracy = totalQuestions > 0 ? ((totalCorrect / (totalQuestions * totalAttempts)) * 100).toFixed(1) : 0;
-    
-            // Summary details in two columns for portrait
-            addText(`Total Questions: ${totalQuestions}`, col1, yPosition + 10, colWidth, colors.text, 10, 'bold');
-            addText(`Total Attempts: ${totalAttempts}`, col2, yPosition + 10, colWidth, colors.text, 10, 'bold');
-            
-            addText(`Total Correct: ${totalCorrect}`, col1, yPosition + 18, colWidth, colors.accent, 10, 'bold');
-            addText(`Total Incorrect: ${totalIncorrect}`, col2, yPosition + 18, colWidth, colors.text, 10, 'bold');
-            
-            addText(`Total Score: ${totalScore}/${totalQuestions * totalAttempts}`, col1, yPosition + 26, colWidth, colors.text, 10, 'bold');
-            addText(`Average Score: ${averageScore}%`, col2, yPosition + 26, colWidth, colors.text, 10, 'bold');
-            
-            addText(`Overall Accuracy: ${accuracy}%`, col1, yPosition + 34, colWidth, colors.accent, 11, 'bold');
-    
-            // Save PDF
-            const filename = `${studentName.replace(/[^a-zA-Z0-9]/g, '_')}_${testName.replace(/[^a-zA-Z0-9]/g, '_')}_AttemptDetails_${new Date().toISOString().split('T')[0]}.pdf`;
-            pdf.save(filename);
-            success('PDF file exported successfully!');
-        } catch (err) {
-            console.error('Error exporting to PDF:', err);
-            error('Failed to export PDF file: ' + err.message);
-        } finally {
-            setStudentExportLoading(false);
-        }
-    };
-
     const handleExportTestResults = async (testId, testName, format = 'excel', filteredData = null, allData = null) => {
         setExportLoading(true);
         try {
-            // Use filtered data if provided, otherwise fetch from backend
             if (filteredData && allData) {
-                // Export using filtered data from frontend
                 let dataToExport;
                 if (format === 'complete' || format === 'csv') {
                     // Export all students from filtered list (both attempted and unattempted)
@@ -1257,7 +858,6 @@ const ResultsManagement = () => {
                     return;
                 }
                 
-                // Prepare data for export
                 const exportData = dataToExport.map(student => ({
                     'Student Name': student.student_name || 'N/A',
                     'Student Email': student.student_email || 'N/A',
@@ -1274,13 +874,11 @@ const ResultsManagement = () => {
                 }));
                 
                 if (format === 'csv') {
-                    // Export as CSV
                     const headers = Object.keys(exportData[0]);
                     const csvContent = [
                         headers.join(','),
                         ...exportData.map(row => headers.map(header => {
                             const value = row[header];
-                            // Escape commas and quotes in CSV
                             return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
                                 ? `"${value.replace(/"/g, '""')}"` 
                                 : value;
@@ -1297,7 +895,6 @@ const ResultsManagement = () => {
                     document.body.removeChild(link);
                     window.URL.revokeObjectURL(url);
                 } else {
-                    // Export as Excel
                     const ws = XLSX.utils.json_to_sheet(exportData);
                     const wb = XLSX.utils.book_new();
                     XLSX.utils.book_append_sheet(wb, ws, 'Test Results');
@@ -1306,7 +903,6 @@ const ResultsManagement = () => {
                 
                 success(`Test results exported successfully! (${dataToExport.length} students)`);
             } else {
-                // Fallback to backend export (original behavior)
                 let endpoint;
                 let mimeType;
                 let fileExtension;
@@ -1354,7 +950,6 @@ const ResultsManagement = () => {
         }
     };
 
-    // Release test results
     const handleReleaseResults = async (testId, testName) => {
         try {
             setReleaseLoading(prev => ({ ...prev, [testId]: true }));
@@ -1375,7 +970,6 @@ const ResultsManagement = () => {
         }
     };
 
-    // Unrelease test results
     const handleUnreleaseResults = async (testId, testName) => {
         try {
             setReleaseLoading(prev => ({ ...prev, [testId]: true }));
@@ -1396,7 +990,6 @@ const ResultsManagement = () => {
         }
     };
 
-    // Fetch release status for all tests
     const fetchReleaseStatus = async () => {
         try {
             const statusPromises = tests.map(test => 
@@ -1416,37 +1009,12 @@ const ResultsManagement = () => {
         }
     };
 
-    // Fetch release status when tests are loaded
     useEffect(() => {
         if (tests.length > 0) {
             fetchReleaseStatus();
         }
     }, [tests]);
 
-    // Migrate existing tests
-    const handleMigrateExistingTests = async () => {
-        try {
-            setMigrationLoading(true);
-            
-            const response = await api.post('/results-management/migrate-existing-tests');
-            
-            if (response.data.success) {
-                success(`Migration completed! ${response.data.data.updated_tests} tests updated with release fields.`);
-                // Refresh the tests list and release status
-                await fetchTests();
-                await fetchReleaseStatus();
-            } else {
-                error(response.data.message || 'Failed to migrate existing tests');
-            }
-        } catch (err) {
-            console.error('Migration error:', err);
-            error('Failed to migrate existing tests. Please try again.');
-        } finally {
-            setMigrationLoading(false);
-        }
-    };
-
-    // Auto-release settings functions
     const fetchAutoReleaseSettings = async () => {
         try {
             const response = await autoReleaseSettingsAPI.getSettings();
@@ -1467,7 +1035,6 @@ const ResultsManagement = () => {
         }
     };
 
-    // Fetch auto-release schedule for a specific test
     const fetchAutoReleaseSchedule = async (testId) => {
         try {
             const response = await autoReleaseSettingsAPI.getTestSchedule(testId);
@@ -1533,18 +1100,6 @@ const ResultsManagement = () => {
                                         <Settings className="w-4 h-4" />
                                         Auto Release Settings
                                     </button>
-                                    {/* <button
-                                        onClick={handleMigrateExistingTests}
-                                        disabled={migrationLoading}
-                                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        {migrationLoading ? (
-                                            <RefreshCw className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                            <AlertCircle className="w-4 h-4" />
-                                        )}
-                                        {migrationLoading ? 'Migrating...' : 'Migrate Existing Tests'}
-                                    </button> */}
                                 </div>
                             </div>
 
@@ -1588,7 +1143,7 @@ const ResultsManagement = () => {
                                                 <div className="flex flex-col items-center">
                                                     <BarChart3 className="w-12 h-12 text-gray-400 mb-4" />
                                                     <h3 className="text-lg font-medium text-gray-900 mb-2">No online tests found</h3>
-                                                    <p className="text-gray-500">No online tests are available in the system.</p>
+                                                    <p className="text-gray-500">No online tests are available for your course.</p>
                                                 </div>
                                             </td>
                                         </tr>
@@ -1665,207 +1220,19 @@ const ResultsManagement = () => {
                 </motion.div>
             </main>
 
-            {/* Student Attempt Details Modal */}
-            {showDetailsModal && studentAttemptDetails && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
-                    >
-                        <div className="p-6 border-b border-gray-200">
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-xl font-semibold text-gray-900">
-                                    Student Attempt Details
-                                </h3>
-                                <div className="flex items-center gap-3">
-                                    {/* Export Buttons */}
-                                        <button
-                                        onClick={exportStudentAttemptToExcel}
-                                        disabled={studentExportLoading}
-                                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        <ExcelIcon className="w-4 h-4" />
-                                        {studentExportLoading ? 'Exporting...' : 'Export Excel'}
-                                        </button>
-                                        <button
-                                        onClick={exportStudentAttemptToPDF}
-                                        disabled={studentExportLoading}
-                                        className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        <FileText className="w-4 h-4" />
-                                        {studentExportLoading ? 'Exporting...' : 'Export PDF'}
-                                        </button>
-                                    <button
-                                        onClick={closeDetailsModal}
-                                        className="text-gray-400 hover:text-gray-600 transition-colors p-2"
-                                    >
-                                        <XCircle className="w-6 h-6" />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="p-6 overflow-y-auto max-h-[70vh]">
-                            {studentAttemptDetails.length === 0 ? (
-                                <div className="text-center py-8">
-                                    <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No attempt details found</h3>
-                                    <p className="text-gray-500">No detailed results available for this student's attempt.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    {studentAttemptDetails.map((attempt, attemptIndex) => (
-                                        <div key={attemptIndex} className="border border-gray-200 rounded-lg p-4">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h4 className="text-lg font-medium text-gray-900">
-                                                    Attempt {attemptIndex + 1}
-                                                </h4>
-                                                <div className="flex items-center gap-4 text-sm text-gray-600">
-                                                    <span className="flex items-center gap-1">
-                                                        <Calendar className="w-4 h-4" />
-                                                        {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleDateString() : 'N/A'}
-                                                    </span>
-                                                    <span className="flex items-center gap-1">
-                                                        <Clock className="w-4 h-4" />
-                                                        {attempt.time_taken || 'N/A'} min
-                                                    </span>
-                                                    <span className="font-medium text-green-600">
-                                                        Score: {attempt.score_percentage?.toFixed(1) || 0}%
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {attempt.detailed_results && attempt.detailed_results.length > 0 && (
-                                                <div className="space-y-3">
-                                                    {attempt.detailed_results.map((result, questionIndex) => (
-                                                        <div key={questionIndex} className="border border-gray-100 rounded-lg p-4">
-                                                            <div className="flex justify-between items-start mb-2">
-                                                                <h5 className="font-medium text-gray-900">
-                                                                    Question {questionIndex + 1}
-                                                                </h5>
-                                                                <div className={`flex items-center gap-1 ${
-                                                                    result.is_correct ? 'text-green-600' : 'text-red-600'
-                                                                }`}>
-                                                                    {result.is_correct ? (
-                                                                        <CheckCircle className="w-5 h-5" />
-                                                                    ) : (
-                                                                        <XCircle className="w-5 h-5" />
-                                                                    )}
-                                                                    <span className="text-sm font-medium">
-                                                                        {result.is_correct ? 'Correct' : 'Incorrect'}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <div className="mb-3">
-                                                                <p className="text-gray-700 mb-2">
-                                                                    {result.question_text || 'Question text not available'}
-                                                                </p>
-                                                            </div>
-
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                <div>
-                                                                    <label className="text-sm font-medium text-gray-600">Student's Answer:</label>
-                                                                    <p className={`mt-1 p-2 rounded ${
-                                                                        result.is_correct ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                                                                    }`}>
-                                                                        {result.student_answer || result.selected_answer || 'No answer provided'}
-                                                                    </p>
-                                                                </div>
-                                                                <div>
-                                                                    <label className="text-sm font-medium text-gray-600">Correct Answer:</label>
-                                                                    <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
-                                                                        {result.correct_answer_text || result.correct_answer || 'Not available'}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Audio-specific details for listening/speaking tests */}
-                                                            {(result.question_type === 'audio' || result.question_type === 'listening' || result.question_type === 'speaking') && (
-                                                                <div className="mt-4 space-y-3">
-                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Student Transcript:</label>
-                                                                            <p className="mt-1 p-2 rounded bg-blue-50 text-blue-800">
-                                                                                {result.student_text || result.student_answer || 'No transcript available'}
-                                                                            </p>
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Original Text:</label>
-                                                                            <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
-                                                                                {result.original_text || result.correct_answer || 'Not available'}
-                                                                            </p>
-                                                                        </div>
-                                                                    </div>
-                                                                    
-                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Similarity Score:</label>
-                                                                            <div className="mt-1 flex items-center gap-2">
-                                                                                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                                                                    <div 
-                                                                                        className={`h-2 rounded-full ${
-                                                                                            result.similarity_score >= 70 ? 'bg-green-500' : 
-                                                                                            result.similarity_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                                                                                        }`}
-                                                                                        style={{ width: `${Math.min(result.similarity_score || 0, 100)}%` }}
-                                                                                    ></div>
-                                                                                </div>
-                                                                                <span className="text-sm font-medium text-gray-700">
-                                                                                    {result.similarity_score?.toFixed(1) || 0}%
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Student Audio:</label>
-                                                                            {result.student_audio_url ? (
-                                                                                <div className="mt-1">
-                                                                                    <audio controls className="w-full">
-                                                                                        <source src={result.student_audio_url} type="audio/webm" />
-                                                                                        <source src={result.student_audio_url} type="audio/wav" />
-                                                                                        <source src={result.student_audio_url} type="audio/mp3" />
-                                                                                        Your browser does not support the audio element.
-                                                                                    </audio>
-                                                                                    <a 
-                                                                                        href={result.student_audio_url} 
-                                                                                        target="_blank" 
-                                                                                        rel="noopener noreferrer"
-                                                                                        className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
-                                                                                    >
-                                                                                        Download Audio
-                                                                                    </a>
-                                                                                </div>
-                                                                            ) : (
-                                                                                <p className="mt-1 text-sm text-gray-500">No audio available</p>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-
             {/* Auto Release Settings Modal */}
-            <AutoReleaseSettingsModal
-                isOpen={showAutoReleaseModal}
-                onClose={() => setShowAutoReleaseModal(false)}
-                onSave={handleSaveAutoReleaseSettings}
-                initialSettings={autoReleaseSettings}
-            />
+            <AnimatePresence>
+                {showAutoReleaseModal && (
+                    <AutoReleaseSettingsModal
+                        isOpen={showAutoReleaseModal}
+                        onClose={() => setShowAutoReleaseModal(false)}
+                        settings={autoReleaseSettings}
+                        onSave={handleSaveAutoReleaseSettings}
+                    />
+                )}
+            </AnimatePresence>
         </>
     );
 };
 
-export default ResultsManagement;
+export default CourseReports;

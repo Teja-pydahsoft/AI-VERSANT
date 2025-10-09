@@ -482,7 +482,7 @@ const TestDetailsView = ({
                         </h2>
                         <div className="flex gap-2">
                             <button
-                                onClick={() => onExportTestResults(test.test_id, test.test_name, 'complete')}
+                                onClick={() => onExportTestResults(test.test_id, test.test_name, 'complete', filteredAttempts, attempts)}
                                 disabled={exportLoading}
                                 className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
                             >
@@ -494,7 +494,7 @@ const TestDetailsView = ({
                                 Export Complete
                             </button>
                             <button
-                                onClick={() => onExportTestResults(test.test_id, test.test_name, 'excel')}
+                                onClick={() => onExportTestResults(test.test_id, test.test_name, 'excel', filteredAttempts, attempts)}
                                 disabled={exportLoading}
                                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                             >
@@ -506,7 +506,7 @@ const TestDetailsView = ({
                                 Export Attempted
                             </button>
                             <button
-                                onClick={() => onExportTestResults(test.test_id, test.test_name, 'csv')}
+                                onClick={() => onExportTestResults(test.test_id, test.test_name, 'csv', filteredAttempts, attempts)}
                                 disabled={exportLoading}
                                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                             >
@@ -1238,47 +1238,116 @@ const ResultsManagement = () => {
         }
     };
 
-    const handleExportTestResults = async (testId, testName, format = 'excel') => {
+    const handleExportTestResults = async (testId, testName, format = 'excel', filteredData = null, allData = null) => {
         setExportLoading(true);
         try {
-            let endpoint;
-            let mimeType;
-            let fileExtension;
-            let fileName;
-            
-            if (format === 'complete') {
-                endpoint = `/superadmin/export-test-attempts-complete/${testId}`;
-                mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-                fileExtension = 'xlsx';
-                fileName = `${testName}_complete_results.${fileExtension}`;
-            } else if (format === 'csv') {
-                endpoint = `/superadmin/export-test-attempts-csv/${testId}`;
-                mimeType = 'text/csv';
-                fileExtension = 'csv';
-                fileName = `${testName}_attempted_results.${fileExtension}`;
+            // Use filtered data if provided, otherwise fetch from backend
+            if (filteredData && allData) {
+                // Export using filtered data from frontend
+                let dataToExport;
+                if (format === 'complete' || format === 'csv') {
+                    // Export all students from filtered list (both attempted and unattempted)
+                    dataToExport = filteredData;
+                } else {
+                    // Export only attempted students from filtered list (for 'excel' format)
+                    dataToExport = filteredData.filter(s => s.has_attempted);
+                }
+                
+                if (dataToExport.length === 0) {
+                    error('No data to export with current filters. Try "Export Complete" to include all students.');
+                    setExportLoading(false);
+                    return;
+                }
+                
+                // Prepare data for export
+                const exportData = dataToExport.map(student => ({
+                    'Student Name': student.student_name || 'N/A',
+                    'Student Email': student.student_email || 'N/A',
+                    'Roll Number': student.roll_number || 'N/A',
+                    'Campus': student.campus_name || 'N/A',
+                    'Course': student.course_name || 'N/A',
+                    'Batch': student.batch_name || 'N/A',
+                    'Total Questions': student.total_questions || 0,
+                    'Correct Answers': student.correct_answers || 0,
+                    'Score': student.has_attempted ? `${student.highest_score?.toFixed(1) || 0}%` : 'Not Attempted',
+                    'Attempts': student.attempts || 0,
+                    'Latest Attempt': student.latest_attempt_date ? new Date(student.latest_attempt_date).toLocaleString() : 'N/A',
+                    'Status': student.has_attempted ? 'Attempted' : 'Not Attempted'
+                }));
+                
+                if (format === 'csv') {
+                    // Export as CSV
+                    const headers = Object.keys(exportData[0]);
+                    const csvContent = [
+                        headers.join(','),
+                        ...exportData.map(row => headers.map(header => {
+                            const value = row[header];
+                            // Escape commas and quotes in CSV
+                            return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
+                                ? `"${value.replace(/"/g, '""')}"` 
+                                : value;
+                        }).join(','))
+                    ].join('\n');
+                    
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `${testName}_filtered_results.csv`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    // Export as Excel
+                    const ws = XLSX.utils.json_to_sheet(exportData);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Test Results');
+                    XLSX.writeFile(wb, `${testName}_filtered_results.xlsx`);
+                }
+                
+                success(`Test results exported successfully! (${dataToExport.length} students)`);
             } else {
-                endpoint = `/superadmin/export-test-attempts/${testId}`;
-                mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-                fileExtension = 'xlsx';
-                fileName = `${testName}_attempted_results.${fileExtension}`;
+                // Fallback to backend export (original behavior)
+                let endpoint;
+                let mimeType;
+                let fileExtension;
+                let fileName;
+                
+                if (format === 'complete') {
+                    endpoint = `/superadmin/export-test-attempts-complete/${testId}`;
+                    mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                    fileExtension = 'xlsx';
+                    fileName = `${testName}_complete_results.${fileExtension}`;
+                } else if (format === 'csv') {
+                    endpoint = `/superadmin/export-test-attempts-csv/${testId}`;
+                    mimeType = 'text/csv';
+                    fileExtension = 'csv';
+                    fileName = `${testName}_attempted_results.${fileExtension}`;
+                } else {
+                    endpoint = `/superadmin/export-test-attempts/${testId}`;
+                    mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                    fileExtension = 'xlsx';
+                    fileName = `${testName}_attempted_results.${fileExtension}`;
+                }
+                
+                const response = await api.get(endpoint, {
+                    responseType: 'blob'
+                });
+                
+                const blob = new Blob([response.data], { type: mimeType });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                
+                const formatName = format === 'complete' ? 'Complete (All Students)' : format.toUpperCase();
+                success(`Test results exported as ${formatName} successfully!`);
             }
-            
-            const response = await api.get(endpoint, {
-                responseType: 'blob'
-            });
-            
-            const blob = new Blob([response.data], { type: mimeType });
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            
-            const formatName = format === 'complete' ? 'Complete (All Students)' : format.toUpperCase();
-            success(`Test results exported as ${formatName} successfully!`);
         } catch (err) {
             console.error('Export error:', err);
             error('Failed to export test results. Please try again.');

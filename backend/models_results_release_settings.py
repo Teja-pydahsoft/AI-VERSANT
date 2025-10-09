@@ -40,13 +40,17 @@ class ResultsReleaseSettings:
     
     def update_global_settings(self, settings_data):
         """Update global release settings"""
-        settings_data["updated_at"] = datetime.utcnow()
+        # Remove _id from settings_data if present to avoid MongoDB immutable field error
+        settings_data_copy = settings_data.copy()
+        settings_data_copy.pop('_id', None)
+        settings_data_copy["updated_at"] = datetime.utcnow()
+        
         result = self.collection.update_one(
             {"type": "global"},
-            {"$set": settings_data},
+            {"$set": settings_data_copy},
             upsert=True
         )
-        return result.modified_count > 0
+        return result.modified_count > 0 or result.upserted_id is not None
     
     def create_test_schedule(self, test_id, test_type, created_at, end_date=None):
         """Create auto-release schedule for a specific test"""

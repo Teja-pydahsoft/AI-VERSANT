@@ -41,6 +41,7 @@ import CampusCourseManagement from './pages/campus-admin/CampusCourseManagement'
 import CourseAdminDashboard from './pages/course-admin/CourseAdminDashboard'
 import CourseStudentManagement from './pages/course-admin/CourseStudentManagement'
 import StudentProgress from './pages/course-admin/StudentProgress'
+import CourseReports from './pages/course-admin/CourseReports'
 
 // Student Pages
 import StudentDashboard from './pages/student/StudentDashboard'
@@ -169,6 +170,7 @@ function App() {
                     <Route path="students" element={<CourseStudentManagement />} />
                     <Route path="tests" element={<TestManagement />} />
                     <Route path="results" element={<ResultsManagement />} />
+                    <Route path="reports" element={<CourseReports />} />
                     <Route path="analytics" element={<StudentProgress />} />
                     <Route path="profile" element={<SuperAdminProfile />} />
                   </Route>

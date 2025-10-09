@@ -2520,6 +2520,16 @@ def get_test_attempts(test_id):
         course_ids = test.get('course_ids', [])
         batch_ids = test.get('batch_ids', [])
         
+        # Check for course_id filter from query parameter (for course admin)
+        filter_course_id = request.args.get('course_id')
+        if filter_course_id:
+            try:
+                filter_course_object_id = ObjectId(filter_course_id)
+                # Override course_ids with the filtered course
+                course_ids = [filter_course_object_id]
+            except Exception:
+                pass  # Invalid course_id, ignore filter
+        
         # Build student query
         student_query = {}
         if campus_ids:
