@@ -2343,6 +2343,10 @@ def get_online_tests_overview():
         if user.get('role') == 'campus_admin' and user.get('campus_id'):
             match_stage['campus_id'] = user.get('campus_id')
         
+        # Filter by campus if user is course admin (course admin should only see tests from their campus)
+        if user.get('role') == 'course_admin' and user.get('campus_id'):
+            match_stage['campus_id'] = user.get('campus_id')
+        
         pipeline = [
             {
                 '$match': match_stage
@@ -2529,6 +2533,16 @@ def get_test_attempts(test_id):
                 course_ids = [filter_course_object_id]
             except Exception:
                 pass  # Invalid course_id, ignore filter
+        
+        # Check for campus_id filter from query parameter (for course admin)
+        filter_campus_id = request.args.get('campus_id')
+        if filter_campus_id:
+            try:
+                filter_campus_object_id = ObjectId(filter_campus_id)
+                # Override campus_ids with the filtered campus
+                campus_ids = [filter_campus_object_id]
+            except Exception:
+                pass  # Invalid campus_id, ignore filter
         
         # Build student query
         student_query = {}
@@ -2739,7 +2753,7 @@ def export_test_attempts_complete(test_id):
                 'message': 'Invalid test ID format'
             }), 400
         
-        # Get test details
+        # Get test details first
         test = mongo_db.tests.find_one({'_id': test_object_id})
         if not test:
             return jsonify({
@@ -2752,10 +2766,23 @@ def export_test_attempts_complete(test_id):
         course_ids = test.get('course_ids', [])
         batch_ids = test.get('batch_ids', [])
         
-        # Build student query
-        student_query = {}
-        if campus_ids:
-            student_query['campus_id'] = {'$in': campus_ids}
+        # Check for course_id filter from query parameter (for course admin)
+        filter_course_id = request.args.get('course_id')
+        if filter_course_id:
+            try:
+                filter_course_object_id = ObjectId(filter_course_id)
+                course_ids = [filter_course_object_id]
+            except Exception:
+                pass
+        
+        # Check for campus_id filter from query parameter (for course admin)
+        filter_campus_id = request.args.get('campus_id')
+        if filter_campus_id:
+            try:
+                filter_campus_object_id = ObjectId(filter_campus_id)
+                campus_ids = [filter_campus_object_id]
+            except Exception:
+                pass
         if course_ids:
             student_query['course_id'] = {'$in': course_ids}
         if batch_ids:

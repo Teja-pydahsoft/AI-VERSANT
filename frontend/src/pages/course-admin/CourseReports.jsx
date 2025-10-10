@@ -753,8 +753,12 @@ const CourseReports = () => {
             setLoading(true);
             setErrorMsg("");
             
-            // Use course-specific endpoint
-            const response = await api.get(`/superadmin/online-tests-overview?course_id=${user?.course_id || ''}`);
+            // Use course-specific endpoint with campus filtering
+            const params = new URLSearchParams();
+            if (user?.course_id) params.append('course_id', user.course_id);
+            if (user?.campus_id) params.append('campus_id', user.campus_id);
+            
+            const response = await api.get(`/superadmin/online-tests-overview?${params.toString()}`);
             if (response.data.success) {
                 setTests(response.data.data || []);
             } else {
@@ -772,9 +776,12 @@ const CourseReports = () => {
 
     const fetchTestAttempts = async (testId) => {
         try {
-            // Pass course_id as query parameter to filter on backend
-            const courseParam = user?.course_id ? `?course_id=${user.course_id}` : '';
-            const response = await api.get(`/superadmin/test-attempts/${testId}${courseParam}`);
+            // Pass both course_id and campus_id as query parameters to filter on backend
+            const params = new URLSearchParams();
+            if (user?.course_id) params.append('course_id', user.course_id);
+            if (user?.campus_id) params.append('campus_id', user.campus_id);
+            
+            const response = await api.get(`/superadmin/test-attempts/${testId}?${params.toString()}`);
             
             if (response.data.success) {
                 const attempts = response.data.data || [];
@@ -782,7 +789,7 @@ const CourseReports = () => {
                 console.log('Course Admin - Test Attempts:', {
                     testId,
                     userCourseId: user?.course_id,
-                    userCourseName: user?.course_name,
+                    userCampusId: user?.campus_id,
                     attemptsReceived: attempts.length,
                     sampleAttempt: attempts[0]
                 });
