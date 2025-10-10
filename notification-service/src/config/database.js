@@ -36,4 +36,15 @@ const connectDatabase = async () => {
   }
 };
 
-module.exports = { connectDatabase };
+/**
+ * Get database instance
+ * Returns the native MongoDB driver database object from mongoose connection
+ */
+const getDatabase = () => {
+  if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+    throw new Error('Database not connected. Call connectDatabase() first.');
+  }
+  return mongoose.connection.db;
+};
+
+module.exports = { connectDatabase, getDatabase };

@@ -244,8 +244,10 @@ class BatchProcessor:
                 
                 sms_queued = 0
                 email_queued = 0
+                push_sent = 0
                 sms_failed = 0
                 email_failed = 0
+                push_failed = 0
                 
                 for student in students:
                     try:
@@ -256,35 +258,41 @@ class BatchProcessor:
                         username = student.get('username')
                         password = student.get('password')
                         
+                        # Get user_id for push notifications
+                        user_id = student.get('user_id')
+                        
                         if notification_type == 'credentials':
-                            # Process student credentials (both email and SMS)
+                            # Process student credentials (email, SMS, and push)
                             self._process_credentials_notification(
-                                name, email, phone, username, password,
-                                sms_queued, email_queued, sms_failed, email_failed
+                                name, email, phone, username, password, user_id,
+                                sms_queued, email_queued, push_sent, sms_failed, email_failed, push_failed
                             )
                         elif notification_type == 'email_only':
-                            # Process email-only notifications
+                            # Process email-only notifications (and push if user_id available)
                             self._process_email_only_notification(
-                                name, email, username, password,
-                                email_queued, email_failed
+                                name, email, username, password, user_id,
+                                email_queued, push_sent, email_failed, push_failed
                             )
                         elif notification_type == 'test_notification':
-                            # Process test notification
+                            # Process test notification (email, SMS, and push)
                             self._process_test_notification(
-                                name, email, phone, test_data,
-                                sms_queued, email_queued, sms_failed, email_failed
+                                name, email, phone, test_data, user_id,
+                                sms_queued, email_queued, push_sent, sms_failed, email_failed, push_failed
                             )
                                 
                     except Exception as e:
                         logger.error(f"❌ Error processing student {student.get('name', 'Unknown')}: {e}")
                         sms_failed += 1
                         email_failed += 1
+                        push_failed += 1
                 
                 return {
                     'sms_queued': sms_queued,
                     'email_queued': email_queued,
+                    'push_sent': push_sent,
                     'sms_failed': sms_failed,
                     'email_failed': email_failed,
+                    'push_failed': push_failed,
                     'total_processed': len(students)
                 }
                 
@@ -324,10 +332,10 @@ class BatchProcessor:
                     self.active_batches[batch_id]['status'] = 'failed'
     
     def _process_credentials_notification(self, name: str, email: str, phone: str, 
-                                        username: str, password: str,
-                                        sms_queued: int, email_queued: int, 
-                                        sms_failed: int, email_failed: int):
-        """Process student credentials notification (both email and SMS)"""
+                                         username: str, password: str, user_id: str,
+                                         sms_queued: int, email_queued: int, push_sent: int,
+                                         sms_failed: int, email_failed: int, push_failed: int):
+        """Process student credentials notification (email, SMS, and push)"""
         # Queue SMS if phone exists
         if phone:
             sms_task_id = queue_sms(
@@ -362,11 +370,41 @@ class BatchProcessor:
                 email_queued += 1
             else:
                 email_failed += 1
+        
+        # Send push notification if user_id exists
+        if user_id:
+            try:
+                from services.enhanced_notification_service import enhancedNotificationService
+                
+                notification_data = {
+                    'title': 'Welcome to VERSANT! 🎉',
+                    'message': f'Your student account has been created. Username: {username}. Login to get started!',
+                    'type': 'student_created',
+                    'url': '/student/login',
+                    'data': {
+                        'username': username,
+                        'account_type': 'student',
+                        'created_at': datetime.now().isoformat()
+                    }
+                }
+                
+                result = enhancedNotificationService.send_notification_to_user(user_id, notification_data)
+                if result.get('push_sent'):
+                    push_sent += 1
+                    logger.info(f"✅ Push notification sent to user {user_id} for credentials")
+                else:
+                    push_failed += 1
+                    logger.warning(f"⚠️ Push notification failed for user {user_id}: {result.get('errors', [])}")
+                    
+            except Exception as e:
+                push_failed += 1
+                logger.error(f"❌ Error sending push notification to user {user_id}: {e}")
     
     def _process_email_only_notification(self, name: str, email: str, 
-                                       username: str, password: str,
-                                       email_queued: int, email_failed: int):
-        """Process email-only notification (no SMS)"""
+                                       username: str, password: str, user_id: str,
+                                       email_queued: int, push_sent: int, 
+                                       email_failed: int, push_failed: int):
+        """Process email-only notification (email and push)"""
         # Queue email if email exists
         if email:
             email_task_id = queue_email(
@@ -386,11 +424,40 @@ class BatchProcessor:
                 email_queued += 1
             else:
                 email_failed += 1
+        
+        # Send push notification if user_id exists
+        if user_id:
+            try:
+                from services.enhanced_notification_service import enhancedNotificationService
+                
+                notification_data = {
+                    'title': 'Welcome to VERSANT! 🎉',
+                    'message': f'Your student account has been created. Username: {username}. Login to get started!',
+                    'type': 'student_created',
+                    'url': '/student/login',
+                    'data': {
+                        'username': username,
+                        'account_type': 'student',
+                        'created_at': datetime.now().isoformat()
+                    }
+                }
+                
+                result = enhancedNotificationService.send_notification_to_user(user_id, notification_data)
+                if result.get('push_sent'):
+                    push_sent += 1
+                    logger.info(f"✅ Push notification sent to user {user_id} for credentials")
+                else:
+                    push_failed += 1
+                    logger.warning(f"⚠️ Push notification failed for user {user_id}: {result.get('errors', [])}")
+                    
+            except Exception as e:
+                push_failed += 1
+                logger.error(f"❌ Error sending push notification to user {user_id}: {e}")
     
     def _process_test_notification(self, name: str, email: str, phone: str, 
-                                 test_data: Dict, sms_queued: int, email_queued: int, 
-                                 sms_failed: int, email_failed: int):
-        """Process test notification"""
+                                 test_data: Dict, user_id: str, sms_queued: int, email_queued: int, push_sent: int,
+                                 sms_failed: int, email_failed: int, push_failed: int):
+        """Process test notification (email, SMS, and push)"""
         test_id = test_data['test_id']  # Custom test_id for SMS
         object_id = test_data['object_id']  # MongoDB _id for emails
         test_name = test_data['test_name']
@@ -432,6 +499,39 @@ class BatchProcessor:
                 email_queued += 1
             else:
                 email_failed += 1
+        
+        # Send push notification if user_id exists
+        if user_id:
+            try:
+                from services.enhanced_notification_service import enhancedNotificationService
+                
+                # Format start_date to IST readable format
+                formatted_start_date = format_date_to_ist(start_date, 'readable')
+                
+                notification_data = {
+                    'title': f'New Test: {test_name} 📝',
+                    'message': f'A new test has been scheduled for {formatted_start_date}. Click to view details!',
+                    'type': 'test_scheduled',
+                    'url': f'/student/exam/{object_id}',
+                    'data': {
+                        'test_id': test_id,
+                        'test_name': test_name,
+                        'start_date': formatted_start_date,
+                        'exam_url': f"https://crt.pydahsoft.in/student/exam/{object_id}"
+                    }
+                }
+                
+                result = enhancedNotificationService.send_notification_to_user(user_id, notification_data)
+                if result.get('push_sent'):
+                    push_sent += 1
+                    logger.info(f"✅ Push notification sent to user {user_id} for test: {test_name}")
+                else:
+                    push_failed += 1
+                    logger.warning(f"⚠️ Push notification failed for user {user_id}: {result.get('errors', [])}")
+                    
+            except Exception as e:
+                push_failed += 1
+                logger.error(f"❌ Error sending push notification to user {user_id}: {e}")
     
     def _cleanup_completed_batches(self):
         """Clean up completed or failed batches older than 1 hour"""

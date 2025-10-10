@@ -9,6 +9,7 @@ import FormPortalPopup from '../../components/common/FormPortalPopup'
 import { useFormPortal } from '../../contexts/FormPortalContext'
 import FormStats from '../../components/student/FormStats'
 import ReleasedFormData from '../../components/student/ReleasedFormData'
+import NotificationSubscribeButton from '../../components/student/NotificationSubscribeButton'
 import api from '../../services/api'
 import { 
   BrainCircuit, 
@@ -919,8 +920,11 @@ const StudentDashboard = () => {
           </motion.div>
         </div>
       )}
+      
+      {/* Floating Notification Subscribe Button */}
+      <NotificationSubscribeButton />
     </div>
   )
 }
 
-export default StudentDashboard 
+export default StudentDashboard

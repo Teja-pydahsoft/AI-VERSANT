@@ -5,7 +5,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
 import { Users, Filter, Search, Trash2, ListChecks, CheckCircle, BookOpen, Lock, Unlock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User } from 'lucide-react';
 import Modal from '../../components/common/Modal';
-import { getStudentAccessStatus, authorizeStudentModule, lockStudentModule, authorizeStudentLevel, getStudentDetailedInsights, bulkMigrateStudentsProgress } from '../../services/api';
+import { getStudentAccessStatus, authorizeStudentModule, lockStudentModule, authorizeStudentLevel, lockStudentLevel, getStudentDetailedInsights, bulkMigrateStudentsProgress } from '../../services/api';
 
 const StudentManagement = () => {
     const [students, setStudents] = useState([]);
@@ -387,7 +387,6 @@ const StudentManagement = () => {
                 getStudentAccessStatus(student._id),
                 getStudentDetailedInsights(student._id)
             ]);
-            
             setAccessStatus(accessRes.data.data || []);
             setDetailedInsights(insightsRes.data.data || null);
         } catch (e) {
@@ -470,8 +469,8 @@ const StudentManagement = () => {
     const handleLevelLockToggle = async (studentId, levelId, unlocked) => {
         try {
             if (unlocked) {
-                // Lock: remove from authorized_levels (not implemented, but could be added)
-                setUnlockMsg('Level lock not implemented!');
+                await lockStudentLevel(studentId, levelId);
+                setUnlockMsg('Level locked!');
             } else {
                 await authorizeStudentLevel(studentId, levelId);
                 setUnlockMsg('Level unlocked!');
@@ -1158,18 +1157,26 @@ const StudentManagement = () => {
                                 <div className="mb-4">
                                     <h4 className="font-semibold mb-2 text-blue-800">Module Performance</h4>
                                     <div className="space-y-2">
-                                        {Object.entries(detailedInsights.module_analysis).map(([moduleId, moduleData]) => (
+                                        {Object.entries(detailedInsights.module_analysis).map(([moduleId, moduleData]) => {
+                                            const pAttempts = Number((moduleData.practice && moduleData.practice.total_attempts) || 0);
+                                            const oAttempts = Number((moduleData.online && moduleData.online.total_attempts) || 0);
+                                            const attemptsCount = pAttempts + oAttempts;
+                                            const pAvg = Number((moduleData.practice && moduleData.practice.average_score) || 0);
+                                            const oAvg = Number((moduleData.online && moduleData.online.average_score) || 0);
+                                            // Weighted average
+                                            const displayScore = attemptsCount > 0 ? ((pAvg * pAttempts + oAvg * oAttempts) / attemptsCount) : (Number(moduleData.current_score || 0));
+                                            return (
                                             <div key={moduleId} className="bg-white p-3 rounded-lg border flex justify-between items-center">
                                                 <div>
                                                     <span className="font-medium">{moduleId}</span>
-                                                    <span className="text-sm text-gray-600 ml-2">(Level: {moduleData.current_level})</span>
+                                                    <span className="text-sm text-gray-600 ml-2">(Level: {moduleData.current_level || 'N/A'})</span>
                                                 </div>
                                                 <div className="text-right">
-                                                    <div className="font-bold text-blue-600">{moduleData.current_score.toFixed(1)}%</div>
-                                                    <div className="text-xs text-gray-500">{moduleData.attempts_count} attempts</div>
+                                                    <div className="font-bold text-blue-600">{Number.isFinite(displayScore) ? displayScore.toFixed(1) : '0.0'}%</div>
+                                                    <div className="text-xs text-gray-500">{attemptsCount} attempts — P: {pAttempts} ({pAttempts>0? pAvg.toFixed(1)+'%':'--'}) · O: {oAttempts} ({oAttempts>0? oAvg.toFixed(1)+'%':'--'})</div>
                                                 </div>
                                             </div>
-                                        ))}
+                                        )})}
                                     </div>
                                 </div>
 
@@ -1307,10 +1314,10 @@ const StudentManagement = () => {
                                                 setLevelActionLoading(prev => ({ ...prev, [lvl.level_id]: true }));
                                                 try {
                                                     if (lvl.unlocked) {
-                                                        await api.post(`/batch-management/student/${selectedStudent._id}/lock-level`, { module_id: levelsModalData.module.module_id, level_id: lvl.level_id });
+                                                        await lockStudentLevel(selectedStudent._id, lvl.level_id);
                                                         setUnlockMsg('Level locked!');
                                                     } else {
-                                                        await api.post(`/batch-management/student/${selectedStudent._id}/authorize-level`, { module_id: levelsModalData.module.module_id, level_id: lvl.level_id });
+                                                        await authorizeStudentLevel(selectedStudent._id, lvl.level_id);
                                                         setUnlockMsg('Level unlocked!');
                                                     }
                                                     // Refresh levels for modal UI

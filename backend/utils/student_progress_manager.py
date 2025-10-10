@@ -198,72 +198,384 @@ class StudentProgressManager:
             student = self.mongo_db.students.find_one({'_id': ObjectId(student_id)})
             if not student:
                 return None
-            
-            # Get test attempts and scores
-            attempts = list(self.mongo_db.student_test_attempts.find({
-                'student_id': str(student_id),
-                'test_type': 'practice'
-            }))
-            
-            # Analyze progress
+            # Prepare robust student identifier match (some records store string ids or different fields)
+            student_obj_id = student.get('_id')
+            student_id_str = str(student_obj_id)
+            identifiers = {student_obj_id, student_id_str}
+            # include associated user id if present
+            user_id = student.get('user_id')
+            if user_id:
+                identifiers.add(user_id)
+                try:
+                    identifiers.add(str(user_id))
+                except Exception:
+                    pass
+            # include roll_number and email which some attempt docs may store
+            roll_number = student.get('roll_number')
+            email = student.get('email')
+            if roll_number:
+                identifiers.add(roll_number)
+            if email:
+                identifiers.add(email)
+
+            # Build OR clauses for possible fields in attempt documents
+            or_clauses = []
+            for ident in identifiers:
+                or_clauses.append({'student_id': ident})
+                or_clauses.append({'user_id': ident})
+                or_clauses.append({'student_email': ident})
+                or_clauses.append({'student_roll_number': ident})
+
+            # Fetch attempts from student_test_attempts and test_results (both possible places)
+            attempts = []
+            try:
+                if hasattr(self.mongo_db, 'student_test_attempts'):
+                    attempts = list(self.mongo_db.student_test_attempts.find({'$or': or_clauses}))
+            except Exception as e:
+                self.logger.warning(f"Failed to read student_test_attempts: {e}")
+
+            # Also try test_results collection which may contain older/stored results
+            try:
+                if hasattr(self.mongo_db, 'test_results'):
+                    test_results = list(self.mongo_db.test_results.find({'$or': or_clauses}))
+                    # Normalize field names to match attempts shape where possible and append
+                    for tr in test_results:
+                        # Ensure we don't duplicate entries with same _id
+                        attempts.append(tr)
+            except Exception as e:
+                self.logger.warning(f"Failed to read test_results: {e}")
+
+            # Deduplicate attempts by their _id
+            unique = {}
+            for att in attempts:
+                try:
+                    key = str(att.get('_id'))
+                except Exception:
+                    key = repr(att)
+                unique[key] = att
+            attempts = list(unique.values())
+
+            # Split practice vs online attempts
+            practice_attempts = [a for a in attempts if a.get('test_type') == 'practice']
+            online_attempts = [a for a in attempts if a.get('test_type') == 'online']
+
+            # Build per-module analytics structure
+            module_analysis = {}
+            modules_list = ['GRAMMAR', 'VOCABULARY', 'LISTENING', 'SPEAKING', 'READING', 'WRITING']
+
+            # Helper to aggregate attempts list per module
+            def parse_date(v):
+                if not v:
+                    return None
+                if isinstance(v, datetime):
+                    return v
+                # Handle Mongo extended JSON formats and numeric timestamps
+                if isinstance(v, dict):
+                    # { '$date': { '$numberLong': '...' } } or { '$date': 'iso' }
+                    if '$date' in v:
+                        d = v['$date']
+                        if isinstance(d, dict) and '$numberLong' in d:
+                            try:
+                                ms = int(d['$numberLong'])
+                                return datetime.fromtimestamp(ms / 1000.0)
+                            except Exception:
+                                return None
+                        if isinstance(d, (int, float)):
+                            try:
+                                # assume milliseconds
+                                return datetime.fromtimestamp(d / 1000.0)
+                            except Exception:
+                                return None
+                        if isinstance(d, str):
+                            try:
+                                return datetime.fromisoformat(d)
+                            except Exception:
+                                return None
+                    # direct number-long style
+                    if '$numberLong' in v:
+                        try:
+                            ms = int(v['$numberLong'])
+                            return datetime.fromtimestamp(ms / 1000.0)
+                        except Exception:
+                            return None
+                    return None
+                # Numeric timestamps
+                if isinstance(v, (int, float)):
+                    try:
+                        if v > 1e12:
+                            return datetime.fromtimestamp(v / 1000.0)
+                        return datetime.fromtimestamp(v)
+                    except Exception:
+                        return None
+                # String timestamps - try numeric then iso
+                if isinstance(v, str):
+                    try:
+                        num = int(v)
+                        if num > 1e12:
+                            return datetime.fromtimestamp(num / 1000.0)
+                        return datetime.fromtimestamp(num)
+                    except Exception:
+                        try:
+                            return datetime.fromisoformat(v)
+                        except Exception:
+                            return None
+                return None
+
+            def aggregate_attempts(attempts_list):
+                by_test = {}
+                total_attempts = len(attempts_list)
+                total_score = 0
+                score_count = 0
+                highest_score = 0
+                last_attempt = None
+
+                for att in attempts_list:
+                    mod = att.get('module_id') or att.get('module') or 'UNKNOWN'
+                    tid = att.get('test_id')
+                    try:
+                        tid_key = str(tid)
+                    except Exception:
+                        tid_key = tid
+
+                    # per-test bucket
+                    if tid_key not in by_test:
+                        by_test[tid_key] = {
+                            'test_id': tid_key,
+                            'test_name': att.get('test_name') or att.get('name') or 'Unknown Test',
+                            'attempts': 0,
+                            'best_score': 0,
+                            'last_attempt': None
+                        }
+
+                    # Score extraction (support different field names and nested BSON numeric formats)
+                    def extract_numeric(v):
+                        # Handles int/float
+                        if v is None:
+                            return None
+                        if isinstance(v, (int, float)):
+                            return float(v)
+                        # Handle Mongo extended JSON like {'$numberInt': '42'} or {'$numberDouble': '42.0'}
+                        if isinstance(v, dict):
+                            if '$numberDouble' in v:
+                                try:
+                                    return float(v['$numberDouble'])
+                                except Exception:
+                                    return None
+                            if '$numberInt' in v:
+                                try:
+                                    return float(v['$numberInt'])
+                                except Exception:
+                                    return None
+                            # nested $date or others will be ignored
+                            return None
+                        # Strings
+                        if isinstance(v, str):
+                            try:
+                                return float(v)
+                            except Exception:
+                                return None
+                        return None
+
+                    def parse_score(attempt_doc):
+                        # Preferred fields in order
+                        candidates = ['average_score', 'score_percentage', 'percentage', 'score', 'total_score']
+                        for key in candidates:
+                            if key in attempt_doc:
+                                val = attempt_doc.get(key)
+                                num = extract_numeric(val)
+                                if num is not None:
+                                    # If total_score was stored as an integer representing percent*100 or score*100,
+                                    # try to detect a too-large value and normalize by 100 if appropriate.
+                                    if key == 'total_score' and num > 1000:
+                                        # likely stored as percent*100 or score*100; normalize by 100
+                                        try:
+                                            return num / 100.0
+                                        except Exception:
+                                            return num
+                                    return num
+
+                        # If none of the preferred keys found, scan the document for numeric values
+                        for v in attempt_doc.values():
+                            num = extract_numeric(v)
+                            if num is not None:
+                                return num
+                        return 0
+
+                    score_val = parse_score(att) or 0
+
+                    by_test[tid_key]['attempts'] += 1
+                    if score_val > by_test[tid_key]['best_score']:
+                        by_test[tid_key]['best_score'] = score_val
+
+                    # update totals
+                    if score_val is not None and score_val > 0:
+                        total_score += score_val
+                        score_count += 1
+                    if score_val is not None and score_val > highest_score:
+                        highest_score = score_val
+
+                    # last attempt
+                    att_time = att.get('submitted_at') or att.get('end_time') or att.get('created_at')
+                    parsed_time = parse_date(att_time)
+                    if parsed_time:
+                        if not last_attempt or parsed_time > last_attempt:
+                            last_attempt = parsed_time
+
+                    # update per-test last_attempt
+                    if parsed_time:
+                        if not by_test[tid_key].get('last_attempt') or parsed_time > by_test[tid_key].get('last_attempt'):
+                            by_test[tid_key]['last_attempt'] = parsed_time
+
+                # Build list of tests
+                tests_list = list(by_test.values())
+
+                avg_score = (total_score / score_count) if score_count > 0 else 0
+
+                # Convert any datetime objects to ISO strings for JSON-friendly output
+                def iso_or_none(dt):
+                    if isinstance(dt, datetime):
+                        return dt.isoformat()
+                    return None
+
+                for t in tests_list:
+                    t['last_attempt'] = iso_or_none(t.get('last_attempt'))
+
+                return {
+                    'total_attempts': total_attempts,
+                    'distinct_tests': len(by_test),
+                    'average_score': avg_score,
+                    'highest_score': highest_score,
+                    'last_attempt': iso_or_none(last_attempt),
+                    'tests': tests_list
+                }
+
+            # Precompute aggregates grouped by module for practice and online
+            practice_by_module = {}
+            online_by_module = {}
+            for att in practice_attempts:
+                mod = att.get('module_id') or att.get('module') or 'UNKNOWN'
+                practice_by_module.setdefault(mod, []).append(att)
+            for att in online_attempts:
+                mod = att.get('module_id') or att.get('module') or 'UNKNOWN'
+                online_by_module.setdefault(mod, []).append(att)
+
+            # For each module, compute both practice and online analytics and combine
+            overall_levels_unlocked = 0
+            overall_modules_accessed = 0
+            overall_total_attempts = len(attempts)
+            overall_score_acc = 0
+            overall_score_count = 0
+
+            for module_id in modules_list:
+                p_attempts = practice_by_module.get(module_id, [])
+                o_attempts = online_by_module.get(module_id, [])
+
+                p_agg = aggregate_attempts(p_attempts)
+                o_agg = aggregate_attempts(o_attempts)
+
+                # Analyze levels/unlocks using existing helper
+                module_meta = self._analyze_module_progress(student_id, module_id, practice_attempts)
+
+                module_analysis[module_id] = {
+                    'practice': p_agg,
+                    'online': o_agg,
+                    'levels_unlocked': module_meta.get('levels_unlocked', 0),
+                    'current_level': module_meta.get('current_level'),
+                    'next_level': module_meta.get('next_level'),
+                    'current_score': module_meta.get('current_score'),
+                    'total_levels': module_meta.get('total_levels'),
+                    'last_attempt': max(filter(None, [p_agg.get('last_attempt'), o_agg.get('last_attempt')])) if (p_agg.get('last_attempt') or o_agg.get('last_attempt')) else None
+                }
+
+                overall_levels_unlocked += module_analysis[module_id]['levels_unlocked']
+                if (p_agg.get('distinct_tests', 0) + o_agg.get('distinct_tests', 0)) > 0:
+                    overall_modules_accessed += 1
+
+                # overall score accumulation
+                if p_agg.get('average_score', 0) > 0:
+                    overall_score_acc += p_agg.get('average_score', 0)
+                    overall_score_count += 1
+                if o_agg.get('average_score', 0) > 0:
+                    overall_score_acc += o_agg.get('average_score', 0)
+                    overall_score_count += 1
+
+            overall_average_score = (overall_score_acc / overall_score_count) if overall_score_count > 0 else 0
+
+            # Compute assigned online tests count (tests available/assigned to student)
+            assigned_online_tests = []
+            try:
+                if hasattr(self.mongo_db, 'tests'):
+                    # Query online tests assigned directly or via campus/course/batch matching
+                    query = {'test_type': 'online', 'status': 'active'}
+                    # Try to match assigned_student_ids or campus/course/batch
+                    campus_id = student.get('campus_id')
+                    course_id = student.get('course_id')
+                    batch_id = student.get('batch_id')
+
+                    # Build or filters
+                    or_clauses = []
+                    or_clauses.append({'assigned_student_ids': {'$in': [student_obj_id, student_id_str]}})
+                    if campus_id:
+                        or_clauses.append({'campus_ids': campus_id})
+                    if course_id:
+                        or_clauses.append({'course_ids': course_id})
+                    if batch_id:
+                        or_clauses.append({'batch_ids': batch_id})
+
+                    if or_clauses:
+                        query['$or'] = or_clauses
+
+                    assigned_online_tests = list(self.mongo_db.tests.find(query, {'questions': 0, 'audio_config': 0}))
+            except Exception as e:
+                self.logger.warning(f"Failed to read tests collection for assigned online tests: {e}")
+
             insights = {
                 'student_info': {
                     'name': student.get('name', 'Unknown'),
                     'roll_number': student.get('roll_number', 'Unknown'),
                     'email': student.get('email', 'Unknown'),
-                    'student_id': str(student_id)
+                    'student_id': str(student_obj_id)
                 },
-                'module_analysis': {},
-                'unlock_recommendations': [],
-                'admin_actions_taken': [],
+                'module_analysis': module_analysis,
+                'practice_attempts_count': len(practice_attempts),
+                'online_attempts_count': len(online_attempts),
+                'assigned_online_tests_count': len(assigned_online_tests),
+                'assigned_online_tests': [{'_id': str(t.get('_id')), 'test_id': str(t.get('_id')), 'name': t.get('name'), 'module_id': t.get('module_id')} for t in assigned_online_tests],
                 'overall_stats': {
-                    'total_attempts': len(attempts),
-                    'average_score': 0,
-                    'modules_accessed': 0,
-                    'levels_unlocked': 0
-                }
+                    'total_attempts': overall_total_attempts,
+                    'average_score': overall_average_score,
+                    'modules_accessed': overall_modules_accessed,
+                    'levels_unlocked': overall_levels_unlocked
+                },
+                'unlock_recommendations': [],
+                'admin_actions_taken': self._get_admin_actions_history(student_id)
             }
-            
-            # Analyze each module
-            total_score = 0
-            score_count = 0
-            
-            for module_id in ['GRAMMAR', 'VOCABULARY', 'LISTENING', 'SPEAKING', 'READING', 'WRITING']:
-                module_data = self._analyze_module_progress(student_id, module_id, attempts)
-                insights['module_analysis'][module_id] = module_data
-                
-                if module_data['total_score'] > 0:
-                    total_score += module_data['total_score']
-                    score_count += 1
-                    insights['overall_stats']['modules_accessed'] += 1
-                
-                insights['overall_stats']['levels_unlocked'] += module_data['levels_unlocked']
-                
-                # Generate recommendations
-                if module_data['current_score'] >= 60 and not module_data['next_level_unlocked']:
-                    insights['unlock_recommendations'].append({
-                        'module': module_id,
-                        'level': module_data['next_level'],
-                        'action': 'auto_unlock',
-                        'reason': f"Score {module_data['current_score']} meets threshold",
-                        'priority': 'high'
-                    })
-                elif module_data['current_score'] < 60 and module_data['current_score'] > 30:
-                    insights['unlock_recommendations'].append({
-                        'module': module_id,
-                        'level': module_data['next_level'],
-                        'action': 'admin_override',
-                        'reason': f"Score {module_data['current_score']} below threshold but shows potential",
-                        'priority': 'medium'
-                    })
-            
-            # Calculate overall average
-            if score_count > 0:
-                insights['overall_stats']['average_score'] = total_score / score_count
-            
-            # Get admin actions history
-            insights['admin_actions_taken'] = self._get_admin_actions_history(student_id)
-            
+
+            # Generate simple unlock recommendations based on module_analysis
+            for mod_id, mdata in module_analysis.items():
+                # if student has a current_score meeting threshold but next level not unlocked
+                try:
+                    cur_score = mdata.get('current_score', 0) or 0
+                    next_unlocked = mdata.get('next_level') in self._get_current_authorized_levels(student)
+                    if cur_score >= 60 and not next_unlocked and mdata.get('next_level'):
+                        insights['unlock_recommendations'].append({
+                            'module': mod_id,
+                            'level': mdata.get('next_level'),
+                            'action': 'auto_unlock',
+                            'reason': f"Score {cur_score} meets threshold",
+                            'priority': 'high'
+                        })
+                    elif cur_score < 60 and cur_score > 30 and mdata.get('next_level'):
+                        insights['unlock_recommendations'].append({
+                            'module': mod_id,
+                            'level': mdata.get('next_level'),
+                            'action': 'admin_override',
+                            'reason': f"Score {cur_score} below threshold but shows potential",
+                            'priority': 'medium'
+                        })
+                except Exception:
+                    continue
+
             return insights
             
         except Exception as e:
@@ -437,10 +749,20 @@ class StudentProgressManager:
         if reason:
             history_entry['reason'] = reason
         
-        self.mongo_db.students.update_one(
-            {'_id': ObjectId(student_id)},
-            {'$push': {'unlock_history': history_entry}}
-        )
+        # Cap unlock_history to last N entries to prevent unbounded growth
+        MAX_HISTORY = 200
+        try:
+            self.mongo_db.students.update_one(
+                {'_id': ObjectId(student_id)},
+                {'$push': {'unlock_history': {'$each': [history_entry], '$slice': -MAX_HISTORY}}}
+            )
+        except Exception as e:
+            # Fallback to simple push if capped push fails for any reason
+            self.logger.exception(f"Failed to push capped unlock_history, falling back: {e}")
+            self.mongo_db.students.update_one(
+                {'_id': ObjectId(student_id)},
+                {'$push': {'unlock_history': history_entry}}
+            )
     
     def _add_lock_history(self, student_id, module_id, admin_user_id, reason=None):
         """Add entry to lock history"""
@@ -461,10 +783,19 @@ class StudentProgressManager:
         if reason:
             history_entry['reason'] = reason
         
-        self.mongo_db.students.update_one(
-            {'_id': ObjectId(student_id)},
-            {'$push': {'lock_history': history_entry}}
-        )
+        # Cap lock_history to last N entries
+        MAX_LOCK_HISTORY = 100
+        try:
+            self.mongo_db.students.update_one(
+                {'_id': ObjectId(student_id)},
+                {'$push': {'lock_history': {'$each': [history_entry], '$slice': -MAX_LOCK_HISTORY}}}
+            )
+        except Exception as e:
+            self.logger.exception(f"Failed to push capped lock_history, falling back: {e}")
+            self.mongo_db.students.update_one(
+                {'_id': ObjectId(student_id)},
+                {'$push': {'lock_history': history_entry}}
+            )
     
     def _get_module_levels(self, module_id):
         """Get all level IDs for a module"""

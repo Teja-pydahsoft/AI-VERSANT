@@ -211,8 +211,6 @@ const SuperAdminSidebar = () => {
       // Form Portal
       { name: 'Form Management', path: '/superadmin/form-management', icon: ClipboardList, module: 'form_management' },
       
-      // Testing & Development
-      { name: 'Push Notification Test', path: '/superadmin/push-notification-test', icon: Activity, module: 'push_notification_test' },
     ]
 
     // Filter navigation based on user permissions

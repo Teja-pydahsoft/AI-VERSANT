@@ -25,6 +25,10 @@ const analyticsRoutes = require('./routes/analytics');
 const healthRoutes = require('./routes/health');
 const pushRoutes = require('./routes/push');
 const subscriptionRoutes = require('./routes/subscriptions');
+const testNotificationRoutes = require('./routes/testNotifications');
+const emailRoutes = require('./routes/email');
+const smsRoutes = require('./routes/sms');
+const testNotificationRoutesNew = require('./routes/testNotificationRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -60,12 +64,15 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/analytics', validateApiKey);
 
 // Routes
-app.use('/api/notifications', notificationRoutes);
+app.use('/api/notifications', testNotificationRoutesNew); // New test notification routes
 app.use('/api/templates', templateRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/test-notifications', testNotificationRoutes);
+app.use('/api/email', emailRoutes);
+app.use('/api/sms', smsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -107,11 +114,31 @@ async function startServer() {
     await connectDatabase();
     logger.info('✅ Database connected');
 
+    // Initialize test notification service
+    const testNotificationService = require('./services/testNotificationService');
+    await testNotificationService.initialize();
+    logger.info('✅ Test Notification Service initialized');
+
+    // Start test reminder scheduler (existing)
+    try {
+      const testReminderScheduler = require('./services/testReminderScheduler');
+      testReminderScheduler.start();
+    } catch (err) {
+      logger.warn('⚠️ Old test reminder scheduler not found (expected)');
+    }
+
+    // Start test reminder cron job (new)
+    const testReminderCron = require('./services/testReminderCron');
+    testReminderCron.start();
+    logger.info('✅ Test Reminder Cron Job started');
+
     // Start server
     app.listen(PORT, () => {
       logger.info(`🚀 Notification Service running on port ${PORT}`);
       logger.info(`📊 Health check: http://localhost:${PORT}/api/health`);
-      logger.info(`📚 API docs: http://localhost:${PORT}/api/docs`);
+      logger.info(`📧 Email service: http://localhost:${PORT}/api/email/status`);
+      logger.info(`📱 SMS service: http://localhost:${PORT}/api/sms/status`);
+      logger.info(`📋 Test notifications: http://localhost:${PORT}/api/notifications/status`);
     });
 
   } catch (error) {

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotification } from '../../contexts/NotificationContext'
+import { Bell, Send, CheckCircle, XCircle } from 'lucide-react'
 
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import api, { getCoursesByCampus, getCampuses } from '../../services/api'
@@ -17,6 +18,8 @@ const SuperAdminDashboard = () => {
   const [loading, setLoading] = useState(true)
   const [activeCourses, setActiveCourses] = useState(0)
   const [adminCount, setAdminCount] = useState(0)
+  const [pushTestLoading, setPushTestLoading] = useState(false)
+  const [pushTestResult, setPushTestResult] = useState(null)
 
   useEffect(() => {
     fetchDashboardStats()
@@ -76,6 +79,49 @@ const SuperAdminDashboard = () => {
     } catch (e) {
       console.error('Error fetching admin count:', e)
       setAdminCount(0)
+    }
+  }
+  const sendPushNotificationTest = async () => {
+    try {
+      setPushTestLoading(true)
+      setPushTestResult(null)
+
+      const response = await fetch('/api/notifications/test-broadcast', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || user?.access_token}`
+        },
+        body: JSON.stringify({
+          title: 'VERSANT Test Notification',
+          message: 'This is a test push notification from VERSANT system. If you receive this, push notifications are working correctly!'
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setPushTestResult({
+          success: true,
+          message: `${result.message} (${result.details.total_recipients} recipients)\nOneSignal: ${result.details.onesignal_status}\nVAPID: ${result.details.vapid_status}`
+        })
+        success('Test notifications sent successfully!')
+      } else {
+        setPushTestResult({
+          success: false,
+          message: `${result.message}\nOneSignal: ${result.details?.onesignal_status || 'Failed'}\nVAPID: ${result.details?.vapid_status || 'Failed'}`
+        })
+        error(`Test push notification failed: ${result.message}`)
+      }
+    } catch (err) {
+      console.error('Push notification test failed:', err)
+      setPushTestResult({
+        success: false,
+        message: `Network error: ${err.message}`
+      })
+      error(`Test push notification failed: ${err.message}`)
+    } finally {
+      setPushTestLoading(false)
     }
   }
 
@@ -220,6 +266,71 @@ const SuperAdminDashboard = () => {
               ))}
             </div>
           </motion.div>
+
+      {/* Floating Push Notification Test Button */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.5, type: 'spring', stiffness: 200 }}
+        className="fixed bottom-6 right-6 z-50"
+      >
+        <div className="relative group">
+          {/* Tooltip */}
+          <div className="absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+            <div className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap shadow-lg ${
+              pushTestResult?.success 
+                ? 'bg-green-100 text-green-800 border border-green-200' 
+                : pushTestResult?.success === false 
+                ? 'bg-red-100 text-red-800 border border-red-200'
+                : 'bg-gray-100 text-gray-800 border border-gray-200'
+            }`}>
+              {pushTestResult ? (
+                <div className="flex items-center space-x-2">
+                  {pushTestResult.success ? (
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-600" />
+                  )}
+                  <span>{pushTestResult.message}</span>
+                </div>
+              ) : (
+                'Test Push Notifications'
+              )}
+            </div>
+          </div>
+
+          {/* Floating Button */}
+          <button
+            onClick={sendPushNotificationTest}
+            disabled={pushTestLoading}
+            className={`flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-110 focus:outline-none focus:ring-4 focus:ring-opacity-50 ${
+              pushTestLoading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : pushTestResult?.success
+                ? 'bg-green-500 hover:bg-green-600 focus:ring-green-500'
+                : pushTestResult?.success === false
+                ? 'bg-red-500 hover:bg-red-600 focus:ring-red-500'
+                : 'bg-blue-500 hover:bg-blue-600 focus:ring-blue-500'
+            }`}
+            title="Send test push notification to all subscribed users"
+          >
+            {pushTestLoading ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+              >
+                <Bell className="w-6 h-6 text-white" />
+              </motion.div>
+            ) : pushTestResult?.success ? (
+              <CheckCircle className="w-6 h-6 text-white" />
+            ) : pushTestResult?.success === false ? (
+              <XCircle className="w-6 h-6 text-white" />
+            ) : (
+              <Send className="w-6 h-6 text-white" />
+            )}
+          </button>
+        </div>
+      </motion.div>
     </div>
   )
 }

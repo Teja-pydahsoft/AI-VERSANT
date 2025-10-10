@@ -9,13 +9,18 @@ const OneSignalIntegration = () => {
   const [isInitialized, setIsInitialized] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
 
+  // Initialize OneSignal only when user is logged in
   useEffect(() => {
-    initializeOneSignal()
-  }, [])
+    if (user) {
+      initializeOneSignal()
+    }
+  }, [user])
 
+  // Setup user tags when user is logged in and OneSignal is initialized
   useEffect(() => {
     if (user && isInitialized) {
       setupUserTags()
+      checkAndSubscribeUser()
     }
   }, [user, isInitialized])
 
@@ -30,14 +35,26 @@ const OneSignalIntegration = () => {
       if (initialized) {
         const status = oneSignalService.getSubscriptionStatus()
         setIsSubscribed(status.isSubscribed)
-        
-        // Subscribe user if not already subscribed
-        if (!status.isSubscribed) {
-          await subscribeUser()
-        }
       }
     } catch (error) {
       console.error('OneSignal initialization failed:', error)
+    }
+  }
+
+  const checkAndSubscribeUser = async () => {
+    try {
+      // Only check subscription status, don't auto-subscribe
+      // Let the user click the bell button or we can show a prompt
+      const status = oneSignalService.getSubscriptionStatus()
+      setIsSubscribed(status.isSubscribed)
+      
+      // If user is not subscribed, show a subtle notification
+      if (!status.isSubscribed && user) {
+        console.log('User is logged in but not subscribed to push notifications')
+        // The OneSignal bell button will handle the subscription
+      }
+    } catch (error) {
+      console.error('Error checking subscription status:', error)
     }
   }
 
@@ -47,13 +64,12 @@ const OneSignalIntegration = () => {
       setIsSubscribed(subscribed)
       
       if (subscribed) {
-        // Get user ID and store it
+        // Get user ID and store it via oneSignalService helper
         const userId = await oneSignalService.getUserId()
         if (userId) {
-          // Store player ID in backend
-          await storePlayerId(userId)
+          await oneSignalService.notifyBackendOfSubscription(userId)
         }
-        
+
         showNotification('Successfully subscribed to VERSANT notifications!', 'success')
       }
     } catch (error) {
@@ -62,24 +78,7 @@ const OneSignalIntegration = () => {
     }
   }
 
-  const storePlayerId = async (playerId) => {
-    try {
-      const response = await fetch('/api/onesignal/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ player_id: playerId })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to store player ID')
-      }
-    } catch (error) {
-      console.error('Error storing OneSignal player ID:', error)
-    }
-  }
+  
 
   const setupUserTags = async () => {
     if (!user) return

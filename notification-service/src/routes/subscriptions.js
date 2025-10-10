@@ -27,12 +27,16 @@ router.post('/register', [
   body('subscription.endpoint').notEmpty().withMessage('Subscription endpoint is required'),
   body('subscription.keys.p256dh').notEmpty().withMessage('P256DH key is required'),
   body('subscription.keys.auth').notEmpty().withMessage('Auth key is required'),
-  body('deviceInfo').optional().isObject()
+  body('deviceInfo').optional().isObject(),
+  body('device_id').optional().isString()
 ], validateRequest, async (req, res) => {
   try {
-    const { userId, userEmail, subscription, deviceInfo = {} } = req.body;
+    const { userId, userEmail, subscription, deviceInfo = {}, device_id, last_verified } = req.body;
 
     logger.info(`📱 Registering push subscription for user: ${userId} (${userEmail})`);
+    if (device_id) {
+      logger.info(`🔑 Device ID: ${device_id}`);
+    }
 
     // Check if subscription already exists
     const existingSubscription = await UserSubscription.findOne({
@@ -44,8 +48,11 @@ router.post('/register', [
       // Update existing subscription
       existingSubscription.subscription = subscription;
       existingSubscription.deviceInfo = deviceInfo;
+      existingSubscription.device_id = device_id;
+      existingSubscription.last_verified = last_verified || new Date();
       existingSubscription.isActive = true;
       existingSubscription.lastUsed = new Date();
+      existingSubscription.last_heartbeat = new Date();
       await existingSubscription.save();
 
       logger.info(`✅ Updated existing subscription for user: ${userId}`);
@@ -56,7 +63,8 @@ router.post('/register', [
         data: {
           subscriptionId: existingSubscription._id,
           userId,
-          userEmail
+          userEmail,
+          device_id: existingSubscription.device_id
         }
       });
     }
@@ -67,6 +75,9 @@ router.post('/register', [
       userEmail,
       subscription,
       deviceInfo,
+      device_id,
+      last_verified: last_verified || new Date(),
+      last_heartbeat: new Date(),
       isActive: true
     });
 
@@ -80,7 +91,8 @@ router.post('/register', [
       data: {
         subscriptionId: newSubscription._id,
         userId,
-        userEmail
+        userEmail,
+        device_id: newSubscription.device_id
       }
     });
 
@@ -89,6 +101,65 @@ router.post('/register', [
     res.status(500).json({
       success: false,
       message: 'Failed to register subscription',
+      error: error.message
+    });
+  }
+});
+
+// Heartbeat endpoint - verify device is still active
+router.post('/heartbeat', [
+  body('userId').notEmpty().withMessage('User ID is required'),
+  body('device_id').notEmpty().withMessage('Device ID is required'),
+  body('endpoint').notEmpty().withMessage('Endpoint is required')
+], validateRequest, async (req, res) => {
+  try {
+    const { userId, device_id, endpoint, deviceInfo, timestamp } = req.body;
+
+    logger.info(`💓 Heartbeat received from user: ${userId}, device: ${device_id}`);
+
+    // Find and update subscription
+    const subscription = await UserSubscription.findOneAndUpdate(
+      {
+        userId,
+        'subscription.endpoint': endpoint
+      },
+      {
+        $set: {
+          last_heartbeat: new Date(),
+          last_verified: new Date(),
+          deviceInfo: deviceInfo || {},
+          isActive: true,
+          lastUsed: new Date()
+        }
+      },
+      { new: true }
+    );
+
+    if (!subscription) {
+      logger.warn(`⚠️ Heartbeat received but no subscription found for user ${userId}, device ${device_id}`);
+      return res.status(404).json({
+        success: false,
+        message: 'Subscription not found',
+        action: 'resubscribe'
+      });
+    }
+
+    logger.info(`✅ Heartbeat processed for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Heartbeat received',
+      data: {
+        last_heartbeat: subscription.last_heartbeat,
+        last_verified: subscription.last_verified
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error processing heartbeat:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process heartbeat',
       error: error.message
     });
   }

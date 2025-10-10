@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext'
-import { User, Mail, Shield, Calendar, Building, BookOpen, Users, Edit, KeyRound } from 'lucide-react'
+import { User, Mail, Shield, Calendar, Building, BookOpen, Users, Edit, KeyRound, Bell } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import api from '../../services/api'
+import NotificationPreferences from '../../components/common/NotificationPreferences'
 
 const DetailItem = ({ icon, label, value, color = 'blue' }) => {
   const colors = {
@@ -27,6 +28,7 @@ const SuperAdminProfile = () => {
   const { user } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showNotificationPreferences, setShowNotificationPreferences] = useState(false)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -133,7 +135,7 @@ const SuperAdminProfile = () => {
 
             <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
               <h3 className="text-xl font-semibold text-gray-800 mb-4">Account Actions</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                   <Edit className="h-5 w-5 mr-2" />
                   Edit Profile (Soon)
@@ -142,11 +144,24 @@ const SuperAdminProfile = () => {
                   <KeyRound className="h-5 w-5 mr-2" />
                   Change Password
                 </button>
+                <button 
+                  onClick={() => setShowNotificationPreferences(true)}
+                  className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <Bell className="h-5 w-5 mr-2" />
+                  Notification Settings
+                </button>
               </div>
             </div>
           </motion.div>
         </div>
       </div>
+      
+      {/* Notification Preferences Modal */}
+      <NotificationPreferences 
+        isOpen={showNotificationPreferences}
+        onClose={() => setShowNotificationPreferences(false)}
+      />
     </main>
   )
 }

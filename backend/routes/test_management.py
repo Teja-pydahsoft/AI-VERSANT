@@ -930,6 +930,74 @@ def notify_students(test_id):
         current_app.logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': 'An error occurred while sending notifications.'}), 500
 
+@test_management_bp.route('/remind-students', methods=['POST'])
+@jwt_required()
+@require_superadmin
+def remind_students():
+    """Manually trigger test reminders via notification-service"""
+    try:
+        data = request.get_json() or {}
+        test_id = data.get('test_id')  # Optional: specific test ID
+        
+        current_app.logger.info(f"📱 Manual test reminder triggered by admin")
+        
+        # Get notification service URL
+        notification_service_url = os.getenv('NOTIFICATION_SERVICE_URL', 'http://localhost:3001')
+        notification_service_url = notification_service_url.rstrip('/api').rstrip('/')
+        
+        reminder_url = f"{notification_service_url}/api/test-notifications/test-reminder"
+        
+        current_app.logger.info(f"📡 Calling notification service: {reminder_url}")
+        
+        # Call notification-service
+        try:
+            response = requests.post(
+                reminder_url,
+                json={'test_id': test_id} if test_id else {},
+                timeout=60  # 60 seconds for processing
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                current_app.logger.info(f"✅ Test reminders sent: {result}")
+                
+                return jsonify({
+                    'success': True,
+                    'message': result.get('message', 'Test reminders sent successfully'),
+                    'data': result.get('data', {})
+                }), 200
+            else:
+                error_msg = response.json().get('message', 'Unknown error') if response.text else 'Service unavailable'
+                current_app.logger.error(f"❌ Notification service error: {error_msg}")
+                return jsonify({
+                    'success': False,
+                    'message': f'Notification service error: {error_msg}'
+                }), 500
+                
+        except requests.exceptions.ConnectionError:
+            current_app.logger.error(f"❌ Cannot connect to notification service at {notification_service_url}")
+            return jsonify({
+                'success': False,
+                'message': 'Cannot connect to notification service. Please ensure it is running on port 3001.'
+            }), 503
+        except requests.exceptions.Timeout:
+            current_app.logger.error(f"❌ Notification service timeout")
+            return jsonify({
+                'success': False,
+                'message': 'Notification service timeout. Reminders may still be processing.'
+            }), 504
+        except Exception as e:
+            current_app.logger.error(f"❌ Error calling notification service: {e}")
+            return jsonify({
+                'success': False,
+                'message': f'Error calling notification service: {str(e)}'
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Error in remind_students: {e}")
+        import traceback
+        current_app.logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': 'An error occurred while triggering reminders.'}), 500
 
 
 # ==================== QUESTION BANK ENDPOINTS ====================

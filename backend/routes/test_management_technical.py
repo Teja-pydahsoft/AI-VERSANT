@@ -250,6 +250,32 @@ def create_technical_test():
             current_app.logger.error(f"❌ Failed to create technical test notification batch: {e}")
             # Don't fail test creation if notifications fail
 
+        # Send email & SMS notifications via notification-service
+        try:
+            import requests
+            import os
+            notification_service_url = os.getenv('NOTIFICATION_SERVICE_URL', 'http://localhost:3001')
+            notification_service_url = notification_service_url.rstrip('/api').rstrip('/')
+            
+            email_sms_notification_url = f"{notification_service_url}/api/notifications/test-created"
+            
+            current_app.logger.info(f"📧📱 Sending email & SMS notifications for test: {test_id}")
+            
+            # Fire-and-forget: don't wait for response
+            response = requests.post(
+                email_sms_notification_url,
+                json={'test_id': test_id},
+                timeout=1  # Very short timeout - fire and forget
+            )
+            
+            current_app.logger.info(f"✅ Email & SMS notifications queued for test: {test_id}")
+                
+        except requests.exceptions.Timeout:
+            current_app.logger.debug(f"📧 Email & SMS notification request sent (timeout expected): {test_id}")
+        except Exception as e:
+            current_app.logger.warning(f"⚠️ Failed to queue email & SMS notifications: {e}")
+            # Don't fail test creation if notifications fail
+
         return jsonify({
             'success': True,
             'message': 'Technical test created successfully',
@@ -396,7 +422,34 @@ def notify_technical_test_students(test_id):
         results = []
         for student in student_list:
             try:
-                # Send email notification
+                # Send multi-channel notification (email, SMS, and push)
+                from services.enhanced_notification_service import enhancedNotificationService
+                
+                # Format start date for notification
+                start_date_str = test.get('startDateTime', 'Immediately') if test.get('test_type', '').lower() == 'online' else 'Immediately'
+                
+                notification_data = {
+                    'title': f'New Technical Test: {test["name"]} 🔧',
+                    'message': f'A new technical test has been scheduled for {start_date_str}. Click to view details!',
+                    'type': 'test_scheduled',
+                    'url': f'/student/exam/{test_id}',
+                    'data': {
+                        'test_id': str(test['_id']),
+                        'test_name': test['name'],
+                        'test_type': 'Technical',
+                        'start_date': start_date_str,
+                        'exam_url': f"https://crt.pydahsoft.in/student/exam/{test_id}"
+                    }
+                }
+                
+                # Send notification via enhanced service
+                user_id = student.get('user_id')
+                if user_id:
+                    result = enhancedNotificationService.send_notification_to_user(user_id, notification_data)
+                else:
+                    result = {'push_sent': False, 'email_sent': False, 'sms_sent': False, 'errors': ['No user_id found']}
+                
+                # Also send email using existing service for compatibility
                 from utils.email_service import send_email, render_template
                 html_content = render_template('test_notification.html', 
                     student_name=student['name'],
@@ -425,10 +478,13 @@ def notify_technical_test_students(test_id):
                     'name': student['name'],
                     'email': student['email'],
                     'mobile_number': student.get('mobile_number'),
+                    'user_id': user_id,
+                    'push_sent': result.get('push_sent', False),
+                    'email_sent': email_sent or result.get('email_sent', False),
+                    'sms_sent': result.get('sms_sent', False),
                     'test_status': 'pending',
                     'notify_status': 'sent' if email_sent else 'failed',
                     'sms_status': 'no_mobile',
-                    'email_sent': email_sent,
                     'status': 'success' if email_sent else 'failed'
                 })
             except Exception as e:

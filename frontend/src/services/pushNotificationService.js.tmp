@@ -1,0 +1,296 @@
+/**
+ * Unified Push Notification Service
+ * Handles both OneSignal and VAPID push notifications
+ */
+
+import api from './api';
+import { oneSignalService } from './oneSignalService';
+
+class PushNotificationService {
+  constructor() {
+    // Check if push notifications are supported
+    this.isSupported = 'serviceWorker' in navigator && 'PushManager' in window;
+    
+    // Service worker registration
+    this.registration = null;
+    
+    // VAPID state
+    this.vapidSubscription = null;
+    this.vapidPublicKey = null;
+    this.isVapidSubscribed = false;
+    
+    // OneSignal state
+    this.isOneSignalSubscribed = false;
+  }
+
+  async initialize() {
+    try {
+      // Initialize OneSignal first
+      const oneSignalInitialized = await oneSignalService.initialize();
+      console.log('OneSignal initialization:', oneSignalInitialized ? '✅' : '❌');
+
+      // Then initialize VAPID if supported
+      if (this.isSupported) {
+        await this.initializeVapid();
+      } else {
+        console.warn('VAPID push notifications not supported in this browser');
+      }
+
+      // Setup notification click handler
+      this.setupNotificationClickHandler();
+
+      return true;
+    } catch (error) {
+      console.error('❌ Push notification service initialization failed:', error);
+      return false;
+    }
+  }
+
+  async initializeVapid() {
+    try {
+      await this.getVapidKey();
+      await this.registerServiceWorker();
+      await this.checkExistingSubscription();
+      console.log('✅ VAPID service initialized');
+      return true;
+    } catch (error) {
+      console.error('❌ VAPID initialization failed:', error);
+      return false;
+    }
+  }
+
+  async getVapidKey() {
+    try {
+      const response = await api.get('/vapid/public-key');
+      if (response.data.success && response.data.publicKey) {
+        this.vapidPublicKey = response.data.publicKey;
+        console.log('✅ VAPID public key retrieved');
+        return true;
+      }
+      throw new Error('Failed to get VAPID public key');
+    } catch (error) {
+      console.error('❌ Failed to get VAPID key:', error);
+      throw error;
+    }
+  }
+
+  async registerServiceWorker() {
+    try {
+      this.registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/'
+      });
+      await navigator.serviceWorker.ready;
+      console.log('✅ Service worker registered and ready');
+      return true;
+    } catch (error) {
+      console.error('❌ Service worker registration failed:', error);
+      throw error;
+    }
+  }
+
+  async checkExistingSubscription() {
+    try {
+      if (this.registration) {
+        const subscription = await this.registration.pushManager.getSubscription();
+        this.vapidSubscription = subscription;
+        this.isVapidSubscribed = !!subscription;
+        
+        if (subscription) {
+          await this.updateVapidSubscription(subscription);
+          console.log('✅ Found existing VAPID subscription');
+        }
+      }
+
+      this.isOneSignalSubscribed = await oneSignalService.isSubscribed();
+      
+      return {
+        vapid: this.isVapidSubscribed,
+        oneSignal: this.isOneSignalSubscribed
+      };
+    } catch (error) {
+      console.error('❌ Error checking subscriptions:', error);
+      return { vapid: false, oneSignal: false };
+    }
+  }
+
+  async subscribe() {
+    if (!this.isSupported) {
+      throw new Error('Push notifications are not supported');
+    }
+
+    try {
+      const permission = await this.requestPermission();
+      if (!permission) {
+        throw new Error('Notification permission denied');
+      }
+
+      const result = await this.subscribeToAll();
+      if (result.success) {
+        console.log('✅ Successfully subscribed to push notifications');
+        return true;
+      } else {
+        throw new Error('Failed to subscribe to any notification service');
+      }
+    } catch (error) {
+      console.error('❌ Subscription failed:', error);
+      throw error;
+    }
+  }
+
+  async subscribeToAll() {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        throw new Error('Notification permission denied');
+      }
+
+      const oneSignalPromise = oneSignalService.subscribe();
+      const vapidPromise = this.subscribeToVapid();
+
+      const [oneSignalResult, vapidResult] = await Promise.allSettled([
+        oneSignalPromise,
+        vapidPromise
+      ]);
+
+      const success = oneSignalResult.status === 'fulfilled' || vapidResult.status === 'fulfilled';
+      if (success) {
+        this.isOneSignalSubscribed = oneSignalResult.status === 'fulfilled';
+        this.isVapidSubscribed = vapidResult.status === 'fulfilled';
+      }
+
+      return {
+        oneSignal: this.isOneSignalSubscribed,
+        vapid: this.isVapidSubscribed,
+        success
+      };
+    } catch (error) {
+      console.error('Failed to subscribe to notifications:', error);
+      return { oneSignal: false, vapid: false, success: false };
+    }
+  }
+
+  async subscribeToVapid() {
+    try {
+      if (!this.registration || !this.vapidPublicKey) {
+        throw new Error('VAPID service not properly initialized');
+      }
+
+      const subscription = await this.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: this.urlBase64ToUint8Array(this.vapidPublicKey)
+      });
+
+      await this.updateVapidSubscription(subscription);
+      this.vapidSubscription = subscription;
+      this.isVapidSubscribed = true;
+      return true;
+    } catch (error) {
+      console.error('❌ VAPID subscription failed:', error);
+      return false;
+    }
+  }
+
+  async updateVapidSubscription(subscription) {
+    try {
+      const response = await api.post('/vapid/subscribe', {
+        subscription: subscription.toJSON(),
+        browser: navigator.userAgent,
+        platform: 'web'
+      });
+
+      if (!response.data.success) {
+        throw new Error('Failed to update subscription on backend');
+      }
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to update subscription:', error);
+      throw error;
+    }
+  }
+
+  async unsubscribe() {
+    try {
+      const promises = [];
+
+      if (this.isOneSignalSubscribed) {
+        promises.push(oneSignalService.unsubscribe());
+      }
+
+      if (this.vapidSubscription) {
+        promises.push(this.vapidSubscription.unsubscribe());
+        promises.push(api.post('/vapid/unsubscribe', {
+          endpoint: this.vapidSubscription.endpoint
+        }));
+      }
+
+      await Promise.all(promises);
+      this.vapidSubscription = null;
+      this.isVapidSubscribed = false;
+      this.isOneSignalSubscribed = false;
+
+      console.log('✅ Successfully unsubscribed from all push notifications');
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to unsubscribe:', error);
+      throw error;
+    }
+  }
+
+  async requestPermission() {
+    if (!('Notification' in window)) {
+      throw new Error('This browser does not support notifications');
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      console.log('✅ Notification permission granted');
+      return true;
+    } else {
+      console.log(permission === 'denied' ? '❌ Notification permission denied' : '⚠️ Notification permission dismissed');
+      return false;
+    }
+  }
+
+  isNotificationSupported() {
+    return this.isSupported && Notification.permission === 'granted';
+  }
+
+  getSubscriptionStatus() {
+    return {
+      isSupported: this.isSupported,
+      vapid: this.isVapidSubscribed,
+      oneSignal: this.isOneSignalSubscribed,
+      hasPermission: Notification.permission === 'granted'
+    };
+  }
+
+  urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  setupNotificationClickHandler() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
+          const data = event.data.data;
+          if (data && data.url) {
+            window.location.href = data.url;
+          }
+        }
+      });
+    }
+  }
+}
+
+// Create and export singleton instance
+const pushNotificationService = new PushNotificationService();
+export default pushNotificationService;

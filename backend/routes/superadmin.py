@@ -209,6 +209,15 @@ def create_user():
         
         user_id = mongo_db.insert_user(user_data)
         
+        # Create default notification preferences for the new user
+        try:
+            from models_notification_preferences import NotificationPreferences
+            NotificationPreferences.create_default_preferences(user_id)
+            print(f"✅ Created default notification preferences for new user: {user_id}")
+        except Exception as e:
+            print(f"⚠️ Failed to create default notification preferences for user {user_id}: {e}")
+            # Don't fail user creation if notification preferences creation fails
+        
         return jsonify({
             'success': True,
             'message': 'User created successfully',

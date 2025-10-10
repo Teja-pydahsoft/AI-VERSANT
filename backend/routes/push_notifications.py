@@ -68,19 +68,42 @@ def subscribe_user():
             }), 400
         
         subscription = data['subscription']
-        
-        # Store subscription in database
+
+        # Normalize subscription shape and store endpoint/keys at top-level
+        subscription_endpoint = None
+        subscription_keys = {}
+
+        if isinstance(subscription, dict):
+            # New standard PushSubscription JSON
+            subscription_endpoint = subscription.get('endpoint')
+            subscription_keys = subscription.get('keys') or {}
+        else:
+            # Fallback: try attribute access (in case a class instance was sent)
+            try:
+                subscription_endpoint = getattr(subscription, 'endpoint', None)
+                subscription_keys = getattr(subscription, 'keys', {}) or {}
+            except Exception:
+                subscription_endpoint = None
+
+        if not subscription_endpoint:
+            return jsonify({
+                'success': False,
+                'message': 'Subscription endpoint is required'
+            }), 400
+
+        # Build the doc to store (top-level endpoint + keys)
         user_subscription = {
             'user_id': user_id,
-            'subscription': subscription,
+            'endpoint': subscription_endpoint,
+            'keys': subscription_keys,
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow(),
             'is_active': True
         }
-        
-        # Update or insert subscription
+
+        # Update or insert subscription by endpoint (ensure uniqueness)
         mongo_db.push_subscriptions.update_one(
-            {'user_id': user_id},
+            {'endpoint': subscription_endpoint},
             {'$set': user_subscription},
             upsert=True
         )
@@ -119,6 +142,121 @@ def subscribe_user():
             'message': f'Failed to subscribe: {str(e)}'
         }), 500
 
+@push_notifications_bp.route('/subscription-status', methods=['GET'])
+@jwt_required()
+def get_subscription_status():
+    """Check if user is subscribed to push notifications"""
+    try:
+        user_id = get_jwt_identity()
+        
+        # Check VAPID subscriptions
+        vapid_subscription = mongo_db.push_subscriptions.find_one({
+            'user_id': user_id,
+            'is_active': True,
+            'provider': 'vapid'
+        })
+        
+        # Check OneSignal subscriptions
+        onesignal_subscription = mongo_db.push_subscriptions.find_one({
+            'user_id': user_id,
+            'is_active': True,
+            'provider': 'onesignal'
+        })
+        
+        # Also check for subscriptions without provider field (legacy)
+        legacy_subscription = mongo_db.push_subscriptions.find_one({
+            'user_id': user_id,
+            'is_active': True,
+            'provider': {'$exists': False}
+        })
+        
+        is_subscribed = bool(vapid_subscription or onesignal_subscription or legacy_subscription)
+        
+        return jsonify({
+            'success': True,
+            'is_subscribed': is_subscribed,
+            'subscriptions': {
+                'vapid': bool(vapid_subscription),
+                'onesignal': bool(onesignal_subscription),
+                'legacy': bool(legacy_subscription)
+            },
+            'details': {
+                'vapid_endpoint': vapid_subscription.get('endpoint') if vapid_subscription else None,
+                'onesignal_player_id': onesignal_subscription.get('player_id') if onesignal_subscription else None,
+                'total_devices': mongo_db.push_subscriptions.count_documents({
+                    'user_id': user_id,
+                    'is_active': True
+                })
+            }
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error checking subscription status: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to check subscription status: {str(e)}'
+        }), 500
+
+@push_notifications_bp.route('/heartbeat', methods=['POST'])
+@jwt_required()
+def subscription_heartbeat():
+    """Receive heartbeat from device to verify subscription is still active"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        if not data or 'device_id' not in data or 'endpoint' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'device_id and endpoint are required'
+            }), 400
+        
+        device_id = data['device_id']
+        endpoint = data['endpoint']
+        device_info = data.get('device_info', {})
+        timestamp = data.get('timestamp')
+        
+        # Update subscription with heartbeat info
+        update_data = {
+            'last_heartbeat': datetime.utcnow(),
+            'device_id': device_id,
+            'device_info': device_info,
+            'is_active': True,
+            'updated_at': datetime.utcnow()
+        }
+        
+        # Update by endpoint
+        result = mongo_db.push_subscriptions.update_one(
+            {
+                'user_id': user_id,
+                'endpoint': endpoint
+            },
+            {'$set': update_data}
+        )
+        
+        if result.matched_count == 0:
+            current_app.logger.warning(f"Heartbeat received but no subscription found for user {user_id}, endpoint {endpoint[:50]}...")
+            return jsonify({
+                'success': False,
+                'message': 'Subscription not found',
+                'action': 'resubscribe'
+            }), 404
+        
+        current_app.logger.info(f"Heartbeat received from user {user_id}, device {device_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Heartbeat received',
+            'last_verified': datetime.utcnow().isoformat()
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error processing heartbeat: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to process heartbeat: {str(e)}'
+        }), 500
+
 @push_notifications_bp.route('/unsubscribe', methods=['POST'])
 @jwt_required()
 def unsubscribe_user():
@@ -128,25 +266,27 @@ def unsubscribe_user():
         data = request.get_json()
         
         endpoint = data.get('endpoint') if data else None
-        
+
         # Update subscription status in database
         update_data = {
             'is_active': False,
             'updated_at': datetime.utcnow()
         }
-        
+
         if endpoint:
-            # Unsubscribe specific endpoint
-            mongo_db.push_subscriptions.update_one(
-                {'user_id': user_id, 'subscription.endpoint': endpoint},
-                {'$set': update_data}
-            )
+            # Unsubscribe specific endpoint. Support both top-level and nested shapes.
+            query = {
+                'user_id': user_id,
+                'is_active': True,
+                '$or': [
+                    {'endpoint': endpoint},
+                    {'subscription.endpoint': endpoint}
+                ]
+            }
+            mongo_db.push_subscriptions.update_one(query, {'$set': update_data})
         else:
             # Unsubscribe all subscriptions for user
-            mongo_db.push_subscriptions.update_many(
-                {'user_id': user_id},
-                {'$set': update_data}
-            )
+            mongo_db.push_subscriptions.update_many({'user_id': user_id}, {'$set': update_data})
         
         # Unregister from notification service
         client = get_notification_client()

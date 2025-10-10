@@ -64,6 +64,7 @@ def get_students_for_test_notification(test_id: str, batch_ids: List[str],
                     'email': user.get('email'),
                     'mobile_number': student.get('mobile_number') or student.get('mobile'),
                     'username': user.get('username'),
+                    'user_id': str(student.get('user_id')),  # Add user_id for push notifications
                     'batch_id': str(student.get('batch_id')),
                     'course_id': str(student.get('course_id')),
                     'campus_id': str(student.get('campus_id'))
@@ -133,6 +134,7 @@ def get_students_by_batch_course_combination(batch_ids: List[str],
                     'email': '$user.email',
                     'mobile_number': '$mobile_number',
                     'username': '$user.username',
+                    'user_id': '$user_id',  # Add user_id for push notifications
                     'batch_id': '$batch_id',
                     'course_id': '$course_id',
                     'campus_id': '$campus_id'

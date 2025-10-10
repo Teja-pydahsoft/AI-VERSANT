@@ -78,7 +78,6 @@ import StudentSidebar from './pages/student/StudentSidebar'
 import RealAnalytics from './pages/analytics/RealAnalytics'
 
 // Admin Pages
-import PushNotificationTest from './pages/admin/PushNotificationTest'
 
 function App() {
   return (
@@ -144,7 +143,6 @@ function App() {
                     <Route path="form-management" element={<FormManagement />} />
                     <Route path="form-submissions/:formId" element={<SubmissionViewer />} />
                     <Route path="real-analytics" element={<RealAnalytics />} />
-                    <Route path="push-notification-test" element={<PushNotificationTest />} />
                     <Route path="profile" element={<SuperAdminProfile />} />
                   </Route>
 

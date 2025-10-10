@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VAPID Push Test</title>
+</head>
+<body>
+    <h1>VAPID Push Notification Test</h1>
+    <button id="subscribe">Subscribe to Push Notifications</button>
+    <pre id="output"></pre>
+
+    <script>
+        const vapidPublicKey = 'BCSohD6F9iJzTDzsv4KTi8E8eZHxPMrzwFncBon1kJS0OokH_OBdT2dT_LXTyiG74Q1OcpgeaRSigY8ApOGKolg';
+
+        function urlB64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding)
+                .replace(/\-/g, '+')
+                .replace(/_/g, '/');
+
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        async function subscribeToPush() {
+            try {
+                // Register Service Worker
+                const registration = await navigator.serviceWorker.register('/sw.js');
+                console.log('Service Worker registered');
+
+                // Subscribe to Push
+                const subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlB64ToUint8Array(vapidPublicKey)
+                });
+
+                console.log('Push Subscription:', subscription);
+                
+                // Display the subscription details
+                const output = document.getElementById('output');
+                output.textContent = JSON.stringify(subscription, null, 2);
+
+                // You can now send this subscription to your backend
+                await fetch('/api/push/subscribe', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(subscription)
+                });
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('output').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // Add click handler
+        document.getElementById('subscribe').addEventListener('click', subscribeToPush);
+
+        // Check if push is supported
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            document.getElementById('output').textContent = 'Push notifications not supported';
+            document.getElementById('subscribe').disabled = true;
+        }
+    </script>
+</body>
+</html>

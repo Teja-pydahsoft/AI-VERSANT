@@ -812,6 +812,15 @@ def upload_students_to_batch():
                     
                     user_id_inserted = user_result.inserted_id
                     
+                    # Create default notification preferences for the new user
+                    try:
+                        from models_notification_preferences import NotificationPreferences
+                        NotificationPreferences.create_default_preferences(user_id_inserted)
+                        current_app.logger.info(f"✅ Created default notification preferences for student: {user_id_inserted}")
+                    except Exception as e:
+                        current_app.logger.warning(f"⚠️ Failed to create default notification preferences for student {user_id_inserted}: {e}")
+                        # Don't fail user creation if notification preferences creation fails
+                    
                     student_doc = {
                         'user_id': user_id_inserted,
                         'name': student_name,
@@ -907,13 +916,24 @@ def upload_students_to_batch():
                 username = roll_number
                 password = f"{student_name.split()[0][:4].lower()}{roll_number[-4:]}"
 
+                # Get user_id from the student_result or find it by username
+                user_id_for_student = None
+                try:
+                    # Try to find the user_id by username
+                    user_doc = mongo_db.users.find_one({'username': username})
+                    if user_doc:
+                        user_id_for_student = str(user_doc['_id'])
+                except Exception as e:
+                    current_app.logger.warning(f"Could not find user_id for username {username}: {e}")
+
                 student_data = {
                     'name': student_name,
                     'username': username,
                     'password': password,
                     'email': email if email and email.strip() else None,
                     'mobile_number': mobile_number if mobile_number and mobile_number.strip() else None,
-                    'roll_number': roll_number
+                    'roll_number': roll_number,
+                    'user_id': user_id_for_student  # Add user_id for push notifications
                 }
                 students_for_notifications.append(student_data)
 
@@ -937,6 +957,43 @@ def upload_students_to_batch():
                         student_result['notifications_queued'] = True
                         student_result['email_queued'] = True  # Will be processed in background
                         student_result['sms_queued'] = True    # Will be processed in background
+                        student_result['push_queued'] = True   # Will be processed in background
+                
+                # Send ALL students to notification service at once (fire-and-forget)
+                try:
+                    import requests
+                    import os
+                    notification_service_url = os.getenv('NOTIFICATION_SERVICE_URL', 'http://localhost:3001')
+                    notification_service_url = notification_service_url.rstrip('/api').rstrip('/')
+                    
+                    current_app.logger.info(f"📧📱 Sending {len(students_for_notifications)} students to notification service (batch)")
+                    
+                    # Send email batch (fire-and-forget)
+                    try:
+                        requests.post(
+                            f"{notification_service_url}/api/email/send-credentials-batch",
+                            json={'students': students_for_notifications, 'loginUrl': 'https://crt.pydahsoft.in/login'},
+                            timeout=1  # Fire-and-forget
+                        )
+                        current_app.logger.info(f"✅ Email batch queued in notification service")
+                    except:
+                        pass  # Ignore errors
+                    
+                    # Send SMS batch (fire-and-forget)
+                    try:
+                        requests.post(
+                            f"{notification_service_url}/api/sms/send-credentials-batch",
+                            json={'students': students_for_notifications},
+                            timeout=1  # Fire-and-forget
+                        )
+                        current_app.logger.info(f"✅ SMS batch queued in notification service")
+                    except:
+                        pass  # Ignore errors
+                        
+                except Exception as e:
+                    current_app.logger.warning(f"⚠️ Failed to queue student credentials in notification service: {e}")
+                    # Don't fail the upload if notifications fail
+                    
             except Exception as e:
                 current_app.logger.error(f"❌ Failed to create credentials batch: {e}")
                 # Don't fail the upload if notifications fail
@@ -949,6 +1006,7 @@ def upload_students_to_batch():
             # Set notification flags based on queueing success
             student_result['email_sent'] = student_result.get('email_queued', False)
             student_result['sms_sent'] = student_result.get('sms_queued', False)
+            student_result['push_sent'] = student_result.get('push_queued', False)
         
         # Send completion notification
         current_app.logger.info("🎉 Student upload completed successfully with batch processing!")
@@ -1350,91 +1408,119 @@ def lock_student_level(student_id):
 @jwt_required()
 def authorize_student_module(student_id):
     try:
-        data = request.json
-        module = data.get('module')
+        # Support multiple input forms: JSON body, form data, and alternate keys
+        data = request.get_json(silent=True) or {}
+        # fallback to form data if request.json is None or empty
+        if not data and request.form:
+            data = request.form.to_dict()
+
+        # Accept module from multiple possible keys for robustness
+        module = data.get('module') or data.get('module_id') or data.get('moduleId')
         reason = data.get('reason', 'Admin authorization')
-        
+
+        # Debug logging: capture incoming payload and module for easier troubleshooting
+        current_app.logger.info(f"authorize_student_module called - student_id={student_id}, module={module}, payload={data}")
+
         if not module:
+            # Log raw request body and headers for debugging
+            try:
+                raw = request.get_data(as_text=True)
+            except Exception:
+                raw = '<unable to read body>'
+            current_app.logger.warning(f"authorize_student_module missing 'module' - raw_body={raw} headers={dict(request.headers)}")
             return jsonify({'success': False, 'message': 'Module is required'}), 400
 
         # Get current admin user
         current_user_id = get_jwt_identity()
-        
+        current_app.logger.info(f"authorize_student_module: current_user_id={current_user_id}")
+
         # Find student - try multiple methods
         student = None
         try:
             # Method 1: Try as ObjectId (student._id)
             try:
                 student = mongo_db.students.find_one({'_id': ObjectId(student_id)})
-            except:
-                pass
-            
+            except Exception:
+                student = None
+
             # Method 2: Try as user_id
             if not student:
                 try:
                     student = mongo_db.students.find_one({'user_id': ObjectId(student_id)})
-                except:
-                    pass
-            
+                except Exception:
+                    student = None
+
             # Method 3: Try as roll_number
             if not student:
                 student = mongo_db.students.find_one({'roll_number': student_id})
-            
+
             # Method 4: Try as username in users collection, then find student
             if not student:
                 user = mongo_db.users.find_one({'username': student_id})
-            if user:
+                if user:
                     student = mongo_db.students.find_one({'user_id': user['_id']})
-            
+
             # Method 5: Try as email in users collection, then find student
             if not student:
                 user = mongo_db.users.find_one({'email': student_id})
                 if user:
                     student = mongo_db.students.find_one({'user_id': user['_id']})
-            
+
             if not student:
+                current_app.logger.warning(f"authorize_student_module: student not found for identifier {student_id}")
                 return jsonify({'success': False, 'message': f'Student not found with identifier: {student_id}'}), 404
-                
+
         except Exception as e:
+            current_app.logger.exception(f"Error searching for student: {e}")
             return jsonify({'success': False, 'message': f'Error searching for student: {str(e)}'}), 400
+
+        # Compute module levels (quick sanity) and log
+        from config.constants import LEVELS
+        module_levels_check = [level_id for level_id, level in LEVELS.items() if isinstance(level, dict) and (level.get('module_id') == module or level.get('module') == module)]
+        current_app.logger.info(f"authorize_student_module: module_levels_check for module={module} -> {module_levels_check}")
 
         # Use progress manager for enhanced authorization
         from utils.student_progress_manager import StudentProgressManager
         progress_manager = StudentProgressManager(mongo_db)
-        
-        success, message = progress_manager.admin_authorize_module(
-            student_id=student['_id'],
-            module_id=module,
-            admin_user_id=current_user_id,
-            reason=reason
-        )
-        
+
+        try:
+            # Ensure we pass a string id to the progress manager (it expects ids it can wrap with ObjectId)
+            success, message = progress_manager.admin_authorize_module(
+                student_id=str(student['_id']),
+                module_id=module,
+                admin_user_id=current_user_id,
+                reason=reason
+            )
+            current_app.logger.info(f"authorize_student_module: progress_manager returned success={success}, message={message}")
+        except Exception as pm_err:
+            current_app.logger.exception(f"authorize_student_module: progress_manager raised exception: {pm_err}")
+            return jsonify({'success': False, 'message': f'Error authorizing module: {str(pm_err)}'}), 500
+
         if success:
-        # Emit real-time event to the student
+            # Emit real-time event to the student using socketio instance
             try:
-                from flask_socketio import emit
-                emit('module_access_changed', {
-                    'student_id': str(student['_id']), 
-                    'module': module, 
+                socketio.emit('module_access_changed', {
+                    'student_id': str(student['_id']),
+                    'module': module,
                     'action': 'unlocked',
                     'authorized_by': 'admin'
                 }, room=str(student['_id']))
             except Exception as socket_error:
                 current_app.logger.warning(f"Could not emit socket event: {socket_error}")
-            
+
             # Get updated student data
             updated_student = mongo_db.students.find_one({'_id': student['_id']})
-            
+
             return jsonify({
-                'success': True, 
+                'success': True,
                 'message': message,
                 'authorized_levels': updated_student.get('authorized_levels', [])
             }), 200
         else:
             return jsonify({'success': False, 'message': message}), 400
-            
+
     except Exception as e:
-        current_app.logger.error(f"Error authorizing module: {e}")
+        current_app.logger.exception(f"Error authorizing module: {e}")
         return jsonify({'success': False, 'message': 'An error occurred authorizing the module.'}), 500
 
 @batch_management_bp.route('/student/<student_id>/lock-module', methods=['POST'])
@@ -1457,8 +1543,26 @@ def lock_student_module(student_id):
             student = mongo_db.students.find_one({'user_id': ObjectId(student_id)})
         if not student:
             return jsonify({'success': False, 'message': 'Student not found.'}), 404
-        mongo_db.students.update_one({'_id': student['_id']}, {'$pull': {'authorized_levels': {'$in': module_levels}}})
+        # Pull object entries first, then string entries to support legacy and new shapes
+        try:
+            mongo_db.students.update_one(
+                {'_id': student['_id']},
+                {'$pull': {'authorized_levels': {'level_id': {'$in': module_levels}}}}
+            )
+        except Exception as e:
+            current_app.logger.exception(f"Failed to pull object-authorized_levels: {e}")
+
+        try:
+            mongo_db.students.update_one(
+                {'_id': student['_id']},
+                {'$pull': {'authorized_levels': {'$in': module_levels}}}
+            )
+        except Exception as e:
+            current_app.logger.exception(f"Failed to pull string-authorized_levels: {e}")
+
         student = mongo_db.students.find_one({'_id': student['_id']})
+
+        current_app.logger.info(f"lock_student_module: removed levels for module={module}, module_levels={module_levels}, remaining_authorized_levels_count={len(student.get('authorized_levels', []))}")
 
         # Emit real-time event to the student
         socketio.emit('module_access_changed', {'student_id': str(student['_id']), 'module': module, 'action': 'locked'}, room=str(student['_id']))
@@ -2475,6 +2579,15 @@ def upload_students_to_instance(instance_id):
                 
                 user_id = mongo_db.users.insert_one(user_doc).inserted_id
                 
+                # Create default notification preferences for the new user
+                try:
+                    from models_notification_preferences import NotificationPreferences
+                    NotificationPreferences.create_default_preferences(user_id)
+                    current_app.logger.info(f"✅ Created default notification preferences for student: {user_id}")
+                except Exception as e:
+                    current_app.logger.warning(f"⚠️ Failed to create default notification preferences for student {user_id}: {e}")
+                    # Don't fail user creation if notification preferences creation fails
+                
                 # Create student profile
                 student_doc = {
                     'user_id': user_id,
@@ -2867,40 +2980,69 @@ def bulk_migrate_students_progress():
         
         try:
             from utils.student_progress_manager import StudentProgressManager
-            progress_manager = StudentProgressManager()
+            # PASS mongo_db to StudentProgressManager - previously missing which caused runtime errors
+            progress_manager = StudentProgressManager(mongo_db)
             
             for student in students_to_migrate:
                 try:
                     authorized_levels = student.get('authorized_levels', [])
-                    
-                    # Convert old string array to new object array
-                    new_authorized_levels = []
-                    for level_id in authorized_levels:
-                        if isinstance(level_id, str):
-                            new_authorized_levels.append({
-                                'level_id': level_id,
-                                'unlocked_at': datetime.now(),
-                                'unlock_source': 'legacy_migration',
-                                'unlocked_by': current_user_id,
-                                'reason': 'Bulk migrated from old progress system'
-                            })
-                    
-                    # Update student document
+
+                    # Preserve existing object entries and convert only string entries
+                    existing_objects = [lvl for lvl in authorized_levels if isinstance(lvl, dict)]
+                    string_entries = [lvl for lvl in authorized_levels if isinstance(lvl, str)]
+
+                    converted_from_strings = []
+                    for level_id in string_entries:
+                        converted_from_strings.append({
+                            'level_id': level_id,
+                            'unlocked_at': datetime.now(),
+                            'unlock_source': 'legacy_migration',
+                            'unlocked_by': current_user_id,
+                            'reason': 'Bulk migrated from old progress system'
+                        })
+
+                    # Merge existing object entries with converted entries, prefer existing object metadata
+                    merged_map = {obj.get('level_id'): obj for obj in existing_objects if obj.get('level_id')}
+                    for conv in converted_from_strings:
+                        lid = conv.get('level_id')
+                        if lid and lid not in merged_map:
+                            merged_map[lid] = conv
+
+                    new_authorized_levels = list(merged_map.values())
+
+                    # Prepare update_data while preserving/initializing other fields
                     update_data = {
                         'authorized_levels': new_authorized_levels,
                         'migration_status': 'completed',
                         'migrated_at': datetime.now(),
                         'migrated_by': current_user_id
                     }
-                    
-                    # Add module_progress if not exists
+
+                    # Ensure module_progress exists (do not overwrite if present)
                     if 'module_progress' not in student:
                         update_data['module_progress'] = {}
-                    
-                    # Add unlock_history if not exists
-                    if 'unlock_history' not in student:
-                        update_data['unlock_history'] = []
-                    
+
+                    # Ensure unlock_history exists - append converted history entries if unlock_history exists
+                    existing_history = student.get('unlock_history', []) or []
+                    converted_history_entries = []
+                    for level_id in string_entries:
+                        converted_history_entries.append({
+                            'level_id': level_id,
+                            'unlocked_at': datetime.now(),
+                            'unlocked_by': 'legacy_migration',
+                            'score': None,
+                            'test_id': None
+                        })
+
+                    # Merge histories (append converted entries while avoiding duplicates by level_id+timestamp)
+                    # Simple append is fine for now; dedupe by level_id
+                    existing_history_map = {h.get('level_id'): h for h in existing_history if isinstance(h, dict) and h.get('level_id')}
+                    for h in converted_history_entries:
+                        if h.get('level_id') not in existing_history_map:
+                            existing_history.append(h)
+
+                    update_data['unlock_history'] = existing_history
+
                     result = mongo_db.students.update_one(
                         {'_id': student['_id']},
                         {'$set': update_data}
@@ -3254,7 +3396,13 @@ def send_batch_emails(batch_id):
         except Exception as e:
             current_app.logger.error(f"❌ Failed to create email batch job: {e}")
             # Fallback to individual email processing
-            self._process_emails_individually(students_with_email, current_user_id)
+            try:
+                from utils.notification_queue import queue_batch_notifications
+                # Queue notifications individually as a fallback
+                queue_result = queue_batch_notifications(students_for_batch, notification_type='welcome')
+                current_app.logger.info(f"Fallback queued individual emails: {queue_result}")
+            except Exception as fallback_err:
+                current_app.logger.error(f"Fallback email processing also failed: {fallback_err}")
 
         return jsonify({
             'success': True,

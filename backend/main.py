@@ -355,7 +355,19 @@ def create_app():
     
     # OneSignal Push Notifications
     from routes.onesignal_notifications import onesignal_notifications_bp
-    app.register_blueprint(onesignal_notifications_bp, url_prefix='/api/onesignal')
+    app.register_blueprint(onesignal_notifications_bp, url_prefix='/onesignal')
+    
+    # VAPID Push Notifications
+    from routes.vapid_notifications import vapid_bp
+    app.register_blueprint(vapid_bp, url_prefix='/vapid')
+    
+    # Test Notifications (Broadcast)
+    from routes.test_notifications import test_notifications_bp
+    app.register_blueprint(test_notifications_bp, url_prefix='/notifications')
+    
+    # Notification Preferences
+    from routes.notification_preferences import notification_preferences_bp
+    app.register_blueprint(notification_preferences_bp, url_prefix='/notification-preferences')
     
     # Register Global Settings blueprint
     app.register_blueprint(global_settings_bp, url_prefix='/global-settings')

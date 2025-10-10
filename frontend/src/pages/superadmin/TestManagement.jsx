@@ -283,6 +283,25 @@ const TestManagement = () => {
     }
   }
 
+  // Remind students handler
+  const handleRemindStudents = async () => {
+    const loadingToast = toast.loading('Sending test reminders...');
+    try {
+      const res = await api.post('/test-management/remind-students', {});
+      if (res.data && res.data.success) {
+        toast.success(res.data.message || 'Test reminders sent successfully!', { id: loadingToast });
+        const data = res.data.data || {};
+        if (data.total_sent > 0) {
+          toast.success(`📱 ${data.total_sent} reminders sent!`);
+        }
+      } else {
+        toast.error(res.data.message || 'Failed to send reminders', { id: loadingToast });
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Failed to send reminders. Please try again.', { id: loadingToast });
+    }
+  }
+
   const renderContent = () => {
     switch (view) {
       case 'create':
@@ -291,7 +310,7 @@ const TestManagement = () => {
         if (isPreviewLoading) {
           return <div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>;
         }
-        return <TestPreviewView test={selectedTest} onBack={handleBackToList} onTestEmail={handleTestEmail} onFixAudioUrls={handleFixAudioUrls} onNotifyStudents={handleNotifyStudents} />
+        return <TestPreviewView test={selectedTest} onBack={handleBackToList} onTestEmail={handleTestEmail} onFixAudioUrls={handleFixAudioUrls} onNotifyStudents={handleNotifyStudents} onRemindStudents={handleRemindStudents} />
       case 'module-upload':
         return <ModuleQuestionUpload onBack={() => setView('list')} />
       case 'list':
@@ -594,7 +613,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
   )
 }
 
-const TestPreviewView = ({ test, onBack, onTestEmail, onFixAudioUrls, onNotifyStudents }) => {
+const TestPreviewView = ({ test, onBack, onTestEmail, onFixAudioUrls, onNotifyStudents, onRemindStudents }) => {
   const { success, error } = useNotification();
 
   const navigate = useNavigate();
@@ -711,6 +730,12 @@ const TestPreviewView = ({ test, onBack, onTestEmail, onFixAudioUrls, onNotifySt
             className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"
           >
             Notify Students
+          </button>
+          <button
+            onClick={onRemindStudents}
+            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 transition-colors"
+          >
+            🔔 Remind Students
           </button>
           <button
             onClick={() => navigate(`/superadmin/results?test_id=${test._id}`)}

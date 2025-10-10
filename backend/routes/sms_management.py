@@ -130,7 +130,7 @@ def send_test_scheduled():
 
 @sms_bp.route('/send-test-reminders', methods=['POST'])
 @jwt_required()
-def send_test_reminders():
+async def send_test_reminders():
     """Send test reminder SMS to unattempted students"""
     try:
         data = request.get_json()
@@ -143,7 +143,7 @@ def send_test_reminders():
             }), 400
         
         # Send test reminder notifications
-        result = send_test_reminder_notifications(test_id)
+        result = await send_test_reminder_notifications(test_id)
         
         if result.get('success'):
             return jsonify({

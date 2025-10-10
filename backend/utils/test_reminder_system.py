@@ -12,6 +12,7 @@ from bson import ObjectId
 from mongo import mongo_db
 from utils.sms_service import send_test_reminder_sms, send_test_scheduled_sms
 from utils.date_formatter import format_date_to_ist
+from services.test_notification_service import test_notification_service
 # Make email service import optional
 try:
     from utils.email_service import send_test_notification_email
@@ -183,8 +184,8 @@ class TestReminderSystem:
             logger.error(f"Error sending test scheduled SMS: {e}")
             return {'success': False, 'error': str(e)}
     
-    def send_test_reminders(self, test_id: str) -> Dict:
-        """Send test reminders to unattempted students"""
+    async def send_test_reminders(self, test_id: str) -> Dict:
+        """Send test reminders to unattempted students through SMS and push notifications"""
         try:
             # Get test and online exam details
             test = self.db.tests.find_one({'_id': ObjectId(test_id)})
@@ -192,6 +193,9 @@ class TestReminderSystem:
             
             if not test or not online_exam:
                 return {'success': False, 'error': 'Test or online exam not found'}
+                
+            # Base URL for exam link
+            exam_link = f"https://crt.pydahsoft.in/student/exam/{test_id}"
             
             # Check if test is still active
             now = datetime.now()
@@ -245,10 +249,28 @@ class TestReminderSystem:
             
             successful_sms = sum(1 for r in results if r['sms_result'].get('success', False))
             
+            # Send push notifications through both OneSignal and VAPID
+            student_ids = [str(student['_id']) for student in unattempted_students]
+            
+            # Send through OneSignal
+            onesignal_result = test_notification_service.send_test_reminder(test, student_ids)
+            
+            # Send through VAPID
+            from services.vapid_push_service import vapid_service
+            vapid_result = await vapid_service.send_test_reminder(test, student_ids)
+            
             return {
                 'success': True,
                 'total_unattempted': len(unattempted_students),
                 'successful_sms': successful_sms,
+                'onesignal': {
+                    'success': onesignal_result.get('success', False),
+                    'recipients': onesignal_result.get('recipients', 0)
+                },
+                'vapid': {
+                    'success': vapid_result.get('success', False),
+                    'recipients': vapid_result.get('successful', 0)
+                },
                 'results': results
             }
             
@@ -332,9 +354,9 @@ def send_test_scheduled_notifications(test_id: str) -> Dict:
     """Send test scheduled notifications (SMS + Email)"""
     return reminder_system.send_test_scheduled_sms(test_id)
 
-def send_test_reminder_notifications(test_id: str) -> Dict:
+async def send_test_reminder_notifications(test_id: str) -> Dict:
     """Send test reminder notifications"""
-    return reminder_system.send_test_reminders(test_id)
+    return await reminder_system.send_test_reminders(test_id)
 
 def process_all_reminders() -> Dict:
     """Process all pending reminders"""

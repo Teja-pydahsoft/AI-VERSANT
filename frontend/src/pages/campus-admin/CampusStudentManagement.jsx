@@ -6,7 +6,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
 import { Users, Filter, Search, Trash2, ListChecks, CheckCircle, BookOpen, Lock, Unlock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User } from 'lucide-react';
 import Modal from '../../components/common/Modal';
-import { getStudentAccessStatus, authorizeStudentModule, lockStudentModule, authorizeStudentLevel, getStudentDetailedInsights, bulkMigrateStudentsProgress } from '../../services/api';
+import { getStudentAccessStatus, authorizeStudentModule, lockStudentModule, authorizeStudentLevel, lockStudentLevel, getStudentDetailedInsights, bulkMigrateStudentsProgress } from '../../services/api';
 
 const CampusStudentManagement = () => {
     const { user, refreshUser } = useAuth();
@@ -507,8 +507,8 @@ const CampusStudentManagement = () => {
     const handleLevelLockToggle = async (studentId, levelId, unlocked) => {
         try {
             if (unlocked) {
-                // Lock: remove from authorized_levels (not implemented, but could be added)
-                setUnlockMsg('Level lock not implemented!');
+                await lockStudentLevel(studentId, levelId);
+                setUnlockMsg('Level locked!');
             } else {
                 await authorizeStudentLevel(studentId, levelId);
                 setUnlockMsg('Level unlocked!');
@@ -1325,10 +1325,10 @@ const CampusStudentManagement = () => {
                                                 setLevelActionLoading(prev => ({ ...prev, [lvl.level_id]: true }));
                                                 try {
                                                     if (lvl.unlocked) {
-                                                        await api.post(`/batch-management/student/${selectedStudent._id}/lock-level`, { module_id: levelsModalData.module.module_id, level_id: lvl.level_id });
+                                                        await lockStudentLevel(selectedStudent._id, lvl.level_id);
                                                         setUnlockMsg('Level locked!');
                                                     } else {
-                                                        await api.post(`/batch-management/student/${selectedStudent._id}/authorize-level`, { module_id: levelsModalData.module.module_id, level_id: lvl.level_id });
+                                                        await authorizeStudentLevel(selectedStudent._id, lvl.level_id);
                                                         setUnlockMsg('Level unlocked!');
                                                     }
                                                     // Refresh levels for modal UI

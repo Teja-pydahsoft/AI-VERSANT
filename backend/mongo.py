@@ -16,6 +16,8 @@ class MongoDB:
         self.online_exams = self.db.online_exams
         self.student_test_attempts = self.db.student_test_attempts
         self.student_progress = self.db.student_progress
+    # Monitoring collection for progress events
+        self.progress_events = self.db.progress_events
         self.campuses = self.db.campuses
         self.batches = self.db.batches
         self.courses = self.db.courses
@@ -112,6 +114,15 @@ class MongoDB:
             self.test_results.create_index("submitted_at")
             self.test_results.create_index([("test_id", 1), ("student_id", 1)])
             
+            # Push subscriptions indexes (endpoint uniqueness + lookup by user)
+            try:
+                self.push_subscriptions.create_index([('endpoint', 1)], unique=True)
+                self.push_subscriptions.create_index([('user_id', 1)])
+                self.push_subscriptions.create_index([('is_active', 1)])
+            except Exception as e:
+                # Index creation may fail if collection doesn't exist yet; log and continue
+                print(f"⚠️ Could not create push_subscriptions indexes: {e}")
+
         except Exception as e:
             print(f"⚠️ Warning: Could not create some indexes: {e}")
             # Continue without failing the entire initialization

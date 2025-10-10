@@ -2,6 +2,7 @@ import os
 import requests
 import logging
 from typing import List, Dict, Optional, Union
+from models_push_subscriptions import PushSubscription
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -192,15 +193,24 @@ class OneSignalService:
             return False
 
     def send_broadcast_notification(self, notification_data: Dict) -> bool:
-        """Send notification to all subscribed users"""
+        """Send notification to all subscribed users using push_subscriptions collection"""
         try:
             if not self.is_configured():
                 logger.warning("OneSignal not configured")
                 return False
 
+            # Get all active OneSignal player IDs from push_subscriptions collection
+            player_ids = PushSubscription.get_all_onesignal_player_ids()
+            
+            if not player_ids or len(player_ids) == 0:
+                logger.warning("No active OneSignal subscriptions found")
+                return False
+            
+            logger.info(f"📢 Broadcasting to {len(player_ids)} OneSignal subscribers")
+
             payload = {
                 "app_id": self.app_id,
-                "included_segments": ["All"],
+                "include_player_ids": player_ids,  # Use actual player IDs instead of segments
                 "headings": {"en": notification_data.get('title', 'New Notification')},
                 "contents": {"en": notification_data.get('message', '')},
                 "url": notification_data.get('url', '/'),

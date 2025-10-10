@@ -47,50 +47,51 @@ def migrate_student_progress():
                 skipped_count += 1
                 continue
             
-            # Check if already in new format
-            if authorized_levels and isinstance(authorized_levels[0], dict):
-                logger.info(f"   ✅ Already in new format, skipping")
-                skipped_count += 1
-                continue
-            
-            # Convert old format to new format
-            new_authorized_levels = []
-            for level_id in authorized_levels:
-                if isinstance(level_id, str):
-                    new_level = {
-                        "level_id": level_id,
-                        "authorized_by": "legacy",  # Mark as legacy migration
-                        "authorized_at": datetime.utcnow(),
-                        "authorized_by_user": None,
-                        "score_unlocked": None,
-                        "is_admin_override": True,  # Assume legacy unlocks were admin overrides
-                        "reason": "Migrated from legacy system"
-                    }
-                    new_authorized_levels.append(new_level)
-            
-            # Initialize module progress if not exists
+            # If first entry is dict we may already be in new format; still check and merge
+            existing_objects = [lvl for lvl in authorized_levels if isinstance(lvl, dict)]
+            string_entries = [lvl for lvl in authorized_levels if isinstance(lvl, str)]
+
+            # Convert string entries to object entries
+            converted_from_strings = []
+            for level_id in string_entries:
+                converted_from_strings.append({
+                    "level_id": level_id,
+                    "authorized_by": "legacy",  # Mark as legacy migration
+                    "authorized_at": datetime.utcnow(),
+                    "authorized_by_user": None,
+                    "score_unlocked": None,
+                    "is_admin_override": True,
+                    "reason": "Migrated from legacy system"
+                })
+
+            # Merge existing object entries with converted entries (prefer existing metadata)
+            merged_map = {obj.get('level_id'): obj for obj in existing_objects if obj.get('level_id')}
+            for conv in converted_from_strings:
+                lid = conv.get('level_id')
+                if lid and lid not in merged_map:
+                    merged_map[lid] = conv
+
+            new_authorized_levels = list(merged_map.values())
+
+            # Preserve existing module_progress and unlock_history, append converted history entries
             module_progress = student.get('module_progress', {})
-            
-            # Initialize unlock history if not exists
-            unlock_history = student.get('unlock_history', [])
-            
-            # Add legacy entries to unlock history
-            for level_id in authorized_levels:
-                if isinstance(level_id, str):
-                    history_entry = {
-                        "level_id": level_id,
-                        "unlocked_at": datetime.utcnow(),
-                        "unlocked_by": "legacy",
-                        "score": None,
-                        "test_id": None
-                    }
-                    unlock_history.append(history_entry)
-            
+            existing_history = student.get('unlock_history', []) or []
+            for level_id in string_entries:
+                history_entry = {
+                    "level_id": level_id,
+                    "unlocked_at": datetime.utcnow(),
+                    "unlocked_by": "legacy",
+                    "score": None,
+                    "test_id": None
+                }
+                if not any(h.get('level_id') == level_id for h in existing_history if isinstance(h, dict)):
+                    existing_history.append(history_entry)
+
             # Update student document
             update_data = {
                 'authorized_levels': new_authorized_levels,
                 'module_progress': module_progress,
-                'unlock_history': unlock_history,
+                'unlock_history': existing_history,
                 'migration_completed_at': datetime.utcnow()
             }
             

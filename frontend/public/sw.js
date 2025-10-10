@@ -8,37 +8,55 @@ self.addEventListener('push', function(event) {
   console.log('Service Worker: Push received');
   
   if (event.data) {
+    let data;
     try {
-      const data = event.data.json();
-      console.log('Service Worker: Push data:', data);
-      
-      const options = {
-        body: data.body || 'You have a new notification',
-        icon: data.icon || '/icon-192x192.png',
-        badge: data.badge || '/badge-72x72.png',
-        image: data.image || null,
-        data: data.data || {},
-        tag: data.tag || `notification-${Date.now()}`,
-        requireInteraction: data.requireInteraction || false,
-        actions: data.actions || [],
-        vibrate: data.vibrate || [200, 100, 200],
-        timestamp: Date.now(),
-        renotify: true,
-        silent: false
-      };
-
-      event.waitUntil(
-        self.registration.showNotification(data.title || 'VERSANT Notification', options)
-          .then(() => {
-            console.log('Service Worker: Notification displayed successfully');
-          })
-          .catch(error => {
-            console.error('Service Worker: Error showing notification:', error);
-          })
-      );
-    } catch (error) {
-      console.error('Service Worker: Error processing push data:', error);
+      // Try to parse as JSON first
+      data = event.data.json();
+      console.log('Service Worker: Push data (JSON):', data);
+    } catch (jsonError) {
+      // If JSON parsing fails, try to get as text
+      console.log('Service Worker: JSON parse failed, trying text');
+      try {
+        const text = event.data.text();
+        console.log('Service Worker: Push data (text):', text);
+        // Create a simple notification object from text
+        data = {
+          title: 'VERSANT Notification',
+          body: text
+        };
+      } catch (textError) {
+        console.error('Service Worker: Failed to parse push data:', textError);
+        data = {
+          title: 'VERSANT Notification',
+          body: 'You have a new notification'
+        };
+      }
     }
+    
+    const options = {
+      body: data.body || 'You have a new notification',
+      icon: data.icon || '/icon-192x192.png',
+      badge: data.badge || '/badge-72x72.png',
+      image: data.image || null,
+      data: data.data || {},
+      tag: data.tag || `notification-${Date.now()}`,
+      requireInteraction: data.requireInteraction || false,
+      actions: data.actions || [],
+      vibrate: data.vibrate || [200, 100, 200],
+      timestamp: Date.now(),
+      renotify: true,
+      silent: false
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(data.title || 'VERSANT Notification', options)
+        .then(() => {
+          console.log('Service Worker: Notification displayed successfully');
+        })
+        .catch(error => {
+          console.error('Service Worker: Error showing notification:', error);
+        })
+    );
   }
 });
 
@@ -100,6 +118,6 @@ self.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
-});
+});   
 
 console.log('VERSANT Service Worker: Initialized successfully');

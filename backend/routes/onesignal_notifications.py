@@ -1,6 +1,27 @@
 """
 OneSignal Push Notifications Routes
-Handles all OneSignal push notification related endpoints
+Hand        # Get user's notification preferences
+        preferences = NotificationPreferences.get_user_preferences(current_user_id)
+        if not preferences:
+            return jsonify({
+                'success': False,
+                'message': 'No notification preferences found'
+            }), 404
+
+        # Check OneSignal subscription
+        onesignal_data = preferences.get('push_notifications', {}).get('providers', {}).get('onesignal', {})
+        if not onesignal_data.get('subscribed') or not onesignal_data.get('is_active'):
+            return jsonify({
+                'success': False,
+                'message': 'You are not subscribed to push notifications'
+            }), 400
+
+        player_id = onesignal_data.get('player_id')
+        if not player_id:
+            return jsonify({
+                'success': False,
+                'message': 'No OneSignal player ID found'
+            }), 400OneSignal push notification related endpoints
 """
 
 from flask import Blueprint, request, jsonify, current_app
@@ -12,8 +33,48 @@ import json
 from datetime import datetime
 from mongo import mongo_db
 from routes.access_control import require_permission
+from services.oneSignalService import oneSignalService
+from services.vapid_push_service import vapid_service
+from models_push_subscriptions import PushSubscription
 
 onesignal_notifications_bp = Blueprint('onesignal_notifications', __name__)
+
+@onesignal_notifications_bp.route('/verify', methods=['POST'])
+@jwt_required()
+def verify_subscription():
+    """Verify OneSignal subscription status"""
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        player_id = data.get('player_id')
+
+        if not player_id:
+            return jsonify({
+                'success': False,
+                'message': 'player_id is required'
+            }), 400
+
+        # Check if subscription exists and matches
+        subscription = PushSubscription.get_onesignal_subscription(current_user_id)
+        if not subscription:
+            return jsonify({'success': False, 'verified': False}), 200
+
+        is_valid = (
+            subscription.get('is_active', False) and
+            subscription.get('player_id') == player_id
+        )
+
+        return jsonify({
+            'success': True,
+            'verified': is_valid
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error verifying OneSignal subscription: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error verifying subscription: {str(e)}'
+        }), 500
 
 # OneSignal configuration
 ONESIGNAL_APP_ID = os.getenv('ONESIGNAL_APP_ID', 'ee224f6c-70c4-4414-900b-c283db5ea114')
@@ -42,14 +103,16 @@ def send_test_notification():
                 'message': 'User not found'
             }), 404
 
-        # Get user's OneSignal player ID (if stored)
-        player_id = user.get('onesignal_player_id')
+        # Get user's OneSignal subscription from push_subscriptions collection
+        subscription = PushSubscription.get_onesignal_subscription(current_user_id)
         
-        if not player_id:
+        if not subscription or not subscription.get('player_id'):
             return jsonify({
                 'success': False,
                 'message': 'User not subscribed to OneSignal notifications'
             }), 400
+        
+        player_id = subscription.get('player_id')
 
         # Send test notification
         notification_data = {
@@ -109,59 +172,42 @@ def send_broadcast_notification():
     try:
         data = request.get_json()
         
-        if not data or not data.get('title') or not data.get('body'):
+        if not data or not data.get('title') or not data.get('message'):
             return jsonify({
                 'success': False,
-                'message': 'Title and body are required'
+                'message': 'Title and message are required'
             }), 400
 
-        # Send broadcast notification
+        # Prepare notification data for OneSignal service
         notification_data = {
-            'app_id': ONESIGNAL_APP_ID,
-            'included_segments': ['All'],  # Send to all users
-            'headings': {'en': data['title']},
-            'contents': {'en': data['body']},
-            'data': {
-                'type': 'broadcast',
-                'timestamp': datetime.now().isoformat(),
-                'url': data.get('url', '/'),
-                **data.get('data', {})
-            },
-            'web_buttons': [
-                {
-                    'id': 'view',
-                    'text': 'View',
-                    'icon': 'https://via.placeholder.com/72x72/4F46E5/FFFFFF?text=V',
-                    'url': data.get('url', '/')
-                }
-            ]
+            'title': data['title'],
+            'message': data['message'],
+            'type': 'broadcast',
+            'url': data.get('url', '/'),
+            'image': data.get('image'),
+            'icon': data.get('icon', 'https://crt.pydahsoft.in/logo.png'),
+            'priority': data.get('priority', 8),
+            'data': data.get('data', {})
         }
 
-        # Add icon if provided
-        if data.get('icon'):
-            notification_data['chrome_web_icon'] = data['icon']
+        # Send broadcast notification using OneSignal service
+        success = oneSignalService.send_broadcast_notification(notification_data)
 
-        response = requests.post(
-            ONESIGNAL_API_URL,
-            headers=get_onesignal_headers(),
-            json=notification_data
-        )
-
-        if response.status_code == 200:
-            result = response.json()
+        if success:
             return jsonify({
                 'success': True,
-                'message': 'Broadcast notification sent successfully',
+                'message': 'Broadcast push notification sent successfully to all subscribed users',
                 'data': {
-                    'notification_id': result.get('id'),
-                    'recipients': result.get('recipients', 0)
+                    'title': data['title'],
+                    'message': data['message'],
+                    'timestamp': datetime.now().isoformat()
                 }
             }), 200
         else:
             return jsonify({
                 'success': False,
-                'message': f'Failed to send broadcast: {response.text}'
-            }), response.status_code
+                'message': 'Failed to send broadcast notification'
+            }), 500
 
     except Exception as e:
         current_app.logger.error(f"Error sending OneSignal broadcast: {e}")
@@ -356,19 +402,17 @@ def subscribe_user():
                 'message': 'Player ID is required'
             }), 400
 
-        # Update user with OneSignal player ID
-        result = mongo_db.db.users.update_one(
-            {'_id': ObjectId(current_user_id)},
-            {
-                '$set': {
-                    'onesignal_player_id': data['player_id'],
-                    'onesignal_subscribed_at': datetime.now(),
-                    'updated_at': datetime.now()
-                }
-            }
+        # Store OneSignal subscription in push_subscriptions collection
+        result = PushSubscription.create_onesignal_subscription(
+            user_id=current_user_id,
+            player_id=data['player_id'],
+            platform=data.get('platform'),
+            browser=data.get('browser'),
+            tags=data.get('tags', [])
         )
 
-        if result.modified_count > 0:
+        if result:
+            current_app.logger.info(f"✅ OneSignal subscription created for user {current_user_id}")
             return jsonify({
                 'success': True,
                 'message': 'Successfully subscribed to OneSignal notifications'
@@ -393,21 +437,11 @@ def unsubscribe_user():
     try:
         current_user_id = get_jwt_identity()
         
-        # Remove OneSignal player ID from user
-        result = mongo_db.db.users.update_one(
-            {'_id': ObjectId(current_user_id)},
-            {
-                '$unset': {
-                    'onesignal_player_id': '',
-                    'onesignal_subscribed_at': ''
-                },
-                '$set': {
-                    'updated_at': datetime.now()
-                }
-            }
-        )
+        # Deactivate OneSignal subscription
+        result = PushSubscription.deactivate_subscription(current_user_id, 'onesignal')
 
-        if result.modified_count > 0:
+        if result:
+            current_app.logger.info(f"✅ OneSignal subscription deactivated for user {current_user_id}")
             return jsonify({
                 'success': True,
                 'message': 'Successfully unsubscribed from OneSignal notifications'
@@ -415,8 +449,8 @@ def unsubscribe_user():
         else:
             return jsonify({
                 'success': False,
-                'message': 'Failed to update subscription'
-            }), 500
+                'message': 'No active OneSignal subscription found'
+            }), 404
 
     except Exception as e:
         current_app.logger.error(f"Error unsubscribing user from OneSignal: {e}")
@@ -473,6 +507,102 @@ def get_notification_stats():
         return jsonify({
             'success': False,
             'message': f'Error getting stats: {str(e)}'
+        }), 500
+
+@onesignal_notifications_bp.route('/test-broadcast', methods=['POST'])
+@jwt_required()
+def test_broadcast_notification():
+    """Test endpoint for super admin to send push notification to all subscribed users"""
+    try:
+        print("🔔 Test broadcast endpoint called")
+        data = request.get_json()
+        print(f"🔔 Request data: {data}")
+        
+        # Default test message if none provided
+        title = data.get('title', 'VERSANT Test Notification') if data else 'VERSANT Test Notification'
+        message = data.get('message', 'This is a test push notification from VERSANT system. If you receive this, push notifications are working correctly!') if data else 'This is a test push notification from VERSANT system. If you receive this, push notifications are working correctly!'
+        
+        print(f"🔔 Notification data - Title: {title}, Message: {message}")
+
+        # Prepare test notification data
+        notification_data = {
+            'title': title,
+            'message': message,
+            'type': 'test',
+            'url': '/student/dashboard',
+            'icon': 'https://crt.pydahsoft.in/logo.png',
+            'priority': 10,  # High priority for test notifications
+            'data': {
+                'test_id': 'superadmin_test',
+                'timestamp': datetime.now().isoformat(),
+                'sender': 'Super Admin'
+            }
+        }
+
+        # Send test broadcast notification via BOTH OneSignal and VAPID
+        print("🔔 Sending via OneSignal...")
+        onesignal_success = oneSignalService.send_broadcast_notification(notification_data)
+        print(f"🔔 OneSignal result: {onesignal_success}")
+        
+        print("🔔 Sending via VAPID...")
+        vapid_result = vapid_service.send_broadcast_notification(
+            title=title,
+            body=message,
+            data={
+                'type': 'test',
+                'url': '/student/dashboard',
+                'timestamp': datetime.now().isoformat()
+            }
+        )
+        print(f"🔔 VAPID result: {vapid_result}")
+        
+        # Calculate total recipients
+        onesignal_count = 0
+        vapid_count = vapid_result.get('sent', 0)
+        
+        # Get OneSignal count from push_subscriptions
+        onesignal_subs = PushSubscription.get_all_onesignal_player_ids()
+        onesignal_count = len(onesignal_subs) if onesignal_subs else 0
+        
+        total_recipients = onesignal_count + vapid_count
+        
+        # Determine overall success
+        overall_success = onesignal_success or vapid_result.get('success', False)
+        
+        if overall_success:
+            return jsonify({
+                'success': True,
+                'message': 'Test push notification sent successfully',
+                'details': {
+                    'total_recipients': total_recipients,
+                    'onesignal_status': f'Sent to {onesignal_count} subscribers' if onesignal_success else 'Failed',
+                    'vapid_status': f'Sent to {vapid_count} subscribers' if vapid_result.get('success') else 'No VAPID subscribers',
+                    'onesignal_count': onesignal_count,
+                    'vapid_count': vapid_count
+                },
+                'data': {
+                    'title': title,
+                    'message': message,
+                    'type': 'test',
+                    'timestamp': datetime.now().isoformat(),
+                    'sent_by': 'Super Admin'
+                }
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to send test push notification',
+                'details': {
+                    'onesignal_status': 'Failed' if not onesignal_success else 'Success',
+                    'vapid_status': vapid_result.get('error', 'Failed')
+                }
+            }), 500
+
+    except Exception as e:
+        current_app.logger.error(f"Error sending test OneSignal broadcast: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error sending test notification: {str(e)}'
         }), 500
 
 @onesignal_notifications_bp.route('/config', methods=['GET'])

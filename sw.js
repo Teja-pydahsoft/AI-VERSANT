@@ -1,5 +1,5 @@
 // Service Worker for VERSANT Application
-// This is a simple service worker that works with OneSignal
+// Handles both OneSignal and VAPID Web Push notifications
 
 console.log('VERSANT Service Worker: Starting...');
 
@@ -7,9 +7,32 @@ console.log('VERSANT Service Worker: Starting...');
 self.addEventListener('push', function(event) {
   console.log('Service Worker: Push received');
   
+  // Check if it's a OneSignal notification
+  if (self.OneSignal && event.custom) {
+    // Let OneSignal handle it
+    return;
+  }
+  
   if (event.data) {
     try {
-      const data = event.data.json();
+      // Try to parse as JSON, if it fails, use text
+      let data;
+      try {
+        data = event.data.json();
+      } catch (jsonError) {
+        // If JSON parsing fails, try to get text and parse it
+        const text = event.data.text();
+        console.log('Service Worker: Push data as text:', text);
+        try {
+          data = JSON.parse(text);
+        } catch (textParseError) {
+          // If still fails, create a simple notification with the text
+          data = {
+            title: 'VERSANT Notification',
+            body: text
+          };
+        }
+      }
       console.log('Service Worker: Push data:', data);
       
       const options = {

@@ -274,6 +274,10 @@ export const authorizeStudentLevel = async (studentId, level) => {
   return api.post(`/batch-management/student/${studentId}/authorize-level`, { level });
 };
 
+export const lockStudentLevel = async (studentId, level) => {
+  return api.post(`/batch-management/student/${studentId}/lock-level`, { level });
+};
+
 // Student Management
 export const updateStudent = async (studentId, data) => {
   return api.put(`/batch-management/student/${studentId}`, data);

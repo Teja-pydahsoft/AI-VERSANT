@@ -1,90 +1,123 @@
-const CACHE_NAME = 'pydah-VERSANT-v1';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
-  '/images/icon-192x192.png',
-  '/images/icon-512x512.png'
-];
+// Service Worker for VERSANT Application
+// This is a simple service worker that works with OneSignal
 
-// Install event - cache resources
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-  );
-});
+console.log('VERSANT Service Worker: Starting...');
 
-// Fetch event - serve from cache if available
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
+// Handle push events
+self.addEventListener('push', function(event) {
+  console.log('Service Worker: Push received');
+  
+  if (event.data) {
+    let data;
+    try {
+      // Try to parse as JSON first
+      data = event.data.json();
+      console.log('Service Worker: Push data (JSON):', data);
+    } catch (jsonError) {
+      // If JSON parsing fails, try to get as text
+      console.log('Service Worker: JSON parse failed, trying text');
+      try {
+        const text = event.data.text();
+        console.log('Service Worker: Push data (text):', text);
+        // Create a simple notification object from text
+        data = {
+          title: 'VERSANT Notification',
+          body: text
+        };
+      } catch (textError) {
+        console.error('Service Worker: Failed to parse push data:', textError);
+        data = {
+          title: 'VERSANT Notification',
+          body: 'You have a new notification'
+        };
       }
-    )
-  );
+    }
+    
+    const options = {
+      body: data.body || 'You have a new notification',
+      icon: data.icon || '/icon-192x192.png',
+      badge: data.badge || '/badge-72x72.png',
+      image: data.image || null,
+      data: data.data || {},
+      tag: data.tag || `notification-${Date.now()}`,
+      requireInteraction: data.requireInteraction || false,
+      actions: data.actions || [],
+      vibrate: data.vibrate || [200, 100, 200],
+      timestamp: Date.now(),
+      renotify: true,
+      silent: false
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(data.title || 'VERSANT Notification', options)
+        .then(() => {
+          console.log('Service Worker: Notification displayed successfully');
+        })
+        .catch(error => {
+          console.error('Service Worker: Error showing notification:', error);
+        })
+    );
+  }
 });
 
-// Activate event - clean up old caches
-self.addEventListener('activate', event => {
+// Handle notification click events
+self.addEventListener('notificationclick', function(event) {
+  console.log('Service Worker: Notification clicked');
+  
+  event.notification.close();
+
+  const data = event.notification.data || {};
+  const url = data.url || '/';
+
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
+    clients.matchAll({ type: 'window' }).then(function(clientList) {
+      // Check if there's already a window/tab open with the target URL
+      for (let i = 0; i < clientList.length; i++) {
+        const client = clientList[i];
+        if (client.url === url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      
+      // If no existing window, open a new one
+      if (clients.openWindow) {
+        return clients.openWindow(url);
+      }
     })
   );
 });
 
-// Handle push notifications
-self.addEventListener('push', event => {
-  const options = {
-    body: event.data ? event.data.text() : 'New notification from VERSANT',
-    icon: '/images/icon-192x192.png',
-    badge: '/images/icon-72x72.png',
-    vibrate: [100, 50, 100],
-    data: {
-      dateOfArrival: Date.now(),
-      primaryKey: 1
-    },
-    actions: [
-      {
-        action: 'explore',
-        title: 'View',
-        icon: '/images/icon-72x72.png'
-      },
-      {
-        action: 'close',
-        title: 'Close',
-        icon: '/images/icon-72x72.png'
-      }
-    ]
-  };
-
-  event.waitUntil(
-      self.registration.showNotification('VERSANT', options)
-  );
+// Handle notification close events
+self.addEventListener('notificationclose', function(event) {
+  console.log('Service Worker: Notification closed');
+  
+  const data = event.notification.data || {};
+  if (data.trackDismissal) {
+    console.log('Service Worker: Notification dismissed:', data);
+  }
 });
 
-// Handle notification clicks
-self.addEventListener('notificationclick', event => {
-  event.notification.close();
-
-  if (event.action === 'explore') {
-    event.waitUntil(
-      clients.openWindow('/')
-    );
+// Handle background sync
+self.addEventListener('sync', function(event) {
+  console.log('Service Worker: Background sync');
+  
+  if (event.tag === 'background-sync') {
+    event.waitUntil(doBackgroundSync());
   }
-}); 
+});
+
+function doBackgroundSync() {
+  // Implement background sync logic here
+  return Promise.resolve();
+}
+
+// Handle messages from main thread
+self.addEventListener('message', function(event) {
+  console.log('Service Worker: Message received:', event.data);
+  
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});   
+
+console.log('VERSANT Service Worker: Initialized successfully');
