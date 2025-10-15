@@ -245,9 +245,9 @@ def test_form_analytics(token, form_id):
     response = requests.get(f"{API_BASE}/form-analytics/completion-rates", headers=headers)
     print(f"GET /form-analytics/completion-rates: {response.status_code}")
     
-    # Export analytics
-    response = requests.get(f"{API_BASE}/form-analytics/export/analytics", headers=headers)
-    print(f"GET /form-analytics/export/analytics: {response.status_code}")
+    # Export analytics for the specific form
+    response = requests.get(f"{API_BASE}/form-analytics/export/analytics/{form_id}", headers=headers)
+    print(f"GET /form-analytics/export/analytics/{form_id}: {response.status_code}")
 
 def main():
     """Main demo function"""
