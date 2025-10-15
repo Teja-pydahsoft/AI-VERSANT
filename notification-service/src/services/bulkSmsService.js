@@ -16,8 +16,8 @@ class BulkSmsService {
     // Templates (same as backend)
     this.templates = {
       studentCredentials: 'Welcome to Pydah Campus Recruitment Training, Your Credentials username: {#var#} password: {#var#} \nLogin with https://crt.pydahsoft.in/login - Pydah College',
-      testScheduled: 'A new test {#var#} has been scheduled at {#var#} for you. Please make sure to attempt it within 24hours. exam link: https://crt.pydahsoft.in/student/exam/{#var#} - Pydah College',
-      testReminder: 'you haven\'t attempted your scheduled test {#var#} yet. Please complete it as soon as possible. \nexam link: https://crt.pydahsoft.in/student/exam/{#var#} - Pydah College',
+      testScheduled: 'A new test {#var#} has been scheduled at {#var#} for you. Please make sure to attempt it within 24hours. exam link: https://crt.pydahsoft.in/student/exam/ {#var#} - Pydah College',
+      testReminder: 'you haven\'t attempted your scheduled test {#var#} yet. Please complete it as soon as possible. \nexam link: https://crt.pydahsoft.in/student/exam/ {#var#} - Pydah College',
       result: 'Hello {#var#}, Your test {#var#} result is {#var#}%. Check your results at https://crt.pydahsoft.in/student/results - Pydah College'
     };
   }

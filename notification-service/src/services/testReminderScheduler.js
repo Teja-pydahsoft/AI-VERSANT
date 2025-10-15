@@ -10,8 +10,7 @@ class TestReminderScheduler {
 
   /**
    * Start the scheduler
-   * Runs every 3 hours between 9 AM and 9 PM
-   * Schedule: 9 AM, 12 PM, 3 PM, 6 PM, 9 PM
+   * Runs at 12 PM and 6 PM IST
    */
   start() {
     if (this.isRunning) {
@@ -19,9 +18,8 @@ class TestReminderScheduler {
       return;
     }
 
-    // Run every 3 hours: 0 9,12,15,18,21 * * *
-    // This means: At minute 0 of hours 9, 12, 15, 18, and 21
-    this.job = cron.schedule('0 9,12,15,18,21 * * *', async () => {
+    // Schedule: 12 PM and 6 PM (18:00)
+    this.job = cron.schedule('0 12,18 * * *', async () => {
       await this.sendTestReminders();
     }, {
       scheduled: true,
@@ -30,7 +28,7 @@ class TestReminderScheduler {
 
     this.isRunning = true;
     logger.info('✅ Test reminder scheduler started');
-    logger.info('📅 Schedule: Every 3 hours (9 AM, 12 PM, 3 PM, 6 PM, 9 PM IST)');
+    logger.info('📅 Schedule: 12 PM and 6 PM IST');
   }
 
   /**
@@ -52,9 +50,9 @@ class TestReminderScheduler {
       const now = new Date();
       const hour = now.getHours();
 
-      // Double-check time (9 AM to 9 PM)
-      if (hour < 9 || hour >= 21) {
-        logger.info(`⏰ Skipping test reminders (current hour: ${hour}, outside 9 AM - 9 PM)`);
+      // Double-check time (12 PM or 6 PM)
+      if (hour !== 12 && hour !== 18) {
+        logger.info(`⏰ Skipping test reminders (current hour: ${hour}, outside 12 PM or 6 PM)`);
         return;
       }
 
@@ -96,7 +94,7 @@ class TestReminderScheduler {
   getStatus() {
     return {
       isRunning: this.isRunning,
-      schedule: 'Every 3 hours (9 AM, 12 PM, 3 PM, 6 PM, 9 PM IST)',
+      schedule: '12 PM and 6 PM IST',
       timezone: 'Asia/Kolkata',
       nextRun: this.isRunning ? 'Check cron schedule' : 'Not scheduled'
     };

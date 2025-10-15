@@ -541,7 +541,7 @@ router.post('/test-reminder', async (req, res) => {
         end_datetime: endDate.toISOString(),
         hours_remaining: hoursRemaining,
         urgency: urgency,
-        url: `/student/exam/${test._id}`
+        url: `/student/exam/ ${test._id}`
       };
 
       logger.info(`📤 Sending to user ${userId}: "${title}" (${pendingTests.length} pending tests)`);
