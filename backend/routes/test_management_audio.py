@@ -52,10 +52,23 @@ def create_audio_test():
         duplicate_questions = []
         for i, question in enumerate(questions):
             # Handle both question formats: from question bank ('question') and from manual upload ('question_text')
-            question_text = question.get('question_text', question.get('question', '')).strip().lower()
+            # Also handle 'sentence' field for audio questions
+            question_text = (question.get('question_text') or
+                           question.get('question') or
+                           question.get('sentence') or
+                           '').strip().lower()
+
+            if not question_text:
+                return jsonify({
+                    'success': False,
+                    'message': f'Question {i+1} is missing required text content. Please ensure each question has either a question_text, question, or sentence field.'
+                }), 400
+
             if question_text in question_texts:
                 # Get the display text for error message
-                display_text = question.get('question_text', question.get('question', ''))[:50]
+                display_text = (question.get('question_text') or
+                              question.get('question') or
+                              question.get('sentence') or '')[:50]
                 duplicate_questions.append(f"Question {i+1}: '{display_text}...'")
             else:
                 question_texts.append(question_text)
@@ -74,16 +87,45 @@ def create_audio_test():
             {'module_id': module_id, 'level_id': level_id, 'question_type': 'sentence'},
             {'question': 1, '_id': 1, 'used_count': 1}
         ))
-        existing_question_texts = {q['question'].strip().lower(): str(q['_id']) for q in existing_questions}
-        existing_question_objects = {q['question'].strip().lower(): q['_id'] for q in existing_questions}
+        # Safely build lookup maps; skip docs missing valid question text
+        existing_question_texts = {
+            q.get('question', '').strip().lower(): str(q['_id'])
+            for q in existing_questions
+            if isinstance(q.get('question'), str) and q.get('question').strip()
+        }
+        existing_question_objects = {
+            q.get('question', '').strip().lower(): q['_id']
+            for q in existing_questions
+            if isinstance(q.get('question'), str) and q.get('question').strip()
+        }
         
         # Process questions for audio - store in database and get ObjectIds
         processed_questions = []
         new_questions_to_store = []
         questions_to_update_usage = []
-        
+
         for i, question in enumerate(questions):
-            question_text = question.get('sentence') or question.get('question_text') or question.get('question', '')
+            # Validate that question has at least one text field
+            question_text = (question.get('sentence') or
+                           question.get('question_text') or
+                           question.get('question') or
+                           '').strip()
+
+            if not question_text:
+                current_app.logger.error(f"Question {i+1} is missing required text field (sentence, question_text, or question). Question data: {question}")
+                return jsonify({
+                    'success': False,
+                    'message': f'Question {i+1} is missing required text content. Please ensure each question has either a sentence, question_text, or question field.'
+                }), 400
+
+            # Additional validation to ensure text is not just whitespace
+            if not question_text or len(question_text.strip()) == 0:
+                current_app.logger.error(f"Question {i+1} has empty or whitespace-only text: '{question_text}'")
+                return jsonify({
+                    'success': False,
+                    'message': f'Question {i+1} has empty or invalid text content. Please provide valid text for the question.'
+                }), 400
+
             question_text_lower = question_text.strip().lower()
             is_existing = question_text_lower in existing_question_texts
             
@@ -113,12 +155,26 @@ def create_audio_test():
         if new_questions_to_store:
             result = mongo_db.question_bank.insert_many(new_questions_to_store)
             for i, question_doc in enumerate(new_questions_to_store):
-                question_text_lower = question_doc['question'].strip().lower()
-                stored_question_ids[question_text_lower] = result.inserted_ids[i]
+                # question_doc['question'] is always set above, but guard anyway
+                question_text_value = (question_doc.get('question') or '').strip().lower()
+                if question_text_value:
+                    stored_question_ids[question_text_value] = result.inserted_ids[i]
         
         # Create processed questions with correct ObjectIds
         for i, question in enumerate(questions):
-            question_text = question.get('sentence') or question.get('question_text') or question.get('question', '')
+            # Validate that question has at least one text field
+            question_text = (question.get('sentence') or
+                           question.get('question_text') or
+                           question.get('question') or
+                           '').strip()
+
+            if not question_text:
+                current_app.logger.error(f"Question {i+1} is missing required text field (sentence, question_text, or question)")
+                return jsonify({
+                    'success': False,
+                    'message': f'Question {i+1} is missing required text content. Please ensure each question has either a sentence, question_text, or question field.'
+                }), 400
+
             question_text_lower = question_text.strip().lower()
             is_existing = question_text_lower in existing_question_texts
             
@@ -128,9 +184,17 @@ def create_audio_test():
             else:
                 question_id = stored_question_ids.get(question_text_lower)
             
+            # Ensure question_text is not empty after all processing
+            if not question_text or not question_text.strip():
+                current_app.logger.error(f"Question {i+1} has empty text after processing")
+                return jsonify({
+                    'success': False,
+                    'message': f'Question {i+1} has empty text content. Please provide valid text for the question.'
+                }), 400
+            
             processed_question = {
                 '_id': question_id if question_id else ObjectId(),
-                'question': question_text,
+                'question': question_text.strip(),
                 'question_type': 'sentence',
                 'module_id': module_id
             }
@@ -151,13 +215,23 @@ def create_audio_test():
                         speed = 1.0
                         current_app.logger.warning(f"Invalid speed value '{audio_config.get('speed')}', using default 1.0")
                     
-                    audio_url = generate_audio_from_text(processed_question['question'], accent, speed)
+                    # Validate question text before generating audio
+                    question_text_for_audio = processed_question.get('question', '').strip()
+                    if not question_text_for_audio:
+                        current_app.logger.error(f"Question {i+1} has no text content for audio generation: {processed_question}")
+                        return jsonify({
+                            'success': False,
+                            'message': f'Question {i+1} has no text content for audio generation'
+                        }), 400
+
+                    audio_url = generate_audio_from_text(question_text_for_audio, accent, speed)
                     if audio_url:
                         processed_question['audio_url'] = audio_url
                     else:
+                        current_app.logger.error(f"Failed to generate audio for question {i+1}: {question_text_for_audio}")
                         return jsonify({
-                            'success': False, 
-                            'message': f'Failed to generate audio for question: {processed_question["question"]}'
+                            'success': False,
+                            'message': f'Failed to generate audio for question: {question_text_for_audio}'
                         }), 500
                 
                 processed_question['audio_config'] = question.get('audio_config', audio_config)
@@ -394,9 +468,15 @@ def validate_audio_test(test_id):
 
         validation_results = []
         for i, question in enumerate(questions):
+            # Safely get question text from any available field
+            question_text = (question.get('question_text') or
+                           question.get('question') or
+                           question.get('sentence') or
+                           '')
+
             validation = {
                 'question_index': i,
-                'question': question.get('question', ''),
+                'question': question_text,
                 'has_audio': 'audio_url' in question and question['audio_url'],
                 'has_transcript_validation': 'transcript_validation' in question,
                 'is_valid': True,
@@ -544,4 +624,4 @@ def notify_audio_test_students(test_id):
 
     except Exception as e:
         current_app.logger.error(f"Error notifying audio test students: {e}")
-        return jsonify({'success': False, 'message': f'Failed to send notifications: {e}'}), 500 
+        return jsonify({'success': False, 'message': f'Failed to send notifications: {e}'}), 500

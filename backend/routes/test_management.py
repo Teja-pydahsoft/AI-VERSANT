@@ -163,7 +163,11 @@ def audio_generation_worker(app, test_id, questions, audio_config):
             current_app.logger.info(f"Starting audio generation for test {test_id}")
             
             for i, question in enumerate(questions):
-                question_text = question.get('question', '')
+                # Safely get question text from any available field
+                question_text = (question.get('question_text') or
+                               question.get('question') or
+                               question.get('sentence') or
+                               '')
                 if not question_text:
                     continue
                 
@@ -211,8 +215,46 @@ def create_test_with_instances():
     """Route to appropriate test creation endpoint based on module type"""
     try:
         data = request.get_json()
+
+        # Validate that data exists
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided in request'}), 400
+
         module_id = data.get('module_id')
-        
+
+        # Validate module_id is provided
+        if not module_id:
+            return jsonify({'success': False, 'message': 'Module ID is required'}), 400
+
+        # Validate questions array exists and is not empty for audio tests
+        if module_id in ['LISTENING', 'SPEAKING']:
+            questions = data.get('questions', [])
+            if not questions:
+                return jsonify({'success': False, 'message': 'Questions array is required for audio tests'}), 400
+
+            # Validate each question has required content
+            for i, question in enumerate(questions):
+                # Check if question has any text content
+                question_text = (question.get('question_text') or
+                               question.get('question') or
+                               question.get('sentence') or
+                               '').strip()
+
+                if not question_text:
+                    current_app.logger.error(f"Question {i+1} is missing required text content. Question data: {question}")
+                    return jsonify({
+                        'success': False,
+                        'message': f'Question {i+1} is missing required text content. Please ensure each question has either a question_text, question, or sentence field.'
+                    }), 400
+
+                # Additional validation to ensure text is not just whitespace
+                if not question_text or len(question_text.strip()) == 0:
+                    current_app.logger.error(f"Question {i+1} has empty or whitespace-only text: '{question_text}'")
+                    return jsonify({
+                        'success': False,
+                        'message': f'Question {i+1} has empty or invalid text content. Please provide valid text for the question.'
+                    }), 400
+
         # Route to appropriate test creation endpoint based on module type
         if module_id in ['GRAMMAR', 'VOCABULARY', 'READING']:
             # Redirect to MCQ test creation
@@ -607,7 +649,8 @@ def get_all_tests():
             else:
                 test['level'] = 'N/A'
             
-            tests_data.append(test)
+            # Convert any remaining ObjectIds recursively (e.g., inside questions)
+            tests_data.append(convert_objectids(test))
 
         return jsonify({'success': True, 'data': tests_data}), 200
     except Exception as e:
@@ -5272,6 +5315,14 @@ def submit_online_listening_test():
         test = test_result['test']
         current_app.logger.info(f"Online listening test resolved by {test_result['resolved_by']}: {test_result['object_id']} / {test_result['test_id']}")
         
+        # Define both forms of test identifiers for consistent use
+        try:
+            test_object_id = test_result['object_id'] if isinstance(test_result['object_id'], ObjectId) else ObjectId(test_result['object_id'])
+        except Exception:
+            # Fallback: try to read _id from the fetched test
+            test_object_id = test.get('_id') if isinstance(test.get('_id'), ObjectId) else ObjectId(str(test.get('_id')))
+        test_custom_id = test_result.get('test_id') or test.get('test_id')
+        
         # Check if this is a listening test
         if test.get('module_id') != 'LISTENING':
             return jsonify({
@@ -5293,13 +5344,13 @@ def submit_online_listening_test():
         
         # Check for existing completed attempts to prevent duplicates
         existing_attempt = mongo_db.student_test_attempts.find_one({
-            'test_id': test_id,
+            'test_id': test_object_id,
             'student_id': student['_id'],
             'status': 'completed'
         })
         
         if existing_attempt:
-            current_app.logger.warning(f"Student {student.get('name')} already has a completed attempt for test {test_id}")
+            current_app.logger.warning(f"Student {student.get('name')} already has a completed attempt for test {test_custom_id}")
             return jsonify({
                 'success': False,
                 'message': 'You have already completed this test. Duplicate submissions are not allowed.'
@@ -5371,7 +5422,7 @@ def submit_online_listening_test():
                 
                 # Create unique audio key with question identifier
                 question_identifier = question.get('question_id', f'q_{i}')
-                student_audio_key = f"student_audio/online_tests/{current_user_id}/{test_id}/{question_identifier}_{uuid.uuid4()}.{file_extension}"
+                student_audio_key = f"student_audio/online_tests/{current_user_id}/{test_custom_id}/{question_identifier}_{uuid.uuid4()}.{file_extension}"
                 
                 current_app.logger.info(f"Uploading audio for question {i}: {student_audio_key}")
                 current_s3_client.upload_fileobj(audio_file, S3_BUCKET_NAME, student_audio_key)
@@ -5476,7 +5527,7 @@ def submit_online_listening_test():
         # Create result document for student_test_attempts
         current_time = datetime.now(timezone.utc)
         result_doc = {
-            'test_id': test_id,
+            'test_id': test_object_id,
             'student_id': student['_id'],  # Use student document ID as primary identifier
             'user_id': ObjectId(current_user_id),  # Keep user_id for reference
             'test_type': 'online',
@@ -5508,7 +5559,7 @@ def submit_online_listening_test():
             'success': True,
             'message': 'Online listening test submitted successfully',
             'data': {
-                'test_id': str(test_id),
+                'test_id': str(test_custom_id),
                 'total_questions': len(test.get('questions', [])),
                 'correct_answers': correct_answers,
                 'total_marks': total_marks,
@@ -5523,4 +5574,3 @@ def submit_online_listening_test():
             'success': False,
             'message': f'Failed to submit online listening test: {str(e)}'
         }), 500
-
