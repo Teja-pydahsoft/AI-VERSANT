@@ -175,39 +175,28 @@ def create_app():
         print("⚠️  AWS S3 initialization failed - audio uploads may not work")
 
     # CORS configuration
+    # IMPORTANT: Frontend uses withCredentials: true, so we MUST use supports_credentials=True
+    # This means we CANNOT use origins="*" - we must specify exact origins
 
     default_origins = 'http://localhost:3000,http://localhost:5173,https://crt.pydahsoft.in,https://52.66.128.80'
     cors_origins = os.getenv('CORS_ORIGINS', default_origins)
 
-    # Enhanced CORS configuration to handle all possible origins
-    # Check if we should allow all origins (for development/testing)
-    allow_all_origins = os.getenv('ALLOW_ALL_CORS', 'true').lower() == 'true'  # Changed default to true for production
-
+    # Parse origins list
+    origins_list = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
+    
+    # Always use specific origins with credentials support (required for withCredentials: true)
+    # Note: We cannot use origins="*" when supports_credentials=True
     print(f"🔧 CORS Configuration:")
-    print(f"   Allow all origins: {allow_all_origins}")
-    print(f"   CORS origins: {cors_origins}")
-
-    if allow_all_origins:
-        # Allow all origins for development/testing
-        print("   Using wildcard CORS (*)")
-        CORS(app, 
-             origins="*", 
-             supports_credentials=False,  # Must be False when origins="*"
-             allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"],
-             methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-             expose_headers=["Content-Type", "Authorization"],
-             max_age=3600)
-    else:
-        # Production CORS with specific origins
-        origins_list = [origin.strip() for origin in cors_origins.split(',')]
-        print(f"   Using specific origins: {origins_list}")
-        CORS(app, 
-             origins=origins_list, 
-             supports_credentials=True, 
-             allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"],
-             methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-             expose_headers=["Content-Type", "Authorization"],
-             max_age=3600)
+    print(f"   CORS origins: {origins_list}")
+    print(f"   Supports credentials: True (required for frontend withCredentials)")
+    
+    CORS(app, 
+         origins=origins_list, 
+         supports_credentials=True,  # REQUIRED: Frontend uses withCredentials: true
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+         expose_headers=["Content-Type", "Authorization"],
+         max_age=3600)
 
     # CORS after_request handler (removed - Flask-CORS handles it automatically)
     # @app.after_request
@@ -263,8 +252,8 @@ def create_app():
             'version': '1.0.0',
             'status': 'active',
             'cors_enabled': True,
-            'allowed_origins': cors_origins.split(','),
-            'allow_all_origins': allow_all_origins,
+            'allowed_origins': origins_list,
+            'supports_credentials': True,
             'aws_status': get_aws_status(),
             'endpoints': {
                 'auth': '/auth',
@@ -350,8 +339,8 @@ def create_app():
             'message': 'CORS test successful',
             'origin': origin,
             'cors_enabled': True,
-            'allow_all_origins': allow_all_origins,
-            'allowed_origins': cors_origins.split(',')
+            'supports_credentials': True,
+            'allowed_origins': origins_list
         }), 200
 
     # Register blueprints
