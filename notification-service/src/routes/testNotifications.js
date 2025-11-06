@@ -617,7 +617,7 @@ router.post('/test-reminder', async (req, res) => {
 
         // Send SMS reminder (check if SMS is enabled)
         if (studentPhone) {
-          const smsContent = `Reminder: You haven't attempted your test "${test.name}". Please complete it. Exam link: https://crt.pydahsoft.in/student/exam/${test.test_id} - Pydah College`;
+          const smsContent = `you haven't attempted your scheduled test ${test.name} yet. Please complete it as soon as possible. \nexam link: https://crt.pydahsoft.in/student/exam/ ${test.test_id || test._id} - Pydah College`;
           const smsMetadata = { template: 'testReminder' };
           const smsResult = await notificationService.sendNotification('sms', studentPhone, smsContent, smsMetadata);
           if (smsResult.success && smsResult.messageId !== 'disabled-by-settings') {
