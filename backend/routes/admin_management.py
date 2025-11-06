@@ -20,11 +20,11 @@ def create_admin():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        # Only super admin can create admins
-        if not user or user.get('role') != 'superadmin':
+        # Only super admin and sub_superadmin can create admins
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin']:
             return jsonify({
                 'success': False,
-                'message': 'Access denied. Super admin privileges required.'
+                'message': 'Access denied. Admin privileges required.'
             }), 403
         
         data = request.get_json()
@@ -194,11 +194,11 @@ def list_admins():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        # Only super admin can access admin list
-        if not user or user.get('role') != 'superadmin':
+        # Only super admin and sub_superadmin can access admin list
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin']:
             return jsonify({
                 'success': False,
-                'message': 'Access denied. Super admin privileges required.'
+                'message': 'Access denied. Admin privileges required.'
             }), 403
         
         # Get all admins
@@ -250,11 +250,11 @@ def delete_admin(admin_id):
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        # Only super admin can delete admins
-        if not user or user.get('role') != 'superadmin':
+        # Only super admin and sub_superadmin can delete admins
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin']:
             return jsonify({
                 'success': False,
-                'message': 'Access denied. Super admin privileges required.'
+                'message': 'Access denied. Admin privileges required.'
             }), 403
         
         # Validate admin_id format

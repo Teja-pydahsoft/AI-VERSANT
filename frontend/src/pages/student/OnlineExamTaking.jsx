@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Code, Play, CheckCircle, XCircle, TestTube, AlertCircle } from 'lucide-react';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
 import { useNotification } from '../../contexts/NotificationContext';
+import TechnicalCodeEditor from '../../components/TechnicalCodeEditor';
 
 const OnlineExamTaking = () => {
-  const { examId } = useParams();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const examId = searchParams.get('testid');
   const { error: showError, success } = useNotification();
   const [questions, setQuestions] = useState([]);
   const [exam, setExam] = useState(null);
@@ -33,18 +37,20 @@ const OnlineExamTaking = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExamFetched, setIsExamFetched] = useState(false);
   const [alreadyAttempted, setAlreadyAttempted] = useState(false);
+  const [codeTestResults, setCodeTestResults] = useState({});
+  const [runningCode, setRunningCode] = useState(false);
 
   // Security measures for exam taking
   useEffect(() => {
     // Disable right-click context menu
     const handleContextMenu = (e) => e.preventDefault();
-    
+
     // Disable text selection
     const handleSelectStart = (e) => e.preventDefault();
-    
+
     // Disable drag and drop
     const handleDragStart = (e) => e.preventDefault();
-    
+
     // Disable F12, Ctrl+Shift+I, Ctrl+U, Ctrl+S, Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
     const handleKeyDown = (e) => {
       if (
@@ -62,21 +68,21 @@ const OnlineExamTaking = () => {
         showError('This action is not allowed during the exam.');
       }
     };
-    
+
     // Prevent page refresh
     const handleBeforeUnload = (e) => {
       e.preventDefault();
       e.returnValue = 'Are you sure you want to leave? Your progress will be lost.';
       return 'Are you sure you want to leave? Your progress will be lost.';
     };
-    
+
     // Disable back button
     const handlePopState = (e) => {
       e.preventDefault();
       window.history.pushState(null, '', window.location.href);
       showError('You cannot navigate away from the exam.');
     };
-    
+
     // Add event listeners
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('selectstart', handleSelectStart);
@@ -84,10 +90,10 @@ const OnlineExamTaking = () => {
     document.addEventListener('keydown', handleKeyDown);
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('popstate', handlePopState);
-    
+
     // Push initial state to prevent back navigation
     window.history.pushState(null, '', window.location.href);
-    
+
     // Cleanup
     return () => {
       document.removeEventListener('contextmenu', handleContextMenu);
@@ -103,22 +109,22 @@ const OnlineExamTaking = () => {
     const fetchExam = async () => {
       // Prevent multiple API calls
       if (isExamFetched) return;
-      
+
       try {
         setLoading(true);
         setIsExamFetched(true);
-        
+
         // First, check if student has already attempted this test
         try {
           // Check completed exams first
           const completedExamsRes = await api.get('/student/completed-exams');
           const completedExamIds = completedExamsRes.data.data || [];
-          
+
           if (completedExamIds.includes(examId)) {
             setAlreadyAttempted(true);
             return;
           }
-          
+
           // Try to start the test - this will give us attempt_id if not already attempted
           // or fail if already attempted
           try {
@@ -127,9 +133,9 @@ const OnlineExamTaking = () => {
             setAttemptId(startRes.data.data.attempt_id);
             console.log('✅ Test started successfully, attempt_id:', startRes.data.data.attempt_id);
           } catch (startErr) {
-            if (startErr.response?.status === 409 || 
-                startErr.response?.data?.message?.includes('already attempted') ||
-                startErr.response?.data?.message?.includes('Test already attempted')) {
+            if (startErr.response?.status === 409 ||
+              startErr.response?.data?.message?.includes('already attempted') ||
+              startErr.response?.data?.message?.includes('Test already attempted')) {
               setAlreadyAttempted(true);
               return;
             }
@@ -140,18 +146,18 @@ const OnlineExamTaking = () => {
           console.warn('Could not check completed exams:', err);
           // Continue with exam loading if check fails
         }
-        
+
         // Get the test details to check if it's a random assignment test
         try {
           const testRes = await api.get(`/student/test/${examId}`);
           const testData = testRes.data.data;
-          
+
           // Set exam duration from the test data
           const duration = testData.duration || 0;
           setExamDuration(duration);
           setTimeRemaining(duration * 60); // Convert minutes to seconds
-          
-          
+
+
           // Check if this is a random assignment test
           if (testData.test_type === 'random_assignment' || testData.has_random_questions) {
             // Try to get the random assignment
@@ -171,7 +177,7 @@ const OnlineExamTaking = () => {
             setExam(testData);
             setQuestions(testData.questions || []);
             setAssignmentId(null);
-            
+
             // Note: Test start was already called above and attempt_id is already stored
             // If we reach here, the test is not already attempted and we have attempt_id
           }
@@ -297,18 +303,18 @@ const OnlineExamTaking = () => {
       timerRef.current = setInterval(() => {
         setTimeRemaining(prev => {
           const newTime = prev - 1;
-          
+
           // Show warning when 5 minutes or less remain
           if (newTime <= 300 && !timerWarning) {
             setTimerWarning(true);
             showError('Warning: Only 5 minutes remaining!');
           }
-          
+
           // Show critical warning when 1 minute remains
           if (newTime <= 60 && newTime > 0) {
             showError(`Critical: Only ${newTime} seconds remaining!`);
           }
-          
+
           // Auto-submit when time runs out
           if (newTime <= 0) {
             console.log('Time expired, auto-submitting...', {
@@ -323,7 +329,7 @@ const OnlineExamTaking = () => {
             handleSubmit();
             return 0;
           }
-          
+
           return newTime;
         });
       }, 1000);
@@ -349,6 +355,17 @@ const OnlineExamTaking = () => {
     }
   }, [currentQuestionIndex, questions]);
 
+  // Debug logging for exam and currentQuestion
+  useEffect(() => {
+    console.log('Exam object:', exam);
+    if (exam) console.log('Exam._id:', exam._id);
+    if (questions.length > 0 && currentQuestionIndex < questions.length) {
+      const currentQuestion = questions[currentQuestionIndex];
+      console.log('CurrentQuestion object:', currentQuestion);
+      if (currentQuestion) console.log('CurrentQuestion._id:', currentQuestion._id, 'CurrentQuestion.question_id:', currentQuestion.question_id);
+    }
+  }, [exam, questions, currentQuestionIndex]);
+
   // Format time for display (clean MM:SS format)
   const formatTime = (seconds) => {
     const totalSeconds = Math.floor(seconds); // Remove any decimal places
@@ -361,11 +378,117 @@ const OnlineExamTaking = () => {
     setAnswers(prev => ({ ...prev, [questionId]: answer }));
   };
 
+  const handleCodeChange = (questionId, code, language) => {
+    // Normalize questionId to string (backend expects str(_id))
+    const normalizedQuestionId = String(questionId || '');
+    
+    // Preserve existing results if they exist, but always update code
+    setAnswers(prev => {
+      const existingAnswer = prev[normalizedQuestionId];
+      return {
+        ...prev,
+        [normalizedQuestionId]: {
+          code: code || '', // Always store code, even if empty
+          language: language || 'python',
+          type: 'code',
+          // Preserve existing results if code is being updated
+          ...(existingAnswer && existingAnswer.results ? { results: existingAnswer.results } : {})
+        }
+      };
+    });
+  };
+
+  const handleTechnicalSubmission = (questionData) => {
+    const { questionId, code, language, results } = questionData;
+
+    // Normalize questionId to string (backend expects str(_id))
+    const normalizedQuestionId = String(questionId || '');
+
+    // Store the submission data with pre-calculated scores
+    // Ensure code is always stored, even if empty string
+    setAnswers(prev => ({
+      ...prev,
+      [normalizedQuestionId]: {
+        code: code || '', // Always store code, even if empty
+        language: language || 'python',
+        type: 'code',
+        results: results, // Store full results object with test_results
+        submitted: true
+      }
+    }));
+
+    // Store test results for final submission
+    setCodeTestResults(prev => ({
+      ...prev,
+      [normalizedQuestionId]: results
+    }));
+  };
+
+  const handleCodeSubmit = (questionId, code, language, results) => {
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: {
+        code,
+        language,
+        type: 'code',
+        results: results // Store validation results for submission
+      }
+    }));
+
+    // Also update codeTestResults for display
+    if (results) {
+      setCodeTestResults(prev => ({
+        ...prev,
+        [questionId]: results
+      }));
+    }
+  };
+
+  const handleRunCode = async (questionId) => {
+    // Normalize questionId for comparison
+    const normalizedQuestionId = String(questionId || '');
+    const currentQuestion = questions.find(q => {
+      const qId = q.question_id || String(q._id || '');
+      return qId === normalizedQuestionId;
+    });
+    if (!currentQuestion) return;
+
+    const answer = answers[normalizedQuestionId];
+    if (!answer || !answer.code) {
+      showError('Please write some code first');
+      return;
+    }
+
+    setRunningCode(true);
+    try {
+      const response = await api.post('/test-management-technical/run-code', {
+        code: answer.code,
+        language: answer.language,
+        test_cases: currentQuestion.test_cases?.filter(tc => tc.is_sample) || []
+      });
+
+      if (response.data.success) {
+        const normalizedQuestionId = String(questionId || '');
+        setCodeTestResults(prev => ({
+          ...prev,
+          [normalizedQuestionId]: response.data.data
+        }));
+        success('Code executed successfully!');
+      } else {
+        showError(response.data.message || 'Failed to run code');
+      }
+    } catch (error) {
+      showError(error.response?.data?.message || 'Failed to run code');
+    } finally {
+      setRunningCode(false);
+    }
+  };
+
   // Audio recording functionality for listening modules
   const startRecording = async (questionId) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
+
       // Check what audio formats are supported
       const supportedTypes = [
         'audio/webm;codecs=opus',
@@ -373,7 +496,7 @@ const OnlineExamTaking = () => {
         'audio/mp4',
         'audio/wav'
       ];
-      
+
       let selectedType = 'audio/webm';
       for (const type of supportedTypes) {
         if (MediaRecorder.isTypeSupported(type)) {
@@ -381,15 +504,15 @@ const OnlineExamTaking = () => {
           break;
         }
       }
-      
+
       console.log(`Using audio format: ${selectedType}`);
-      
+
       const mediaRecorder = new MediaRecorder(stream, { mimeType: selectedType });
       const audioChunks = [];
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-        audioChunks.push(event.data);
+          audioChunks.push(event.data);
         }
       };
 
@@ -409,7 +532,7 @@ const OnlineExamTaking = () => {
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingQuestionId(questionId);
-      
+
       // Store the media recorder for stopping
       window.currentMediaRecorder = mediaRecorder;
     } catch (err) {
@@ -446,7 +569,7 @@ const OnlineExamTaking = () => {
 
       // Check if this is a listening module that requires audio submission
       const isListeningModule = exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING';
-      
+
       if (isListeningModule) {
         // Validate that all questions have audio recordings for listening modules
         const missingRecordings = [];
@@ -456,28 +579,28 @@ const OnlineExamTaking = () => {
             missingRecordings.push(index + 1);
           }
         });
-        
+
         if (missingRecordings.length > 0) {
           showError(`Audio recording is required for questions: ${missingRecordings.join(', ')}`);
           setIsSubmitting(false);
           return;
         }
-        
+
         // Submit using FormData for listening modules with audio recordings
         console.log('Submitting listening module with audio recordings to online listening endpoint');
         const formData = new FormData();
         formData.append('test_id', examId);
-        
+
         // Process each question with correct indexing
         questions.forEach((question, index) => {
           const questionId = question.question_id || question._id;
-          
+
           // Add text answer if exists (using question ID format)
           if (answers[questionId]) {
             formData.append(`question_${questionId}`, answers[questionId]);
             console.log(`Added text answer for question ${index}: ${questionId} = ${answers[questionId]}`);
           }
-          
+
           // Add audio recording if exists (using question index format)
           if (recordings[questionId]) {
             let fileExtension = 'webm'; // default
@@ -488,14 +611,14 @@ const OnlineExamTaking = () => {
             } else if (recordings[questionId].type.includes('wav')) {
               fileExtension = 'wav';
             }
-            
+
             formData.append(`question_${index}`, recordings[questionId], `answer_${index}.${fileExtension}`);
             console.log(`Added audio recording for question ${index}: ${questionId} -> ${recordings[questionId].size} bytes, type: ${recordings[questionId].type}`);
           } else {
             console.log(`No recording found for question ${index}: ${questionId}`);
           }
         });
-        
+
         // Debug: Log what we're sending
         console.log('FormData contents:');
         for (let [key, value] of formData.entries()) {
@@ -505,11 +628,11 @@ const OnlineExamTaking = () => {
             console.log(`${key}: ${value}`);
           }
         }
-        
+
         const res = await api.post('/test-management/submit-online-listening-test', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
-        
+
         if (res.data.success) {
           success('Online listening exam submitted successfully!');
           navigate('/student/history');
@@ -519,9 +642,20 @@ const OnlineExamTaking = () => {
       } else if (assignmentId) {
         // Submit using random assignment endpoint
         console.log('Submitting via random assignment endpoint with assignment_id:', assignmentId);
+        // Process answers - stringify code answers
+        const processedAnswers = {};
+        Object.keys(answers).forEach(key => {
+          const answer = answers[key];
+          if (answer && typeof answer === 'object' && answer.type === 'code') {
+            processedAnswers[key] = JSON.stringify(answer);
+          } else {
+            processedAnswers[key] = answer;
+          }
+        });
+
         const payload = {
           assignment_id: assignmentId,
-          answers: answers,
+          answers: processedAnswers,
           time_taken_ms: timeTakenMs
         };
         const res = await api.post(`/student/test/${examId}/submit-random`, payload);
@@ -533,15 +667,82 @@ const OnlineExamTaking = () => {
         }
       } else {
         // Submit using regular test endpoint (for tests without random questions)
-        
+
         if (!attemptId) {
           showError('No attempt ID found. Please refresh the page and try again.');
           return;
         }
-        
+
+        // Process answers - handle compiler questions with pre-calculated scores
+        // Ensure all keys are normalized strings to match backend expectations (str(_id))
+        const processedAnswers = {};
+        Object.keys(answers).forEach(key => {
+          // Normalize key to string to ensure consistency with backend
+          const normalizedKey = String(key);
+          const answer = answers[key];
+          
+          if (answer && typeof answer === 'object' && answer.type === 'code') {
+            // For compiler questions, send the results directly
+            if (answer.results) {
+              processedAnswers[normalizedKey] = {
+                code: answer.code || '', // Always include code field, even if empty
+                language: answer.language || 'python',
+                results: answer.results,
+                total_score: answer.results.total_score,
+                max_score: answer.results.max_score,
+                passed_count: answer.results.passed_count,
+                failed_count: answer.results.failed_count
+              };
+            } else {
+              // If no results but it's a code answer, still send the structure
+              processedAnswers[normalizedKey] = {
+                code: answer.code || '',
+                language: answer.language || 'python',
+                type: 'code'
+              };
+            }
+          } else {
+            processedAnswers[normalizedKey] = answer;
+          }
+        });
+
+        // Also include code test results for compiler questions
+        // Merge code and results if they exist in separate places
+        Object.keys(codeTestResults).forEach(key => {
+          // Normalize key to string
+          const normalizedKey = String(key);
+          const existingAnswer = processedAnswers[normalizedKey];
+          const testResult = codeTestResults[key];
+          
+          if (existingAnswer && existingAnswer.type === 'code') {
+            // Merge: ensure code and results are both present
+            processedAnswers[normalizedKey] = {
+              code: existingAnswer.code || '', // Ensure code is always included
+              language: existingAnswer.language || 'python',
+              results: existingAnswer.results || testResult,
+              total_score: testResult?.total_score || existingAnswer.results?.total_score,
+              max_score: testResult?.max_score || existingAnswer.results?.max_score,
+              passed_count: testResult?.passed_count || existingAnswer.results?.passed_count,
+              failed_count: testResult?.failed_count || existingAnswer.results?.failed_count
+            };
+          } else if (!processedAnswers[normalizedKey]) {
+            // Create new entry with code from answers if available
+            const answerData = answers[normalizedKey];
+            processedAnswers[normalizedKey] = {
+              code: answerData?.code || '', // Always include code field
+              language: answerData?.language || 'python',
+              results: testResult,
+              total_score: testResult.total_score,
+              max_score: testResult.max_score,
+              passed_count: testResult.passed_count,
+              failed_count: testResult.failed_count
+            };
+          }
+        });
+
         const payload = {
           attempt_id: attemptId,
-          answers: answers,
+          answers: processedAnswers,
           time_taken_ms: timeTakenMs
         };
         const res = await api.post(`/student/tests/${examId}/submit`, payload);
@@ -561,7 +762,7 @@ const OnlineExamTaking = () => {
 
   if (loading) return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.6 }}
@@ -575,7 +776,7 @@ const OnlineExamTaking = () => {
         >
           <LoadingSpinner />
         </motion.div>
-        <motion.h3 
+        <motion.h3
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
@@ -583,7 +784,7 @@ const OnlineExamTaking = () => {
         >
           Loading Exam
         </motion.h3>
-        <motion.p 
+        <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
@@ -597,7 +798,7 @@ const OnlineExamTaking = () => {
 
   if (alreadyAttempted) return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.6 }}
@@ -613,8 +814,8 @@ const OnlineExamTaking = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
           </svg>
         </motion.div>
-        
-        <motion.h2 
+
+        <motion.h2
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
@@ -622,8 +823,8 @@ const OnlineExamTaking = () => {
         >
           Test Already Attempted
         </motion.h2>
-        
-        <motion.p 
+
+        <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
@@ -631,8 +832,8 @@ const OnlineExamTaking = () => {
         >
           You have already completed this test. Each test can only be attempted once.
         </motion.p>
-        
-        <motion.div 
+
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.5 }}
@@ -649,7 +850,7 @@ const OnlineExamTaking = () => {
             </svg>
             Go to Exams
           </motion.button>
-          
+
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -677,7 +878,7 @@ const OnlineExamTaking = () => {
       <main className="w-full h-full px-4 py-6">
         {/* Header with Timer */}
         <header className="pb-6 mb-6 border-b border-gradient-to-r from-transparent via-slate-200 to-transparent flex justify-between items-center">
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
@@ -686,7 +887,7 @@ const OnlineExamTaking = () => {
             {exam.name}
           </motion.h1>
           <div className="flex items-center space-x-6">
-            <motion.span 
+            <motion.span
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
@@ -696,22 +897,21 @@ const OnlineExamTaking = () => {
             </motion.span>
             {/* Timer Display - Top Right */}
             {examDuration > 0 ? (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, delay: 0.3 }}
-                className={`px-4 py-2 rounded-xl border-2 font-semibold text-sm shadow-lg backdrop-blur-sm transition-all duration-500 ${
-                  timeRemaining <= 300 
-                    ? timeRemaining <= 60 
-                      ? 'bg-gradient-to-r from-red-50 to-pink-50 border-red-300 text-red-600 animate-pulse shadow-red-200' 
+                className={`px-4 py-2 rounded-xl border-2 font-semibold text-sm shadow-lg backdrop-blur-sm transition-all duration-500 ${timeRemaining <= 300
+                    ? timeRemaining <= 60
+                      ? 'bg-gradient-to-r from-red-50 to-pink-50 border-red-300 text-red-600 animate-pulse shadow-red-200'
                       : 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-300 text-amber-600 shadow-amber-200'
                     : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300 text-blue-600 shadow-blue-200'
-                }`}
+                  }`}
               >
                 <div className="flex items-center space-x-3">
-                  <motion.svg 
-                    className="w-6 h-6" 
-                    fill="currentColor" 
+                  <motion.svg
+                    className="w-6 h-6"
+                    fill="currentColor"
                     viewBox="0 0 20 20"
                     animate={{ rotate: timeRemaining <= 60 ? [0, 10, -10, 0] : 0 }}
                     transition={{ duration: 0.5, repeat: timeRemaining <= 60 ? Infinity : 0 }}
@@ -722,7 +922,7 @@ const OnlineExamTaking = () => {
                 </div>
               </motion.div>
             ) : (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, delay: 0.3 }}
@@ -739,7 +939,7 @@ const OnlineExamTaking = () => {
           </div>
         </header>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
@@ -747,7 +947,7 @@ const OnlineExamTaking = () => {
         >
           {/* Warning Messages */}
           {cheatWarning && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className="bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 text-red-700 px-6 py-4 rounded-2xl mb-6 text-center shadow-lg"
@@ -757,7 +957,7 @@ const OnlineExamTaking = () => {
             </motion.div>
           )}
           {timeRemaining <= 60 && timeRemaining > 0 && !autoSubmitted && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className="bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 text-red-700 px-6 py-4 rounded-2xl mb-6 text-center shadow-lg animate-pulse"
@@ -767,7 +967,7 @@ const OnlineExamTaking = () => {
             </motion.div>
           )}
           {timeRemaining <= 300 && timeRemaining > 60 && !timerWarning && !autoSubmitted && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 text-amber-700 px-6 py-4 rounded-2xl mb-6 text-center shadow-lg"
@@ -778,21 +978,63 @@ const OnlineExamTaking = () => {
           )}
 
           {/* Progress Bar */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
             className="mb-8"
           >
             <div className="flex justify-between text-xs text-slate-600 mb-3">
-              <span className="font-medium">Progress: {Object.keys({...answers, ...recordings}).length} / {questions.length} answered</span>
-              <span className="font-semibold text-slate-700">{Math.round((Object.keys({...answers, ...recordings}).length / questions.length) * 100)}%</span>
+              <span className="font-medium">Progress: {(() => {
+                const compilerQuestionsAnswered = questions.filter(q =>
+                  (q.question_type === 'compiler' || q.question_type === 'technical' || q.test_cases?.length > 0) &&
+                  codeTestResults[q.question_id || q._id]
+                ).length;
+
+                const otherQuestionsAnswered = Object.keys(answers).filter(key => {
+                  const question = questions.find(q => (q.question_id || q._id) === key);
+                  return question && question.question_type !== 'compiler' && question.question_type !== 'technical' && !question.test_cases?.length;
+                }).length;
+
+                const recordingQuestionsAnswered = Object.keys(recordings).length;
+
+                return compilerQuestionsAnswered + otherQuestionsAnswered + recordingQuestionsAnswered;
+              })()} / {questions.length} answered</span>
+              <span className="font-semibold text-slate-700">{Math.round(((() => {
+                const compilerQuestionsAnswered = questions.filter(q =>
+                  (q.question_type === 'compiler' || q.question_type === 'technical' || q.test_cases?.length > 0) &&
+                  codeTestResults[q.question_id || q._id]
+                ).length;
+
+                const otherQuestionsAnswered = Object.keys(answers).filter(key => {
+                  const question = questions.find(q => (q.question_id || q._id) === key);
+                  return question && question.question_type !== 'compiler' && question.question_type !== 'technical' && !question.test_cases?.length;
+                }).length;
+
+                const recordingQuestionsAnswered = Object.keys(recordings).length;
+
+                return (compilerQuestionsAnswered + otherQuestionsAnswered + recordingQuestionsAnswered) / questions.length;
+              })()) * 100)}%</span>
             </div>
             <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-              <motion.div 
+              <motion.div
                 className="bg-gradient-to-r from-blue-500 to-indigo-500 h-3 rounded-full shadow-sm"
                 initial={{ width: 0 }}
-                animate={{ width: `${(Object.keys({...answers, ...recordings}).length / questions.length) * 100}%` }}
+                animate={{ width: `${(() => {
+                  const compilerQuestionsAnswered = questions.filter(q =>
+                    (q.question_type === 'compiler' || q.question_type === 'technical' || q.test_cases?.length > 0) &&
+                    codeTestResults[q.question_id || q._id]
+                  ).length;
+
+                  const otherQuestionsAnswered = Object.keys(answers).filter(key => {
+                    const question = questions.find(q => (q.question_id || q._id) === key);
+                    return question && question.question_type !== 'compiler' && question.question_type !== 'technical' && !question.test_cases?.length;
+                  }).length;
+
+                  const recordingQuestionsAnswered = Object.keys(recordings).length;
+
+                  return ((compilerQuestionsAnswered + otherQuestionsAnswered + recordingQuestionsAnswered) / questions.length) * 100;
+                })()}%` }}
                 transition={{ duration: 0.8, ease: "easeOut" }}
               />
             </div>
@@ -801,15 +1043,15 @@ const OnlineExamTaking = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Main Question Area */}
             <div className="lg:col-span-2">
-              <motion.div 
-                ref={examRef} 
+              <motion.div
+                ref={examRef}
                 className="select-none"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.3 }}
               >
                 <fieldset disabled={autoSubmitted} style={{ opacity: autoSubmitted ? 0.6 : 1 }}>
-                  <motion.h3 
+                  <motion.h3
                     className="text-lg font-medium mb-6 text-slate-700 leading-relaxed"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -821,7 +1063,7 @@ const OnlineExamTaking = () => {
 
                   {/* Audio playback for listening modules */}
                   {(currentQuestion.question_type === 'audio' || currentQuestion.audio_url) && (
-                    <motion.div 
+                    <motion.div
                       className="mb-8 text-center"
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -829,14 +1071,14 @@ const OnlineExamTaking = () => {
                     >
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                         <p className="text-blue-700 font-medium mb-2 text-sm">Listen to the audio:</p>
-                        <audio 
+                        <audio
                           key={`audio-${currentQuestion.question_id}-${currentQuestionIndex}`}
-                          controls 
+                          controls
                           className="mx-auto w-full max-w-md"
                           onError={(e) => {
                             const error = e.target.error;
                             let errorMessage = 'Failed to load audio file.';
-                            
+
                             if (error) {
                               switch (error.code) {
                                 case MediaError.MEDIA_ERR_NETWORK:
@@ -852,7 +1094,7 @@ const OnlineExamTaking = () => {
                                   errorMessage = 'Audio loading failed. Please refresh and try again.';
                               }
                             }
-                            
+
                             showError(errorMessage);
                           }}
                           preload="auto"
@@ -865,9 +1107,9 @@ const OnlineExamTaking = () => {
                       </div>
                     </motion.div>
                   )}
-                  
+
                   {currentQuestion.question_type === 'mcq' && (
-                    <motion.div 
+                    <motion.div
                       className="space-y-4"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -879,20 +1121,18 @@ const OnlineExamTaking = () => {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.4, delay: 0.6 + index * 0.1 }}
-                          className={`border-2 rounded-2xl p-5 cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] ${
-                            answers[currentQuestion.question_id] === value
+                          className={`border-2 rounded-2xl p-5 cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] ${answers[currentQuestion.question_id] === value
                               ? 'border-blue-400 bg-gradient-to-r from-blue-50 to-indigo-50 ring-4 ring-blue-100 shadow-lg scale-[1.02]'
                               : 'border-slate-200 hover:border-blue-300 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50'
-                          }`}
+                            }`}
                           onClick={() => handleAnswerChange(currentQuestion.question_id, value)}
                         >
                           <div className="flex items-center">
                             <motion.div
-                              className={`h-5 w-5 mr-4 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
-                                answers[currentQuestion.question_id] === value
+                              className={`h-5 w-5 mr-4 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${answers[currentQuestion.question_id] === value
                                   ? 'border-blue-500 bg-blue-500'
                                   : 'border-slate-300 hover:border-blue-400'
-                              }`}
+                                }`}
                             >
                               {answers[currentQuestion.question_id] === value && (
                                 <motion.div
@@ -919,9 +1159,279 @@ const OnlineExamTaking = () => {
                     </motion.div>
                   )}
 
+                  {/* Compiler Questions */}
+                  {(currentQuestion.question_type === 'compiler' ||
+                    currentQuestion.question_type === 'technical' ||
+                    currentQuestion.test_cases?.length > 0) && (
+                      <motion.div
+                        className="w-full"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.6, delay: 0.5 }}
+                      >
+                        {/* Compiler Question Instructions */}
+                        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <h4 className="font-semibold text-blue-800 mb-2 flex items-center">
+                            <Code className="h-5 w-5 mr-2" />
+                            Programming Challenge
+                          </h4>
+                          <div className="text-sm text-blue-700 space-y-1">
+                            <p>• Write your code in the editor below</p>
+                            <p>• Click "Run Code" to test against sample test cases</p>
+                            <p>• Click "Submit Answer" to validate against all test cases</p>
+                            <p>• Your score will be calculated based on test cases passed</p>
+                          </div>
+                        </div>
+
+                        <TechnicalCodeEditor
+                          testId={exam._id}
+                          question={currentQuestion}
+                          onCodeChange={(code, language) => {
+                            // Normalize question ID: use question_id if exists, otherwise convert _id to string
+                            const qId = currentQuestion.question_id || String(currentQuestion._id || '');
+                            handleCodeChange(qId, code, language);
+                          }}
+                          onSubmit={(submissionData) => {
+                            // Normalize question ID: use question_id if exists, otherwise convert _id to string
+                            const qId = currentQuestion.question_id || String(currentQuestion._id || '');
+                            // submissionData can be either:
+                            // 1. { questionId, code, language, results } (from handleValidateAllTestCases)
+                            // 2. { questionId, code, language, results } (from handleSubmitAnswer)
+                            // 3. results object directly (legacy, but we handle it)
+                            if (submissionData && submissionData.questionId) {
+                              // New format with full data
+                              handleTechnicalSubmission(submissionData);
+                            } else if (submissionData && submissionData.results) {
+                              // Legacy format - extract from submissionData
+                              handleTechnicalSubmission({
+                                questionId: qId,
+                                code: submissionData.code || answers[qId]?.code || '',
+                                language: submissionData.language || answers[qId]?.language || currentQuestion.language || 'python',
+                                results: submissionData.results || submissionData
+                              });
+                            } else {
+                              // Fallback: use results as-is and get code from answers
+                              handleTechnicalSubmission({
+                                questionId: qId,
+                                code: answers[qId]?.code || '',
+                                language: answers[qId]?.language || currentQuestion.language || 'python',
+                                results: submissionData
+                              });
+                            }
+                          }}
+                          initialCode={(() => {
+                            const qId = currentQuestion.question_id || String(currentQuestion._id || '');
+                            return answers[qId]?.code || '';
+                          })()}
+                          initialLanguage={(() => {
+                            const qId = currentQuestion.question_id || String(currentQuestion._id || '');
+                            return answers[qId]?.language || currentQuestion.language || 'python';
+                          })()}
+                          showSubmit={false}
+                        />
+
+                        <div className="mt-4 flex gap-3">
+                          <motion.button
+                            onClick={() => {
+                              const qId = currentQuestion.question_id || String(currentQuestion._id || '');
+                              handleRunCode(qId);
+                            }}
+                            disabled={(() => {
+                              const qId = currentQuestion.question_id || String(currentQuestion._id || '');
+                              return runningCode || !answers[qId]?.code?.trim();
+                            })()}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-all duration-300 shadow-lg flex items-center"
+                          >
+                            {runningCode ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                                Running...
+                              </>
+                            ) : (
+                              <>
+                                <Play className="h-4 w-4 mr-2" />
+                                Run Code
+                              </>
+                            )}
+                          </motion.button>
+                        </div>
+
+                        {/* Enhanced Test Results Display */}
+                        {codeTestResults[currentQuestion.question_id || currentQuestion._id] && (
+                          <motion.div
+                            className="mt-6 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                          >
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className="font-semibold text-gray-800 flex items-center">
+                                <TestTube className="h-5 w-5 mr-2 text-blue-600" />
+                                Test Results
+                              </h4>
+                              <div className="flex items-center space-x-4 text-sm">
+                                <span className="flex items-center">
+                                  <CheckCircle className="h-4 w-4 text-green-600 mr-1" />
+                                  {codeTestResults[currentQuestion.question_id || currentQuestion._id].passed_count || 0} Passed
+                                </span>
+                                <span className="flex items-center">
+                                  <XCircle className="h-4 w-4 text-red-600 mr-1" />
+                                  {codeTestResults[currentQuestion.question_id || currentQuestion._id].failed_count || 0} Failed
+                                </span>
+                                <span className="font-semibold text-blue-600">
+                                  Score: {codeTestResults[currentQuestion.question_id || currentQuestion._id].total_score || 0}/{codeTestResults[currentQuestion.question_id || currentQuestion._id].max_score || 0}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              {codeTestResults[currentQuestion.question_id || currentQuestion._id].test_case_results?.map((tc, idx) => (
+                                <motion.div
+                                  key={idx}
+                                  className={`p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer ${
+                                    tc.passed
+                                      ? 'bg-green-50 border-green-300 hover:bg-green-100'
+                                      : 'bg-red-50 border-red-300 hover:bg-red-100'
+                                  }`}
+                                  whileHover={{ scale: 1.01 }}
+                                  onClick={() => {
+                                    // Toggle detailed view for this test case
+                                    setCodeTestResults(prev => ({
+                                      ...prev,
+                                      [currentQuestion.question_id || currentQuestion._id]: {
+                                        ...prev[currentQuestion.question_id || currentQuestion._id],
+                                        expandedTestCase: prev[currentQuestion.question_id || currentQuestion._id].expandedTestCase === idx ? null : idx
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-3">
+                                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                        tc.passed ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
+                                      }`}>
+                                        {tc.passed ? '✓ PASS' : '✗ FAIL'}
+                                      </span>
+                                      <span className="font-medium text-gray-800">
+                                        Test Case {idx + 1}
+                                        {tc.is_sample && <span className="ml-2 text-xs text-blue-600">(Sample)</span>}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-sm text-gray-600">
+                                        {tc.execution_time ? `${tc.execution_time}ms` : ''}
+                                      </span>
+                                      <svg
+                                        className={`h-4 w-4 transition-transform duration-200 ${
+                                          codeTestResults[currentQuestion.question_id || currentQuestion._id].expandedTestCase === idx ? 'rotate-180' : ''
+                                        }`}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                      </svg>
+                                    </div>
+                                  </div>
+
+                                  {/* Expanded Details */}
+                                  {codeTestResults[currentQuestion.question_id || currentQuestion._id].expandedTestCase === idx && (
+                                    <motion.div
+                                      className="mt-4 pt-4 border-t border-gray-200"
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: 'auto' }}
+                                      exit={{ opacity: 0, height: 0 }}
+                                    >
+                                      {tc.is_sample ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                          <div className="bg-white p-3 rounded border">
+                                            <div className="font-medium text-gray-700 mb-1">Input:</div>
+                                            <div className="font-mono text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
+                                              {tc.input || 'No input'}
+                                            </div>
+                                          </div>
+                                          <div className="bg-white p-3 rounded border">
+                                            <div className="font-medium text-gray-700 mb-1">Expected Output:</div>
+                                            <div className="font-mono text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
+                                              {tc.expected_output || 'No expected output'}
+                                            </div>
+                                          </div>
+                                          <div className="bg-white p-3 rounded border">
+                                            <div className="font-medium text-gray-700 mb-1">Your Output:</div>
+                                            <div className={`font-mono text-xs p-2 rounded border overflow-x-auto ${
+                                              tc.passed ? 'bg-green-50' : 'bg-red-50'
+                                            }`}>
+                                              {tc.actual_output || 'No output'}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="text-sm text-gray-600 italic text-center py-4">
+                                          This is a hidden test case. Details are not shown to prevent cheating.
+                                        </div>
+                                      )}
+
+                                      {tc.error && (
+                                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded">
+                                          <div className="font-medium text-red-800 mb-1">Error:</div>
+                                          <div className="text-sm text-red-700 font-mono">{tc.error}</div>
+                                        </div>
+                                      )}
+                                    </motion.div>
+                                  )}
+                                </motion.div>
+                              ))}
+                            </div>
+
+                            {/* Summary Stats */}
+                            <div className="mt-6 pt-4 border-t border-gray-200">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                <div className="bg-blue-50 p-3 rounded-lg">
+                                  <div className="text-lg font-bold text-blue-600">
+                                    {codeTestResults[currentQuestion.question_id || currentQuestion._id].passed_count || 0}
+                                  </div>
+                                  <div className="text-xs text-blue-800">Tests Passed</div>
+                                </div>
+                                <div className="bg-red-50 p-3 rounded-lg">
+                                  <div className="text-lg font-bold text-red-600">
+                                    {codeTestResults[currentQuestion.question_id || currentQuestion._id].failed_count || 0}
+                                  </div>
+                                  <div className="text-xs text-red-800">Tests Failed</div>
+                                </div>
+                                <div className="bg-green-50 p-3 rounded-lg">
+                                  <div className="text-lg font-bold text-green-600">
+                                    {codeTestResults[currentQuestion.question_id || currentQuestion._id].total_score || 0}
+                                  </div>
+                                  <div className="text-xs text-green-800">Score Earned</div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-lg">
+                                  <div className="text-lg font-bold text-gray-600">
+                                    {codeTestResults[currentQuestion.question_id || currentQuestion._id].max_score || 0}
+                                  </div>
+                                  <div className="text-xs text-gray-800">Max Score</div>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* Compiler Question Tips */}
+                        <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <h5 className="font-medium text-yellow-800 mb-2">💡 Tips for Compiler Questions:</h5>
+                          <ul className="text-sm text-yellow-700 space-y-1">
+                            <li>• Test your code with sample test cases first</li>
+                            <li>• Make sure your code handles edge cases</li>
+                            <li>• Check for proper input/output formatting</li>
+                            <li>• Consider time and memory constraints</li>
+                          </ul>
+                        </div>
+                      </motion.div>
+                    )}
+
                   {/* Audio recording interface for listening modules */}
                   {(currentQuestion.question_type === 'audio' || currentQuestion.audio_url || exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING') && (
-                    <motion.div 
+                    <motion.div
                       className="space-y-6"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -931,14 +1441,14 @@ const OnlineExamTaking = () => {
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
                           <h4 className="text-lg font-semibold text-yellow-800 mb-2">Instructions for Listening Module:</h4>
                           <p className="text-yellow-700">
-                            1. Listen to the audio above carefully<br/>
-                            2. Click "Start Recording" to record your response<br/>
-                            3. Speak clearly into your microphone<br/>
-                            4. Click "Stop Recording" when finished<br/>
+                            1. Listen to the audio above carefully<br />
+                            2. Click "Start Recording" to record your response<br />
+                            3. Speak clearly into your microphone<br />
+                            4. Click "Stop Recording" when finished<br />
                             5. You can also type your response below (optional)
                           </p>
                         </div>
-                        
+
                         {/* Recording Controls */}
                         <div className="flex justify-center space-x-4 mb-6">
                           {!isRecording ? (
@@ -970,7 +1480,7 @@ const OnlineExamTaking = () => {
 
                         {/* Recording Status */}
                         {isRecording && recordingQuestionId === currentQuestion.question_id && (
-                          <motion.div 
+                          <motion.div
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
                             className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg mb-4"
@@ -984,7 +1494,7 @@ const OnlineExamTaking = () => {
 
                         {/* Playback of recorded audio */}
                         {audioURLs[currentQuestion.question_id] && (
-                          <motion.div 
+                          <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4"
@@ -1017,7 +1527,7 @@ const OnlineExamTaking = () => {
 
                   {/* Fallback: Show recording interface for any question with audio_url or listening module */}
                   {(!currentQuestion.question_type && currentQuestion.audio_url) || (exam?.module_id === 'LISTENING' && !currentQuestion.question_type) && (
-                    <motion.div 
+                    <motion.div
                       className="space-y-6"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -1027,14 +1537,14 @@ const OnlineExamTaking = () => {
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
                           <h4 className="text-lg font-semibold text-yellow-800 mb-2">Instructions for Listening Module:</h4>
                           <p className="text-yellow-700">
-                            1. Listen to the audio above carefully<br/>
-                            2. Click "Start Recording" to record your response<br/>
-                            3. Speak clearly into your microphone<br/>
-                            4. Click "Stop Recording" when finished<br/>
+                            1. Listen to the audio above carefully<br />
+                            2. Click "Start Recording" to record your response<br />
+                            3. Speak clearly into your microphone<br />
+                            4. Click "Stop Recording" when finished<br />
                             5. You can also type your response below (optional)
                           </p>
                         </div>
-                        
+
                         {/* Recording Controls */}
                         <div className="flex justify-center space-x-4 mb-6">
                           {!isRecording ? (
@@ -1066,7 +1576,7 @@ const OnlineExamTaking = () => {
 
                         {/* Recording Status */}
                         {isRecording && recordingQuestionId === currentQuestion.question_id && (
-                          <motion.div 
+                          <motion.div
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
                             className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg mb-4"
@@ -1080,7 +1590,7 @@ const OnlineExamTaking = () => {
 
                         {/* Playback of recorded audio */}
                         {audioURLs[currentQuestion.question_id] && (
-                          <motion.div 
+                          <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4"
@@ -1112,7 +1622,7 @@ const OnlineExamTaking = () => {
                   )}
 
                   {/* Navigation Buttons */}
-                  <motion.div 
+                  <motion.div
                     className="flex justify-between mt-10"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1139,17 +1649,28 @@ const OnlineExamTaking = () => {
                             // For listening/speaking modules, all questions must have recordings
                             return Object.keys(recordings).length !== questions.length;
                           } else {
-                            // For other modules, check answers
-                            return Object.keys(answers).length !== questions.length;
+                            // For other modules, check answers - compiler questions are handled via onSubmit callback
+                            // Count compiler questions as answered when they have test results
+                            const compilerQuestionsAnswered = questions.filter(q => {
+                              const qId = q.question_id || String(q._id || '');
+                              return (q.question_type === 'compiler' || q.question_type === 'technical' || q.test_cases?.length > 0) &&
+                                     codeTestResults[qId];
+                            }).length;
+
+                            const otherQuestionsAnswered = Object.keys(answers).filter(key => {
+                              const question = questions.find(q => (q.question_id || q._id) === key);
+                              return question && question.question_type !== 'compiler' && question.question_type !== 'technical' && !question.test_cases?.length;
+                            }).length;
+
+                            return (compilerQuestionsAnswered + otherQuestionsAnswered) !== questions.length;
                           }
                         })()}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className={`px-8 py-3 border-2 border-transparent text-sm font-medium rounded-2xl shadow-lg text-white flex items-center transition-all duration-300 ${
-                          timeRemaining <= 60 
-                            ? 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 animate-pulse' 
+                        className={`px-8 py-3 border-2 border-transparent text-sm font-medium rounded-2xl shadow-lg text-white flex items-center transition-all duration-300 ${timeRemaining <= 60
+                            ? 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 animate-pulse'
                             : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600'
-                        } disabled:bg-gradient-to-r disabled:from-gray-400 disabled:to-gray-500`}
+                          } disabled:bg-gradient-to-r disabled:from-gray-400 disabled:to-gray-500`}
                       >
                         {isSubmitting ? 'Submitting...' : autoSubmitted ? 'Auto-Submitting...' : 'Submit Exam'}
                         <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1176,14 +1697,14 @@ const OnlineExamTaking = () => {
             </div>
 
             {/* Question Navigation Panel */}
-            <motion.div 
+            <motion.div
               className="lg:col-span-1"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.4 }}
             >
               <div className="bg-white/60 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-white/20">
-                <motion.h5 
+                <motion.h5
                   className="text-center mb-6 font-light text-slate-700 text-lg"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1191,7 +1712,7 @@ const OnlineExamTaking = () => {
                 >
                   Question Navigation
                 </motion.h5>
-                <motion.div 
+                <motion.div
                   className="grid grid-cols-5 gap-3 mb-6"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1203,30 +1724,31 @@ const OnlineExamTaking = () => {
                       onClick={() => setCurrentQuestionIndex(index)}
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
-                      className={`w-12 h-12 rounded-2xl text-sm font-medium transition-all duration-300 shadow-lg relative ${
-                        index === currentQuestionIndex
+                      className={`w-12 h-12 rounded-2xl text-sm font-medium transition-all duration-300 shadow-lg relative ${index === currentQuestionIndex
                           ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-blue-200'
-                          : answers[questions[index]?.question_id] || recordings[questions[index]?.question_id]
-                          ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border-2 border-green-300 hover:shadow-green-200'
-                          : 'bg-white text-slate-700 border-2 border-slate-200 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 hover:border-blue-300'
-                      }`}
+                          : answers[questions[index]?.question_id] ||
+                            recordings[questions[index]?.question_id] ||
+                            codeTestResults[questions[index]?.question_id || questions[index]?._id]
+                            ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border-2 border-green-300 hover:shadow-green-200'
+                            : 'bg-white text-slate-700 border-2 border-slate-200 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 hover:border-blue-300'
+                        }`}
                     >
                       {index + 1}
                       {/* Show microphone icon for recorded questions in listening modules */}
                       {(exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING') && recordings[questions[index]?.question_id] && (
                         <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
                           <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
                           </svg>
                         </div>
                       )}
                     </motion.button>
                   ))}
                 </motion.div>
-                
+
                 {/* Legend */}
-                <motion.div 
+                <motion.div
                   className="mb-6 text-sm text-slate-600 space-y-2"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -1246,13 +1768,13 @@ const OnlineExamTaking = () => {
                   </div>
                 </motion.div>
 
-                <motion.div 
+                <motion.div
                   className="space-y-3"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: 0.8 }}
                 >
-                  <motion.button 
+                  <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="w-full px-4 py-3 text-sm border-2 border-slate-200 rounded-2xl bg-white/80 backdrop-blur-sm hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 hover:border-blue-300 flex items-center justify-center shadow-lg transition-all duration-300"
@@ -1266,7 +1788,7 @@ const OnlineExamTaking = () => {
                     </svg>
                     Mark for Review
                   </motion.button>
-                  <motion.button 
+                  <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="w-full px-4 py-3 text-sm border-2 border-slate-200 rounded-2xl bg-white/80 backdrop-blur-sm hover:bg-gradient-to-r hover:from-slate-50 hover:to-red-50 hover:border-red-300 flex items-center justify-center shadow-lg transition-all duration-300"
@@ -1290,4 +1812,4 @@ const OnlineExamTaking = () => {
   );
 };
 
-export default OnlineExamTaking; 
+export default OnlineExamTaking;

@@ -209,13 +209,21 @@ const TestHistory = () => {
                         {/* Score Display - Centered and Prominent */}
                         <div className="text-center mb-4">
                           {(() => {
+                            // Use percentage from latest attempt if available (for technical tests with partial credit)
+                            const latestAttempt = testGroup.attempts && testGroup.attempts.length > 0 ? testGroup.attempts[0] : null;
+                            const score = latestAttempt?.percentage !== undefined 
+                              ? latestAttempt.percentage 
+                              : (() => {
+                                  const correctAnswers = testGroup.latest_correct_answers || 0;
+                                  const totalQuestions = testGroup.total_questions || 0;
+                                  return totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+                                })();
                             const correctAnswers = testGroup.latest_correct_answers || 0;
                             const totalQuestions = testGroup.total_questions || 0;
-                            const calculatedScore = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
                             return (
                               <div className="space-y-1">
-                                <div className={`text-3xl font-bold ${getScoreColor(calculatedScore)}`}>
-                                  {calculatedScore.toFixed(1)}%
+                                <div className={`text-3xl font-bold ${getScoreColor(score)}`}>
+                                  {score.toFixed(1)}%
                                 </div>
                                 <div className="text-xs text-gray-600 font-medium">
                                   {correctAnswers} of {totalQuestions} correct
@@ -391,13 +399,21 @@ const TestHistory = () => {
                         {/* Score Display - Centered and Prominent */}
                         <div className="text-center mb-4">
                           {(() => {
+                            // Use percentage from latest attempt if available (for technical tests with partial credit)
+                            const latestAttempt = testGroup.attempts && testGroup.attempts.length > 0 ? testGroup.attempts[0] : null;
+                            const score = latestAttempt?.percentage !== undefined 
+                              ? latestAttempt.percentage 
+                              : (() => {
+                                  const correctAnswers = testGroup.latest_correct_answers || 0;
+                                  const totalQuestions = testGroup.total_questions || 0;
+                                  return totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+                                })();
                             const correctAnswers = testGroup.latest_correct_answers || 0;
                             const totalQuestions = testGroup.total_questions || 0;
-                            const calculatedScore = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
                             return (
                               <div className="space-y-1">
-                                <div className={`text-3xl font-bold ${getScoreColor(calculatedScore)}`}>
-                                  {calculatedScore.toFixed(1)}%
+                                <div className={`text-3xl font-bold ${getScoreColor(score)}`}>
+                                  {score.toFixed(1)}%
                                 </div>
                                 <div className="text-xs text-gray-600 font-medium">
                                   {correctAnswers} of {totalQuestions} correct
@@ -482,13 +498,20 @@ const TestHistory = () => {
                                     
                                     <div className="text-right">
                                       {(() => {
+                                        // Use percentage from attempt if available (for technical tests with partial credit)
+                                        const score = attempt.percentage !== undefined 
+                                          ? attempt.percentage 
+                                          : (() => {
+                                              const correctAnswers = attempt.correct_answers || 0;
+                                              const totalQuestions = attempt.total_questions || 0;
+                                              return totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+                                            })();
                                         const correctAnswers = attempt.correct_answers || 0;
                                         const totalQuestions = attempt.total_questions || 0;
-                                        const calculatedScore = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
                                         return (
                                           <div className="space-y-1">
-                                            <div className={`text-sm font-bold ${getScoreColor(calculatedScore)}`}>
-                                              {calculatedScore.toFixed(1)}%
+                                            <div className={`text-sm font-bold ${getScoreColor(score)}`}>
+                                              {score.toFixed(1)}%
                                             </div>
                                             <div className="text-xs text-gray-500">
                                               {correctAnswers}/{totalQuestions}
@@ -556,12 +579,17 @@ const TestHistory = () => {
                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-3 rounded-lg border border-orange-200">
                   <div className="text-xs font-medium text-orange-600 mb-1">Score</div>
                   {(() => {
-                    const correctAnswers = selectedAttempt.correct_answers || 0;
-                    const totalQuestions = selectedAttempt.total_questions || 0;
-                    const calculatedScore = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+                    // Use percentage from attempt if available, otherwise calculate
+                    const score = selectedAttempt.percentage !== undefined 
+                      ? selectedAttempt.percentage 
+                      : (() => {
+                          const correctAnswers = selectedAttempt.correct_answers || 0;
+                          const totalQuestions = selectedAttempt.total_questions || 0;
+                          return totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+                        })();
                     return (
-                      <div className={`text-lg font-bold ${getScoreColor(calculatedScore)}`}>
-                        {calculatedScore.toFixed(1)}%
+                      <div className={`text-lg font-bold ${getScoreColor(score)}`}>
+                        {score.toFixed(1)}%
                       </div>
                     );
                   })()}
@@ -570,14 +598,29 @@ const TestHistory = () => {
                 <div className="bg-gradient-to-br from-green-50 to-green-100 p-3 rounded-lg border border-green-200">
                   <div className="text-xs font-medium text-green-600 mb-1">Correct</div>
                   <div className="text-lg font-bold text-green-700">
-                    {selectedAttempt.correct_answers || 0}
+                    {(() => {
+                      // For technical tests, count questions with 100% score
+                      if (selectedAttempt.detailed_results) {
+                        const fullyCorrect = selectedAttempt.detailed_results.filter(r => r.is_correct === true).length;
+                        return fullyCorrect > 0 ? fullyCorrect : (selectedAttempt.correct_answers || 0);
+                      }
+                      return selectedAttempt.correct_answers || 0;
+                    })()}
                   </div>
                 </div>
                 
                 <div className="bg-gradient-to-br from-red-50 to-red-100 p-3 rounded-lg border border-red-200">
                   <div className="text-xs font-medium text-red-600 mb-1">Incorrect</div>
                   <div className="text-lg font-bold text-red-700">
-                    {(selectedAttempt.total_questions || 0) - (selectedAttempt.correct_answers || 0)}
+                    {(() => {
+                      const total = selectedAttempt.total_questions || 0;
+                      // For technical tests, count questions not fully correct
+                      if (selectedAttempt.detailed_results) {
+                        const fullyCorrect = selectedAttempt.detailed_results.filter(r => r.is_correct === true).length;
+                        return total - fullyCorrect;
+                      }
+                      return total - (selectedAttempt.correct_answers || 0);
+                    })()}
                   </div>
                 </div>
                 
@@ -601,70 +644,241 @@ const TestHistory = () => {
                     </h4>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {selectedAttempt.detailed_results.map((result, index) => (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: index * 0.05 }}
-                        className={`p-3 rounded-lg border ${
-                          result.is_correct
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-red-50 border-red-200'
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                                result.is_correct ? 'bg-green-200' : 'bg-red-200'
-                              }`}>
-                                <span className="text-xs font-bold text-gray-700">
-                                  {index + 1}
+                  <div className="grid grid-cols-1 gap-4">
+                    {selectedAttempt.detailed_results.map((result, index) => {
+                      const isCompilerQuestion = result.question_type === 'compiler' || result.question_type === 'technical';
+                      
+                      // Get test results from multiple sources
+                      let testResults = result.test_results || [];
+                      
+                      // Also check answers object for test results
+                      if (isCompilerQuestion && selectedAttempt.answers) {
+                        const answerData = selectedAttempt.answers[result.question_id];
+                        if (answerData && answerData.results && answerData.results.test_results) {
+                          // Use test results from answers if detailed_results doesn't have them
+                          if (testResults.length === 0) {
+                            testResults = answerData.results.test_results;
+                          }
+                        }
+                      }
+                      
+                      // Get code from answers object if student_answer is empty
+                      let studentCode = result.student_answer || '';
+                      if (isCompilerQuestion && selectedAttempt.answers) {
+                        const answerData = selectedAttempt.answers[result.question_id];
+                        if (answerData) {
+                          // Always prefer code from answers object (it's the source of truth)
+                          if (answerData.code !== undefined && answerData.code !== null) {
+                            studentCode = answerData.code;
+                          }
+                          // Get language from answers if not in detailed_results
+                          if (!result.language && answerData.language) {
+                            // We'll handle this below
+                          }
+                        }
+                      }
+                      
+                      // Get language from answers if not in detailed_results
+                      let questionLanguage = result.language || '';
+                      if (isCompilerQuestion && !questionLanguage && selectedAttempt.answers) {
+                        const answerData = selectedAttempt.answers[result.question_id];
+                        if (answerData && answerData.language) {
+                          questionLanguage = answerData.language;
+                        }
+                      }
+                      
+                      return (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: index * 0.05 }}
+                          className={`p-4 rounded-lg border ${
+                            result.is_correct
+                              ? 'bg-green-50 border-green-200'
+                              : 'bg-red-50 border-red-200'
+                          }`}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                                  result.is_correct ? 'bg-green-200' : 'bg-red-200'
+                                }`}>
+                                  <span className="text-xs font-bold text-gray-700">
+                                    {index + 1}
+                                  </span>
+                                </div>
+                                <span className="text-sm font-medium text-gray-900">
+                                  Question {index + 1}
                                 </span>
+                                {result.question && (
+                                  <span className="text-sm font-semibold text-gray-700">
+                                    {result.question}
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-sm font-medium text-gray-900">
-                                Question {index + 1}
-                              </span>
-                            </div>
-                            <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              result.is_correct 
-                                ? 'bg-green-100 text-green-700' 
-                                : 'bg-red-100 text-red-700'
-                            }`}>
-                              {result.is_correct ? 'Correct' : 'Incorrect'}
-                            </div>
-                          </div>
-                          
-                          {result.question && (
-                            <div className="text-xs text-gray-600 bg-white p-2 rounded border">
-                              {result.question}
-                            </div>
-                          )}
-                          
-                          <div className="space-y-1">
-                            <div className="text-xs">
-                              <span className="text-gray-500">Your answer: </span>
-                              <span className={`font-medium ${
-                                result.is_correct ? 'text-green-700' : 'text-red-700'
-                              }`}>
-                                {result.student_answer || 'No answer'}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                {isCompilerQuestion && result.score !== undefined && (
+                                  <span className="text-xs font-medium text-gray-600">
+                                    Score: {result.score}/{result.max_score || 1} ({result.percentage?.toFixed(1) || 0}%)
+                                  </span>
+                                )}
+                                <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  result.is_correct 
+                                    ? 'bg-green-100 text-green-700' 
+                                    : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {result.is_correct ? 'Correct' : 'Incorrect'}
+                                </div>
+                              </div>
                             </div>
                             
-                            {!result.is_correct && (
-                              <div className="text-xs">
-                                <span className="text-gray-500">Correct: </span>
-                                <span className="font-medium text-green-700">
-                                  {result.correct_answer_text || result.correct_answer || 'N/A'}
-                                </span>
+                            {/* Compiler/Technical Question Display */}
+                            {isCompilerQuestion ? (
+                              <div className="space-y-3 bg-white p-3 rounded border">
+                                {/* Language and Code */}
+                                {questionLanguage && (
+                                  <div className="text-xs text-gray-600">
+                                    <span className="font-medium">Language: </span>
+                                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                                      {questionLanguage}
+                                    </span>
+                                  </div>
+                                )}
+                                
+                                {/* Submitted Code */}
+                                {studentCode ? (
+                                  <div>
+                                    <div className="text-xs font-medium text-gray-700 mb-1">
+                                      Your Code:
+                                    </div>
+                                    <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto max-h-48 overflow-y-auto">
+                                      <code>{studentCode}</code>
+                                    </pre>
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-gray-500 italic">
+                                    No code submitted
+                                  </div>
+                                )}
+                                
+                                {/* Test Case Results */}
+                                {testResults.length > 0 && (
+                                  <div>
+                                    <div className="text-xs font-medium text-gray-700 mb-2">
+                                      Test Case Results:
+                                    </div>
+                                    <div className="space-y-2">
+                                      {testResults.map((testCase, tcIndex) => (
+                                        <div
+                                          key={tcIndex}
+                                          className={`p-2 rounded border text-xs ${
+                                            testCase.passed
+                                              ? 'bg-green-50 border-green-200'
+                                              : testCase.status === 'partial'
+                                              ? 'bg-yellow-50 border-yellow-200'
+                                              : 'bg-red-50 border-red-200'
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className="font-medium text-gray-700">
+                                              Test Case {testCase.test_case_number || tcIndex + 1}
+                                              {testCase.is_sample && (
+                                                <span className="ml-2 text-xs text-blue-600">(Sample)</span>
+                                              )}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                              {testCase.passed && (
+                                                <span className="text-green-600 font-medium">✓ Passed</span>
+                                              )}
+                                              {testCase.status === 'partial' && (
+                                                <span className="text-yellow-600 font-medium">⚠ Partial</span>
+                                              )}
+                                              {!testCase.passed && testCase.status !== 'partial' && (
+                                                <span className="text-red-600 font-medium">✗ Failed</span>
+                                              )}
+                                              <span className="text-gray-600">
+                                                {testCase.points_earned || 0}/{testCase.points || 1} pts
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                            <div>
+                                              <span className="text-gray-500">Input: </span>
+                                              <span className="font-mono bg-gray-100 px-1 rounded">
+                                                {testCase.input || 'N/A'}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-500">Expected: </span>
+                                              <span className="font-mono bg-gray-100 px-1 rounded">
+                                                {testCase.expected_output || 'N/A'}
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-500">Actual: </span>
+                                              <span className={`font-mono px-1 rounded ${
+                                                testCase.passed ? 'bg-green-100' : 'bg-red-100'
+                                              }`}>
+                                                {testCase.actual_output || 'N/A'}
+                                              </span>
+                                            </div>
+                                            {testCase.execution_time !== undefined && (
+                                              <div>
+                                                <span className="text-gray-500">Time: </span>
+                                                <span className="font-mono bg-gray-100 px-1 rounded">
+                                                  {testCase.execution_time}ms
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {testCase.error && (
+                                            <div className="mt-1 text-xs text-red-600 bg-red-50 p-1 rounded">
+                                              <span className="font-medium">Error: </span>
+                                              {testCase.error}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              /* MCQ Question Display */
+                              <div className="space-y-2 bg-white p-3 rounded border">
+                                {result.question && (
+                                  <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                                    {result.question}
+                                  </div>
+                                )}
+                                
+                                <div className="space-y-1">
+                                  <div className="text-xs">
+                                    <span className="text-gray-500">Your answer: </span>
+                                    <span className={`font-medium ${
+                                      result.is_correct ? 'text-green-700' : 'text-red-700'
+                                    }`}>
+                                      {result.student_answer || 'No answer'}
+                                    </span>
+                                  </div>
+                                  
+                                  {!result.is_correct && (
+                                    <div className="text-xs">
+                                      <span className="text-gray-500">Correct: </span>
+                                      <span className="font-medium text-green-700">
+                                        {result.correct_answer_text || result.correct_answer || 'N/A'}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

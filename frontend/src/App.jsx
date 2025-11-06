@@ -6,6 +6,7 @@ import { DashboardProvider } from './contexts/DashboardContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { FeatureProvider } from './contexts/FeatureContext'
 import { FormPortalProvider } from './contexts/FormPortalContext'
+import { PermissionProvider } from './contexts/PermissionContext'
 
 // Auth Pages
 import Login from './pages/auth/Login'
@@ -17,6 +18,7 @@ import CampusManagement from './pages/superadmin/CampusManagement'
 import CourseManagement from './pages/superadmin/CourseManagement'
 
 import AdminPermissions from './pages/superadmin/AdminPermissions'
+import NotificationSettings from './pages/superadmin/NotificationSettings'
 import TestManagement from './pages/superadmin/TestManagement'
 import StudentManagement from './pages/superadmin/StudentManagement'
 import ResultsManagement from './pages/superadmin/ResultsManagement'
@@ -29,6 +31,7 @@ import BatchManagement from './pages/superadmin/BatchManagement'
 import FormManagement from './pages/superadmin/FormManagement'
 import SubmissionViewer from './pages/superadmin/SubmissionViewer'
 import ProgressTracking from './pages/superadmin/ProgressTracking'
+import SubSuperadminManagement from './pages/superadmin/SubSuperadminManagement'
 
 // Campus Admin Pages
 import CampusAdminDashboard from './pages/campus-admin/CampusAdminDashboard'
@@ -83,6 +86,7 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <PermissionProvider>
         <DashboardProvider>
           <NotificationProvider>
             <FeatureProvider>
@@ -121,13 +125,14 @@ function App() {
 
                 {/* Admin Routes */}
                   {/* Super Admin Routes */}
-                <Route path="/superadmin" element={<ProtectedRoute allowedRoles={['superadmin', 'campus_admin', 'course_admin']}><SuperAdminSidebar /></ProtectedRoute>}>
+                <Route path="/superadmin" element={<ProtectedRoute allowedRoles={['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']}><SuperAdminSidebar /></ProtectedRoute>}>
                   <Route index element={<SuperAdminDashboard />} />
                     <Route path="dashboard" element={<SuperAdminDashboard />} />
                     <Route path="campuses" element={<CampusManagement />} />
                     <Route path="courses" element={<CourseManagement />} />
 
                     <Route path="admin-permissions" element={<AdminPermissions />} />
+                    <Route path="notification-settings" element={<NotificationSettings />} />
                     <Route path="global-settings" element={<GlobalSettings />} />
                     <Route path="students" element={<StudentManagement />} />
                     <Route path="results" element={<ResultsManagement />} />
@@ -139,9 +144,11 @@ function App() {
                     <Route path="crt-upload" element={<CRTUpload />} />
                     <Route path="batch-course-instances" element={<BatchCourseInstances />} />
                     <Route path="batch-management" element={<BatchManagement />} />
+                    <Route path="sub-superadmin" element={<SubSuperadminManagement />} />
                     {/* Form Portal Routes */}
                     <Route path="form-management" element={<FormManagement />} />
                     <Route path="form-submissions/:formId" element={<SubmissionViewer />} />
+                    <Route path="analytics" element={<ProgressTracking />} />
                     <Route path="real-analytics" element={<RealAnalytics />} />
                     <Route path="profile" element={<SuperAdminProfile />} />
                   </Route>
@@ -189,7 +196,7 @@ function App() {
                 </Route>
 
                 {/* Exam Taking Routes - No Sidebar */}
-                <Route path="/student/exam/:examId" element={<ProtectedRoute allowedRoles={['student']}><OnlineExamTaking /></ProtectedRoute>} />
+                <Route path="/student/exam" element={<ProtectedRoute allowedRoles={['student']}><OnlineExamTaking /></ProtectedRoute>} />
 
                 {/* Test Routes */}
 
@@ -201,9 +208,10 @@ function App() {
             </FeatureProvider>
           </NotificationProvider>
         </DashboardProvider>
+        </PermissionProvider>
       </AuthProvider>
     </ErrorBoundary>
   )
 }
 
-export default App 
+export default App

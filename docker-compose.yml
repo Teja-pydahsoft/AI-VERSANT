@@ -165,13 +165,8 @@ services:
       NODE_ENV: production
       LOG_LEVEL: info
       
-      # Database
+      # Database (MongoDB only - no Redis needed)
       MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-password}@mongodb:27017/versant_notifications?authSource=admin
-      
-      # Redis
-      REDIS_URL: redis://redis:6379
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
       
       # API Security
       NOTIFICATION_API_KEYS: ${NOTIFICATION_API_KEYS:-versant-notification-api-key}
@@ -179,10 +174,10 @@ services:
       # CORS
       ALLOWED_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000,https://crt.pydahsoft.in}
       
-      # Email Service (Brevo) - Using your existing variables
+      # Email Service (Brevo) - Same as backend
       BREVO_API_KEY: ${BREVO_API_KEY}
-      BREVO_SENDER_EMAIL: ${SENDER_EMAIL:-noreply@versant.com}
-      BREVO_SENDER_NAME: ${SENDER_NAME:-VERSANT System}
+      SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-noreply@versant.com}
+      SENDER_NAME: ${BREVO_SENDER_NAME:-VERSANT System}
       
       # SMS Service (BulkSMS) - Only API key needed
       BULKSMS_API_KEY: ${BULKSMS_API_KEY}
@@ -196,8 +191,6 @@ services:
       
     depends_on:
       mongodb:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     networks:
       - ai-versant-network

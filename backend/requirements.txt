@@ -117,6 +117,9 @@ Flask-pyWebPush>=1.1.0
 flask-monitoringdashboard>=4.0.0
 prometheus-flask-exporter>=0.23.0
 
+# API Documentation
+flasgger>=0.9.7.1
+
 
 
 pywebpush==1.14.0

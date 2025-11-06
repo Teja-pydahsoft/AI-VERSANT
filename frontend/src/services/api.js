@@ -448,4 +448,17 @@ export const getTestResultById = async (testId) => {
     return api.get(`/student/test-result/${testId}`);
 };
 
+// Notification Settings API functions
+export const getNotificationSettings = async () => {
+    return api.get('/notification-settings/');
+};
+
+export const updateNotificationSettings = async (settingsData) => {
+    return api.put('/notification-settings/', settingsData);
+};
+
+export const getNotificationSettingsHealth = async () => {
+    return api.get('/notification-settings/health');
+};
+
 export default api

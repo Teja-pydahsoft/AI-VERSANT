@@ -1,7 +1,12 @@
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
 
+// Enhanced OneSignal Service Worker with VAPID fallback support
+console.log('🔔 VERSANT OneSignal Service Worker: Starting...');
+
 // Add message event handler to prevent the warning
 self.addEventListener('message', function(event) {
+  console.log('Service Worker received message:', event.data);
+
   // Forward messages to OneSignal SDK
   if (event.data && event.data.type) {
     // Handle any custom messages if needed
@@ -21,12 +26,65 @@ self.addEventListener('activate', function(event) {
   event.waitUntil(self.clients.claim());
 });
 
-// IMPORTANT: Handle VAPID push notifications
-// OneSignal SDK handles its own push events, but we need to handle VAPID too
+// Enhanced push event handler for better notification display
+self.addEventListener('push', function(event) {
+  console.log('🔔 [OneSignal SW] Push event received', event);
+
+  if (!event.data) {
+    console.log('📬 [OneSignal SW] No data in push event');
+    return;
+  }
+
+  try {
+    const data = event.data.json();
+    console.log('📦 [OneSignal SW] Push data:', data);
+
+    // Handle OneSignal notifications
+    if (data.custom || data.onesignal_id) {
+      console.log('📱 [OneSignal SW] OneSignal notification detected');
+      // Let OneSignal SDK handle it, but also show our own notification as backup
+    }
+
+    // Enhanced notification display with better error handling
+    const title = data.title || data.heading || data.headings?.en || 'VERSANT Notification';
+    const body = data.body || data.alert || data.contents?.en || 'You have a new notification';
+
+    const options = {
+      body: body,
+      icon: data.icon || data.chrome_web_icon || '/icon-192x192.png',
+      badge: data.badge || data.chrome_web_badge || '/badge-72x72.png',
+      image: data.image || null,
+      data: data.data || data,
+      tag: data.tag || 'versant-onesignal-' + Date.now(),
+      requireInteraction: data.requireInteraction || false,
+      renotify: true,
+      silent: false,
+      timestamp: Date.now(),
+      vibrate: data.vibrate || [200, 100, 200],
+      actions: data.actions || []
+    };
+
+    console.log('📢 [OneSignal SW] Showing notification:', { title, body });
+
+    event.waitUntil(
+      self.registration.showNotification(title, options)
+        .then(() => {
+          console.log('✅ [OneSignal SW] Notification shown successfully');
+        })
+        .catch(err => {
+          console.error('❌ [OneSignal SW] Error showing notification:', err);
+        })
+    );
+  } catch (e) {
+    console.error('❌ [OneSignal SW] Error parsing push data:', e);
+  }
+});
+
+// Enhanced push event handler for both OneSignal and VAPID
 self.addEventListener('push', function(event) {
   console.log('🔔 [SW] Push event received', event);
   console.log('🔔 [SW] Has data:', !!event.data);
-  
+
   // If no data, show default notification
   if (!event.data) {
     console.log('📬 [SW] No data in push event, showing default notification');
@@ -35,45 +93,48 @@ self.addEventListener('push', function(event) {
         body: 'You have a new notification',
         icon: '/icon-192x192.png',
         badge: '/badge-72x72.png',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        tag: 'versant-default-' + Date.now()
       })
     );
     return;
   }
-  
+
   // Try to parse the data
   try {
     const data = event.data.json();
     console.log('📦 [SW] Push data parsed:', data);
-    
+
     // Check if this is a OneSignal notification
     if (data.custom || data.alert || data.heading || data.headings) {
       console.log('📱 [SW] OneSignal notification detected - letting SDK handle it');
-      // Don't return - let OneSignal SDK handle it, but also show our own notification as backup
+      // Let OneSignal SDK handle it, but also show our own notification as backup
       // This ensures notification is shown even if OneSignal SDK fails
     }
-    
+
     // Handle VAPID notification or show backup notification
-    console.log('📬 [SW] Showing notification...');
-    
+    console.log('📬 [SW] Processing notification...');
+
     const title = data.title || data.heading || data.headings?.en || 'VERSANT Notification';
     const body = data.body || data.alert || data.contents?.en || 'You have a new notification';
-    
+
     const options = {
       body: body,
       icon: data.icon || data.chrome_web_icon || '/icon-192x192.png',
       badge: data.badge || data.chrome_web_badge || '/badge-72x72.png',
+      image: data.image || null,
       data: data.data || data,
       tag: data.tag || 'versant-notification-' + Date.now(),
       requireInteraction: data.requireInteraction || false,
       renotify: true,
       silent: false,
       timestamp: Date.now(),
-      vibrate: [200, 100, 200]
+      vibrate: data.vibrate || [200, 100, 200],
+      actions: data.actions || []
     };
-    
-    console.log('📢 [SW] Notification options:', { title, ...options });
-    
+
+    console.log('📢 [SW] Showing notification:', { title, body });
+
     event.waitUntil(
       self.registration.showNotification(title, options)
         .then(() => {
@@ -81,6 +142,14 @@ self.addEventListener('push', function(event) {
         })
         .catch(err => {
           console.error('❌ [SW] Error showing notification:', err);
+          // Fallback notification
+          return self.registration.showNotification('VERSANT Notification', {
+            body: body,
+            icon: '/icon-192x192.png',
+            badge: '/badge-72x72.png',
+            timestamp: Date.now(),
+            tag: 'versant-fallback-' + Date.now()
+          });
         })
     );
   } catch (e) {
@@ -93,7 +162,7 @@ self.addEventListener('push', function(event) {
     } catch (textError) {
       console.error('❌ [SW] Could not get text data:', textError);
     }
-    
+
     event.waitUntil(
       self.registration.showNotification('VERSANT Notification', {
         body: body,

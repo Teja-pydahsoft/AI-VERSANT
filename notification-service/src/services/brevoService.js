@@ -1,5 +1,6 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
+const { getNotificationSettings } = require('./notificationService');
 
 /**
  * Brevo Email Service
@@ -31,6 +32,14 @@ class BrevoService {
    * Send email using Brevo API
    */
   async sendEmail({ to, subject, htmlContent, textContent = null }) {
+    // Get settings first to decide whether to proceed
+    const settings = await getNotificationSettings();
+    if (!settings.mailEnabled) {
+      logger.warn(`⚠️ Email notifications are disabled in global settings. Skipping email to ${to.email || to}.`);
+      // Return a success-like response to prevent breaking the calling function
+      return { success: true, message: 'Email notifications disabled', messageId: 'disabled-by-settings' };
+    }
+
     if (!this.isConfigured) {
       throw new Error('Brevo email service not configured');
     }

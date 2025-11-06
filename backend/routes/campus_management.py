@@ -19,8 +19,8 @@ def get_campuses():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        # Super admin can see all campuses
-        if user.get('role') == 'superadmin':
+        # Super admin and sub_superadmin can see all campuses
+        if user.get('role') in ['superadmin', 'sub_superadmin']:
             campuses = list(mongo_db.campuses.find())
         else:
             # Other admins can only see their assigned campus
@@ -68,11 +68,11 @@ def create_campus():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        # Only super admin can create campuses
-        if not user or user.get('role') != 'superadmin':
+        # Only super admin and sub_superadmin can create campuses
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin']:
             return jsonify({
                 'success': False,
-                'message': 'Access denied. Only super admin can create campuses.'
+                'message': 'Access denied. Admin privileges required.'
             }), 403
         
         data = request.get_json()

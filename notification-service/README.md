@@ -4,9 +4,9 @@ A dedicated microservice for handling all types of notifications (Email, SMS, Pu
 
 ## 🚀 Features
 
-- **Multi-Channel Notifications**: Email, SMS, and Push notifications
-- **Queue-Based Processing**: Redis-backed job queues with Bull
-- **Template System**: Reusable notification templates
+- **Multi-Channel Notifications**: Email, SMS, and Push notifications (OneSignal ONLY)
+- **In-Memory Queue Processing**: Lightweight job queues without Redis dependency
+- **Template System**: Reusable notification templates with robust fallbacks
 - **Analytics & Monitoring**: Comprehensive metrics and dashboards
 - **High Performance**: Handles thousands of notifications per minute
 - **Fault Tolerant**: Built-in retry logic and error handling
@@ -17,15 +17,15 @@ A dedicated microservice for handling all types of notifications (Email, SMS, Pu
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │            NOTIFICATION SERVICE (Node.js)                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐     │
-│  │   REST API  │  │   Queue     │  │   Providers     │     │
-│  │   Endpoints │  │  (Redis)    │  │  - Brevo Email  │     │
-│  │             │  │             │  │  - BulkSMS      │     │
-│  └─────────────┘  │  - Workers  │  │  - Push Notif   │     │
-│                   │  - Priority │  │  - Webhooks     │     │
-│  ┌─────────────┐  │  - Retry    │  │                 │     │
-│  │  Templates  │  │             │  │                 │     │
-│  │  Management │  └─────────────┘  └─────────────────┘     │
+│  ┌─────────────┐  ┌──────────────────┐  ┌───────────────┐  │
+│  │   REST API  │  │   Queue          │  │   Providers   │  │
+│  │   Endpoints │  │  (In-Memory)     │  │ - Brevo Email │  │
+│  │             │  │  - No Redis      │  │ - BulkSMS     │  │
+│  └─────────────┘  │  - Workers       │  │ - OneSignal   │  │
+│                   │  - Priority      │  │ - Push Only   │  │
+│  ┌─────────────┐  │  - Retry         │  │               │  │
+│  │  Templates  │  │                  │  │               │  │
+│  │  Management │  └──────────────────┘  └───────────────┘  │
 │  └─────────────┘                                          │
 │  ┌─────────────┐  ┌─────────────┐                         │
 │  │  Analytics  │  │  Monitoring │                         │
@@ -38,7 +38,6 @@ A dedicated microservice for handling all types of notifications (Email, SMS, Pu
 
 - Node.js 18+
 - MongoDB 6.0+
-- Redis 7+
 - Docker & Docker Compose (optional)
 
 ## 🛠️ Installation
@@ -82,13 +81,10 @@ cp env.example .env
 # Edit .env with your configuration
 ```
 
-3. Start MongoDB and Redis:
+3. Start MongoDB:
 ```bash
 # MongoDB
 mongod
-
-# Redis
-redis-server
 ```
 
 4. Start the service:
@@ -104,20 +100,21 @@ npm start
 |----------|-------------|---------|
 | `PORT` | Service port | 3001 |
 | `MONGODB_URI` | MongoDB connection string | mongodb://localhost:27017/versant_notifications |
-| `REDIS_URL` | Redis connection string | redis://localhost:6379 |
 | `NOTIFICATION_API_KEYS` | Comma-separated API keys | default-api-key |
 | `BREVO_API_KEY` | Brevo email service API key | - |
+| `SENDER_EMAIL` | Sender email address | noreply@versant.com |
+| `SENDER_NAME` | Sender name | VERSANT System |
 | `BULKSMS_API_KEY` | BulkSMS API key | - |
-| `VAPID_PUBLIC_KEY` | VAPID public key for push notifications | - |
-| `VAPID_PRIVATE_KEY` | VAPID private key for push notifications | - |
+| `ONESIGNAL_APP_ID` | OneSignal App ID | - |
+| `ONESIGNAL_REST_API_KEY` | OneSignal REST API Key | - |
 
 ### Email Providers
 
 #### Brevo (Recommended)
 ```bash
 BREVO_API_KEY=your_brevo_api_key
-BREVO_SENDER_EMAIL=noreply@versant.com
-BREVO_SENDER_NAME=VERSANT System
+SENDER_EMAIL=noreply@versant.com
+SENDER_NAME=VERSANT System
 ```
 
 #### SMTP Fallback
@@ -143,6 +140,16 @@ TWILIO_ACCOUNT_SID=your_twilio_account_sid
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
 TWILIO_PHONE_NUMBER=+1234567890
 ```
+
+### Push Notifications (OneSignal ONLY)
+
+#### OneSignal Configuration
+```bash
+ONESIGNAL_APP_ID=your_onesignal_app_id
+ONESIGNAL_REST_API_KEY=your_onesignal_rest_api_key
+```
+
+**Note**: VAPID has been completely removed. Only OneSignal is used for push notifications.
 
 ## 📚 API Documentation
 
@@ -270,13 +277,15 @@ services:
       - "3001:3001"
     environment:
       MONGODB_URI: mongodb://mongodb:27017/versant_notifications
-      REDIS_URL: redis://redis:6379
       NOTIFICATION_API_KEYS: ${NOTIFICATION_API_KEYS}
       BREVO_API_KEY: ${BREVO_API_KEY}
+      SENDER_EMAIL: ${SENDER_EMAIL:-noreply@versant.com}
+      SENDER_NAME: ${SENDER_NAME:-VERSANT System}
       BULKSMS_API_KEY: ${BULKSMS_API_KEY}
+      ONESIGNAL_APP_ID: ${ONESIGNAL_APP_ID}
+      ONESIGNAL_REST_API_KEY: ${ONESIGNAL_REST_API_KEY}
     depends_on:
       - mongodb
-      - redis
     networks:
       - ai-versant-network
 ```
@@ -338,7 +347,7 @@ Logs are stored in the `logs/` directory:
 
 ## 🔄 Queue Management
 
-### Queue Types
+### Queue Types (In-Memory)
 - **Email Queue**: High priority, 10 concurrent workers
 - **SMS Queue**: Medium priority, 5 concurrent workers  
 - **Push Queue**: Low priority, 20 concurrent workers
@@ -347,6 +356,8 @@ Logs are stored in the `logs/` directory:
 - 3 attempts with exponential backoff
 - Dead letter queue for failed notifications
 - Circuit breaker pattern for external services
+
+**Note**: All queues run in-memory without Redis dependency
 
 ## 📈 Scaling
 
@@ -370,21 +381,22 @@ upstream notification_service {
 
 ### Common Issues
 
-1. **Redis Connection Failed**
-   - Check Redis is running
-   - Verify REDIS_URL configuration
-
-2. **MongoDB Connection Failed**
+1. **MongoDB Connection Failed**
    - Check MongoDB is running
    - Verify MONGODB_URI configuration
 
-3. **Email Not Sending**
+2. **Email Not Sending**
    - Check BREVO_API_KEY is valid
    - Verify sender email is verified
 
-4. **SMS Not Sending**
+3. **SMS Not Sending**
    - Check BULKSMS_API_KEY is valid
    - Verify phone number format
+
+4. **Push Notifications Not Working**
+   - Check ONESIGNAL_APP_ID and ONESIGNAL_REST_API_KEY are configured
+   - Verify OneSignal service is accessible
+   - Check browser notification permissions
 
 ### Debug Mode
 ```bash

@@ -13,9 +13,8 @@ access_control_bp = Blueprint('access_control', __name__)
 ADMIN_MODULES = {
     'dashboard': 'Dashboard',
     'campus_management': 'Campus Management',
-    'course_management': 'Course Management', 
+    'course_management': 'Course Management',
     'batch_management': 'Batch Management',
-
     'student_management': 'Student Management',
     'test_management': 'Test Management',
     'question_bank_upload': 'Question Bank Upload',
@@ -23,13 +22,14 @@ ADMIN_MODULES = {
     'results_management': 'Results Management',
     'analytics': 'Analytics',
     'reports': 'Reports',
-    'admin_permissions': 'Admin Permissions'
+    'admin_permissions': 'Admin Permissions',
+    'sub_superadmin_management': 'Sub Superadmin Management'
 }
 
 # Default permissions for each admin role
 DEFAULT_PERMISSIONS = {
     'super_admin': {
-        'modules': list(ADMIN_MODULES.keys()) + ['admin_permissions'],  # All modules
+        'modules': list(ADMIN_MODULES.keys()),  # All modules including sub_superadmin_management
         'can_create_campus': True,
         'can_create_course': True,
         'can_create_batch': True,
@@ -37,7 +37,8 @@ DEFAULT_PERMISSIONS = {
         'can_manage_tests': True,
         'can_upload_tests': True,
         'can_upload_questions': True,
-        'can_view_all_data': True
+        'can_view_all_data': True,
+        'can_manage_sub_superadmins': True
     },
     'campus_admin': {
         'modules': ['dashboard', 'course_management', 'batch_management', 'student_management', 'test_management', 'question_bank_upload', 'crt_upload', 'results_management', 'analytics', 'reports'],
@@ -70,46 +71,50 @@ def require_permission(module=None, action=None):
         def decorated_function(*args, **kwargs):
             current_user_id = get_jwt_identity()
             user = mongo_db.find_user_by_id(current_user_id)
-            
+
             if not user:
                 return jsonify({
                     'success': False,
                     'message': 'User not found'
                 }), 404
-            
+
             # Debug logging
             print(f"Access control check - User role: {user.get('role')}")
             print(f"Module required: {module}")
             print(f"Action required: {action}")
-            
-            # Super admin has all permissions
+
+            # Super admin and sub_superadmin have all permissions at backend level
             user_role = user.get('role', '').lower()
-            
+
             if user_role == 'superadmin':
                 print("Super admin access granted")
                 return f(*args, **kwargs)
             
+            if user_role == 'sub_superadmin':
+                print("Sub-superadmin access granted (backend allows all, frontend controls UI)")
+                return f(*args, **kwargs)
+
             # Check permissions for other admin roles
             permissions = user.get('permissions', DEFAULT_PERMISSIONS.get(user.get('role'), {}))
-            
+
             has_permission = True
-            
+
             # Check module permission
             if module and module not in permissions.get('modules', []):
                 has_permission = False
-            
+
             # Check specific action permission
             if action and has_permission:
                 action_key = f'can_{action}'
                 if action_key in permissions:
                     has_permission = permissions[action_key]
-            
+
             if not has_permission:
                 return jsonify({
                     'success': False,
                     'message': f'Access denied. You do not have permission to access {module or "this resource"}.'
                 }), 403
-            
+
             return f(*args, **kwargs)
         return decorated_function
     return decorator
@@ -147,11 +152,14 @@ def get_admin_permissions(admin_id):
         current_user_id = get_jwt_identity()
         current_user = mongo_db.find_user_by_id(current_user_id)
         
-        if not current_user or current_user.get('role') != 'superadmin':
-            return jsonify({
-                'success': False,
-                'message': 'Access denied. Super admin privileges required.'
-            }), 403
+        # Check if user is superadmin or has sub superadmin management permission
+        if current_user.get('role') != 'superadmin':
+            from models import SubSuperadmin
+            if not SubSuperadmin.has_permission(current_user_id, 'sub_superadmin_management', 'write'):
+                return jsonify({
+                    'success': False,
+                    'message': 'Access denied. Super admin privileges required.'
+                }), 403
         
         admin = mongo_db.users.find_one({'_id': ObjectId(admin_id)})
         if not admin:
@@ -189,11 +197,28 @@ def update_admin_permissions(admin_id):
         current_user_id = get_jwt_identity()
         current_user = mongo_db.find_user_by_id(current_user_id)
         
-        if not current_user or current_user.get('role') != 'superadmin':
-            return jsonify({
-                'success': False,
-                'message': 'Access denied. Super admin privileges required.'
-            }), 403
+        # Check if user is superadmin or has sub superadmin management permission
+        if current_user.get('role') != 'superadmin':
+            try:
+                # Import here to avoid circular imports
+                import sys
+                import os
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                parent_dir = os.path.dirname(current_dir)
+                sys.path.append(parent_dir)
+
+                from models import SubSuperadmin
+                if not SubSuperadmin.has_permission(current_user_id, 'sub_superadmin_management', 'write'):
+                    return jsonify({
+                        'success': False,
+                        'message': 'Access denied. Super admin privileges required.'
+                    }), 403
+            except (ImportError, Exception) as e:
+                print(f"Warning: Could not check sub superadmin permissions: {e}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Access denied. Super admin privileges required.'
+                }), 403
         
         admin = mongo_db.users.find_one({'_id': ObjectId(admin_id)})
         if not admin:
@@ -239,11 +264,14 @@ def get_all_admins_with_permissions():
         current_user_id = get_jwt_identity()
         current_user = mongo_db.find_user_by_id(current_user_id)
         
-        if not current_user or current_user.get('role') != 'superadmin':
-            return jsonify({
-                'success': False,
-                'message': 'Access denied. Super admin privileges required.'
-            }), 403
+        # Check if user is superadmin or has sub superadmin management permission
+        if current_user.get('role') != 'superadmin':
+            from models import SubSuperadmin
+            if not SubSuperadmin.has_permission(current_user_id, 'sub_superadmin_management', 'write'):
+                return jsonify({
+                    'success': False,
+                    'message': 'Access denied. Super admin privileges required.'
+                }), 403
         
         # Get all admins
         admins = list(mongo_db.users.find({
@@ -306,20 +334,31 @@ def check_permission():
                 'success': True,
                 'data': {'has_permission': True}
             }), 200
-        
+
+        # Check if user is a sub superadmin and has the required permission
+        from models import SubSuperadmin
+        sub_superadmin_permissions = SubSuperadmin.get_user_permissions(current_user_id)
+
+        if sub_superadmin_permissions:
+            has_permission = SubSuperadmin.has_permission(current_user_id, module, action or 'read')
+            return jsonify({
+                'success': True,
+                'data': {'has_permission': has_permission}
+            }), 200
+
         # Check permissions for other admin roles
         permissions = user.get('permissions', DEFAULT_PERMISSIONS.get(user.get('role'), {}))
-        
+
         has_permission = False
         if module in permissions.get('modules', []):
             has_permission = True
-        
+
         # Check specific action permissions
         if action:
             action_key = f'can_{action}'
             if action_key in permissions:
                 has_permission = has_permission and permissions[action_key]
-        
+
         return jsonify({
             'success': True,
             'data': {'has_permission': has_permission}
@@ -339,11 +378,14 @@ def reset_admin_permissions(admin_id):
         current_user_id = get_jwt_identity()
         current_user = mongo_db.find_user_by_id(current_user_id)
         
-        if not current_user or current_user.get('role') != 'superadmin':
-            return jsonify({
-                'success': False,
-                'message': 'Access denied. Super admin privileges required.'
-            }), 403
+        # Check if user is superadmin or has sub superadmin management permission
+        if current_user.get('role') != 'superadmin':
+            from models import SubSuperadmin
+            if not SubSuperadmin.has_permission(current_user_id, 'sub_superadmin_management', 'write'):
+                return jsonify({
+                    'success': False,
+                    'message': 'Access denied. Super admin privileges required.'
+                }), 403
         
         admin = mongo_db.users.find_one({'_id': ObjectId(admin_id)})
         if not admin:

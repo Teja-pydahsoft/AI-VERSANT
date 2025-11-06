@@ -108,20 +108,13 @@ router.post('/send-batch', [
 // Test push notification (for testing purposes)
 router.post('/test', async (req, res) => {
   try {
-    const { type = 'vapid' } = req.body;
-    
-    // Create a test subscription for VAPID
-    const testSubscription = {
-      endpoint: 'https://fcm.googleapis.com/fcm/send/test-endpoint',
-      keys: {
-        p256dh: 'test-p256dh-key',
-        auth: 'test-auth-key'
-      }
-    };
+    // Create test OneSignal subscriptions
+    const testRecipients = [
+      { player_id: 'test-player-id-1' },
+      { player_id: 'test-player-id-2' }
+    ];
 
-    const testRecipients = type === 'onesignal' ? ['test-player-id-1', 'test-player-id-2'] : [testSubscription];
-
-    logger.info(`🧪 Testing ${type} push notification...`);
+    logger.info(`🧪 Testing OneSignal push notification...`);
 
     const result = await pushNotificationService.sendToMultiple(
       testRecipients,

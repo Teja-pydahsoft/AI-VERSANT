@@ -1,0 +1,18 @@
+
+QuestionTitle,ProblemStatement,Language,Difficulty,Category,TimeLimit,MemoryLimit,Instructions,TestCase1Input,TestCase1Output,TestCase1Description,TestCase1Points,TestCase1IsSample,TestCase2Input,TestCase2Output,TestCase2Description,TestCase2Points,TestCase2IsSample,TestCase3Input,TestCase3Output,TestCase3Description,TestCase3Points,TestCase3IsSample
+"Sum of Two Numbers","Write a program that takes two integers as input and outputs their sum. The program should read two numbers from standard input and print their sum to standard output.",python,easy,arithmetic,30,128,"Read two integers from input and print their sum. Input format: two space-separated integers on a single line.",5 3,8,"Basic addition test",1,true,10 20,30,"Larger numbers test",1,true,-5 15,10,"Negative number test",1,false
+"String Reversal","Write a program that reads a string from input and prints it in reverse order. Handle strings with spaces and special characters.",python,easy,strings,30,128,"Read a line of text and output it reversed. Preserve spaces and case.",hello,olleh,"Simple word reversal",1,true,"Hello World","dlroW olleH","String with space",1,true,"123!@#","#@!321","Special characters",1,false
+"Even or Odd","Write a program that determines if a given integer is even or odd. Print 'Even' for even numbers and 'Odd' for odd numbers.",python,easy,conditionals,30,128,"Read an integer and determine if it's even or odd. Output exactly 'Even' or 'Odd'.",4,Even,"Even number test",1,true,7,Odd,"Odd number test",1,true,0,Even,"Zero test",1,false
+"Factorial Calculator","Write a program to calculate the factorial of a given non-negative integer. Use iterative approach to avoid recursion limits.",python,medium,loops,45,128,"Calculate n! (n factorial) for n >= 0. Use a loop, not recursion. Handle n=0 correctly (0! = 1).",5,120,"Factorial of 5",1,true,0,1,"Factorial of 0",1,true,3,6,"Factorial of 3",1,false
+"Prime Number Checker","Write a program that checks if a given positive integer is prime. A prime number is greater than 1 with no positive divisors other than 1 and itself.",python,medium,algorithms,60,128,"Check if number is prime. Handle edge cases: 1 is not prime, 2 is prime. Use efficient algorithm.",7,true,"Prime number test",1,true,4,false,"Composite number test",1,true,2,true,"Smallest prime",1,false
+"Array Sum","Write a program that reads an array of integers and calculates their sum. First input is array size N, followed by N integers.",python,medium,arrays,45,128,"Read N, then read N integers, compute and print their sum. Handle negative numbers.",3
+1 2 3,6,"Positive numbers",1,true,4
+-1 5 -2 8,10,"Mixed numbers",1,true,2
+0 0,0,"Zero values",1,false
+"Palindrome Checker","Write a program that checks if a given string is a palindrome (reads the same forwards and backwards). Ignore case and spaces.",python,medium,strings,45,128,"Check if string is palindrome. Convert to lowercase, ignore spaces. Output 'Yes' or 'No'.",radar,Yes,"Simple palindrome",1,true,"A man a plan a canal Panama",Yes,"Complex palindrome with spaces",1,true,hello,No,"Not a palindrome",1,false
+"Maximum Element","Write a program to find the maximum element in an array of integers. First input is array size N, followed by N integers.",python,easy,arrays,30,128,"Find and print the maximum element in the array. Handle negative numbers.",5
+10 5 8 15 3,15,"Positive numbers with max in middle",1,true,4
+-5 -10 -2 -8,-2,"All negative numbers",1,true,3
+100 50 75,100,"Max at start",1,false
+
+    

@@ -105,11 +105,11 @@ def require_superadmin(f):
     def decorated_function(*args, **kwargs):
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
-        allowed_roles = ['superadmin']
+        allowed_roles = ['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']
         if not user or user.get('role') not in allowed_roles:
             return jsonify({
                 'success': False,
-                'message': 'Access denied. Super admin privileges required.'
+                'message': 'Access denied. Admin privileges required.'
             }), 403
         return f(*args, **kwargs)
     return decorated_function
@@ -298,7 +298,7 @@ def get_single_test(test_id):
             }), 401
         
         # Check if user has admin privileges
-        if user.get('role') not in ['superadmin', 'campus_admin', 'course_admin']:
+        if user.get('role') not in ['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']:
             return jsonify({
                 'success': False,
                 'message': 'Access denied. Admin privileges required.'
@@ -545,7 +545,7 @@ def get_all_tests():
             }), 401
         
         # Check if user has admin privileges
-        if user.get('role') not in ['superadmin', 'campus_admin', 'course_admin']:
+        if user.get('role') not in ['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']:
             return jsonify({
                 'success': False,
                 'message': 'Access denied. Admin privileges required.'
@@ -635,8 +635,11 @@ def get_all_tests():
 
         tests_data = []
         for test in tests:
-            test['_id'] = str(test['_id'])
-            test['created_at'] = safe_isoformat(test['created_at']) if test['created_at'] else None
+            # Convert all ObjectIds recursively (including nested ones in questions and test_cases)
+            test = convert_objectids(test)
+            
+            # Format dates
+            test['created_at'] = safe_isoformat(test['created_at']) if test.get('created_at') else None
             
             # Format campus, batch, and course names properly
             test['campus'] = ', '.join(test.get('campus_names', [])) if test.get('campus_names') else 'N/A'
@@ -672,7 +675,7 @@ def delete_test(test_id):
             }), 401
         
         # Check if user has admin privileges
-        if user.get('role') not in ['superadmin', 'campus_admin', 'course_admin']:
+        if user.get('role') not in ['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']:
             return jsonify({
                 'success': False,
                 'message': 'Access denied. Admin privileges required.'
@@ -1055,6 +1058,7 @@ def upload_module_questions():
         level_id = data.get('level_id')
         questions = data.get('questions')
         topic_id = data.get('topic_id')  # Optional topic_id for CRT modules
+        question_type_from_payload = data.get('question_type')  # Question type from payload
         
         if not module_id or not questions:
             return jsonify({'success': False, 'message': 'module_id and questions are required.'}), 400
@@ -1100,12 +1104,13 @@ def upload_module_questions():
             validation_reason = ""
             
             if module_id == 'CRT_TECHNICAL' or level_id == 'CRT_TECHNICAL':
-                question_type = q.get('questionType', 'technical')
-                if question_type == 'technical':
+                # Get question type from question or payload, default to 'technical'
+                question_type = q.get('questionType', question_type_from_payload or 'technical')
+                if question_type == 'technical' or question_type == 'compiler':
                     # Compiler-integrated technical question
-                    if not (q.get('question') and q.get('testCases') and q.get('expectedOutput')):
+                    if not (q.get('question') and (q.get('testCases') or q.get('test_cases'))):
                         is_valid = False
-                        validation_reason = "Missing required fields (question, testCases, or expectedOutput)"
+                        validation_reason = "Missing required fields (question or testCases)"
                 else:
                     # MCQ technical question
                     if not (q.get('question') and q.get('optionA') and q.get('optionB') and 
@@ -1175,17 +1180,23 @@ def upload_module_questions():
         # Store valid questions in question_bank collection
         inserted = []
         for q in valid_questions:
+            # Determine question type first
+            question_type = None
+            if module_id == 'CRT_TECHNICAL' or level_id == 'CRT_TECHNICAL':
+                question_type = q.get('questionType', question_type_from_payload or 'technical')
+            elif module_id in ['LISTENING', 'SPEAKING']:
+                question_type = 'speaking' if module_id == 'SPEAKING' else 'sentence'
+            else:
+                question_type = 'mcq'
+            
+            # Build document based on question type
             doc = {
                 'module_id': module_id,
                 'level_id': level_id,
                 'question': q.get('question'),
-                'optionA': q.get('options', [])[0] if q.get('options') else q.get('optionA', ''),
-                'optionB': q.get('options', [])[1] if q.get('options') and len(q.get('options')) > 1 else q.get('optionB', ''),
-                'optionC': q.get('options', [])[2] if q.get('options') and len(q.get('options')) > 2 else q.get('optionC', ''),
-                'optionD': q.get('options', [])[3] if q.get('options') and len(q.get('options')) > 3 else q.get('optionD', ''),
-                'answer': q.get('answer', ''),
                 'instructions': q.get('instructions', ''),
-                'used_in_tests': [], # Track test_ids where used
+                'question_type': question_type,
+                'used_in_tests': [],
                 'used_count': 0,
                 'last_used': None,
                 'created_at': datetime.utcnow(),
@@ -1196,46 +1207,39 @@ def upload_module_questions():
             if topic_id:
                 doc['topic_id'] = ObjectId(topic_id)
             
-            # Handle different question types based on module
-            if module_id == 'CRT_TECHNICAL' or level_id == 'CRT_TECHNICAL':
-                # Check question type
-                question_type = q.get('questionType', 'technical')
-                doc['question_type'] = question_type
+            # Handle different question types
+            if question_type in ['technical', 'compiler']:
+                # Compiler/Technical question - only add compiler fields
+                doc['questionTitle'] = q.get('questionTitle', '')
+                doc['problemStatement'] = q.get('problemStatement', '')
+                doc['language'] = q.get('language', 'python')
+                doc['testCases'] = q.get('testCases', q.get('test_cases', []))
                 
-                if question_type == 'technical':
-                    doc['testCases'] = q.get('testCases', '')
-                    doc['expectedOutput'] = q.get('expectedOutput', '')
-                    doc['language'] = q.get('language', 'python')
-                    doc['testCaseId'] = q.get('testCaseId', '')
+                # Validate compiler question
+                if not doc['testCases']:
+                    current_app.logger.warning(f"Skipping compiler question without test cases: {q.get('question', '')}")
+                    continue
                     
-                    # Validate compiler-integrated question
-                    if not doc['testCases'] or not doc['expectedOutput']:
-                        current_app.logger.warning(f"Skipping question without test cases: {q.get('question', '')}")
-                        continue
-                        
-                elif question_type == 'mcq':
-                    # MCQ format for technical questions
-                    doc['question_type'] = 'mcq'
-                    # The MCQ fields are already set above
+            elif question_type == 'mcq':
+                # MCQ question - add MCQ fields
+                doc['optionA'] = q.get('options', [])[0] if q.get('options') else q.get('optionA', '')
+                doc['optionB'] = q.get('options', [])[1] if q.get('options') and len(q.get('options')) > 1 else q.get('optionB', '')
+                doc['optionC'] = q.get('options', [])[2] if q.get('options') and len(q.get('options')) > 2 else q.get('optionC', '')
+                doc['optionD'] = q.get('options', [])[3] if q.get('options') and len(q.get('options')) > 3 else q.get('optionD', '')
+                doc['answer'] = q.get('answer', '')
+                
+                # Validate MCQ question
+                if not (doc['optionA'] and doc['optionB'] and doc['optionC'] and doc['optionD'] and doc['answer']):
+                    current_app.logger.warning(f"Skipping incomplete MCQ question: {q.get('question', '')}")
+                    continue
                     
-                    # Validate MCQ question
-                    if not doc['optionA'] or not doc['optionB'] or not doc['optionC'] or not doc['optionD'] or not doc['answer']:
-                        current_app.logger.warning(f"Skipping incomplete MCQ question: {q.get('question', '')}")
-                        continue
-            elif module_id in ['LISTENING', 'SPEAKING']:
-                # For listening and speaking, handle sentence-type questions
-                doc['question_type'] = 'sentence'
-                # Add sentence-specific fields
+            elif question_type in ['sentence', 'speaking']:
+                # Sentence/Speaking questions
                 doc['sentence'] = q.get('question') or q.get('sentence', '')
                 doc['audio_url'] = q.get('audio_url')
                 doc['audio_config'] = q.get('audio_config')
                 doc['transcript_validation'] = q.get('transcript_validation')
                 doc['has_audio'] = q.get('has_audio', False)
-                # For speaking module
-                if module_id == 'SPEAKING':
-                    doc['question_type'] = 'speaking'
-            else:
-                doc['question_type'] = 'mcq'
             
             # Support sublevel/subcategory for grammar
             if 'subcategory' in q:
@@ -1301,6 +1305,25 @@ def get_existing_questions():
                 'transcript_validation': 1,
                 'has_audio': 1,
                 'question_type': 1,
+                'used_count': 1
+            }
+        elif module_id == 'CRT_TECHNICAL':
+            # For technical questions, include all fields
+            projection = {
+                'question': 1,
+                'questionTitle': 1,
+                'problemStatement': 1,
+                'testCases': 1,
+                'test_cases': 1,
+                'language': 1,
+                'instructions': 1,
+                'question_type': 1,
+                'optionA': 1,
+                'optionB': 1,
+                'optionC': 1,
+                'optionD': 1,
+                'answer': 1,
+                'topic_id': 1,
                 'used_count': 1
             }
         else:
@@ -2444,8 +2467,81 @@ def submit_practice_test():
                         }
                     
                     results.append(empty_result)
+            elif question.get('question_type') in ['compiler', 'technical']:
+                # Handle compiler/technical question
+                answer_key = f'answer_{i}'
+                current_app.logger.info(f"Compiler question {i}: looking for answer key '{answer_key}' in data")
+                
+                if answer_key in data:
+                    import json
+                    try:
+                        # Parse the code submission
+                        answer_data = json.loads(data[answer_key]) if isinstance(data[answer_key], str) else data[answer_key]
+                        student_code = answer_data.get('code', '')
+                        student_language = answer_data.get('language', question.get('language', 'python'))
+                        
+                        current_app.logger.info(f"Compiler question {i}: code length={len(student_code)}, language={student_language}")
+                        
+                        # Run code against test cases
+                        from services.compiler_service import run_code_with_test_cases
+                        
+                        test_cases = question.get('test_cases', [])
+                        test_results = run_code_with_test_cases(student_code, student_language, test_cases)
+                        
+                        # Calculate score based on passed test cases
+                        passed_cases = sum(1 for tc in test_results['test_case_results'] if tc['passed'])
+                        total_cases = len(test_results['test_case_results'])
+                        score = (passed_cases / total_cases) if total_cases > 0 else 0
+                        is_correct = passed_cases == total_cases
+                        
+                        if is_correct:
+                            correct_answers += 1
+                        total_score += score
+                        
+                        current_app.logger.info(f"Compiler question {i}: passed {passed_cases}/{total_cases} test cases, score={score}")
+                        
+                        # Store result
+                        result_data = {
+                            'question_index': i,
+                            'question_id': str(question.get('_id', i)),
+                            'question': question['question'],
+                            'question_type': 'compiler',
+                            'language': student_language,
+                            'student_code': student_code,
+                            'test_results': test_results['test_case_results'],
+                            'passed_cases': passed_cases,
+                            'total_cases': total_cases,
+                            'is_correct': is_correct,
+                            'score': score
+                        }
+                        
+                        results.append(result_data)
+                    except Exception as e:
+                        current_app.logger.error(f"Error processing compiler question {i}: {e}")
+                        # Add error result
+                        results.append({
+                            'question_index': i,
+                            'question_id': str(question.get('_id', i)),
+                            'question': question['question'],
+                            'question_type': 'compiler',
+                            'error': str(e),
+                            'is_correct': False,
+                            'score': 0
+                        })
+                else:
+                    current_app.logger.warning(f"Compiler question {i}: answer key '{answer_key}' not found")
+                    # Add empty result
+                    results.append({
+                        'question_index': i,
+                        'question_id': str(question.get('_id', i)),
+                        'question': question['question'],
+                        'question_type': 'compiler',
+                        'student_code': '',
+                        'is_correct': False,
+                        'score': 0
+                    })
             else:
-                current_app.logger.info(f"Non-MCQ question {i}: type={question.get('question_type')}")
+                current_app.logger.info(f"Non-MCQ/Compiler question {i}: type={question.get('question_type')}")
                 # Handle audio question (Listening or Speaking)
                 audio_key = f'question_{i}'
                 current_app.logger.info(f"Looking for audio file with key: {audio_key}")
@@ -4007,6 +4103,9 @@ def upload_questions():
         if not module_id or not level_id:
             return jsonify({'success': False, 'message': 'module_id and level_id are required'}), 400
         
+        # Check if this is a technical compiler-integrated format
+        is_technical_compiler = (module_id == 'CRT_TECHNICAL' and question_type == 'compiler')
+        
         # Read and parse the file
         questions = []
         
@@ -4015,17 +4114,51 @@ def upload_questions():
             import io
             content = file.read().decode('utf-8')
             csv_reader = csv.DictReader(io.StringIO(content))
-            for row in csv_reader:
-                question = {
-                    'question': row.get('Question', row.get('question', '')),
-                    'optionA': row.get('OptionA', row.get('A', '')),
-                    'optionB': row.get('OptionB', row.get('B', '')),
-                    'optionC': row.get('OptionC', row.get('C', '')),
-                    'optionD': row.get('OptionD', row.get('D', '')),
-                    'answer': row.get('Answer', row.get('answer', '')),
-                    'instructions': row.get('Instructions', row.get('instructions', ''))
-                }
-                questions.append(question)
+            
+            if is_technical_compiler:
+                # Parse compiler-integrated format
+                questions_dict = {}  # Group test cases by question title
+                
+                for row in csv_reader:
+                    question_title = row.get('QuestionTitle', '').strip()
+                    if not question_title:
+                        continue
+                    
+                    # Create test case
+                    test_case = {
+                        'input': row.get('Input', ''),
+                        'expected_output': row.get('ExpectedOutput', ''),
+                        'points': int(row.get('Points', 5)),
+                        'is_sample': row.get('IsSample', 'false').lower() == 'true'
+                    }
+                    
+                    # Group by question title
+                    if question_title not in questions_dict:
+                        questions_dict[question_title] = {
+                            'question': f"{question_title}: {row.get('ProblemStatement', '')}",
+                            'question_type': 'technical',
+                            'language': row.get('Language', 'python'),
+                            'instructions': row.get('Instructions', ''),
+                            'test_cases': []
+                        }
+                    
+                    questions_dict[question_title]['test_cases'].append(test_case)
+                
+                # Convert dict to list
+                questions = list(questions_dict.values())
+            else:
+                # Parse MCQ format
+                for row in csv_reader:
+                    question = {
+                        'question': row.get('Question', row.get('question', '')),
+                        'optionA': row.get('OptionA', row.get('A', '')),
+                        'optionB': row.get('OptionB', row.get('B', '')),
+                        'optionC': row.get('OptionC', row.get('C', '')),
+                        'optionD': row.get('OptionD', row.get('D', '')),
+                        'answer': row.get('Answer', row.get('answer', '')),
+                        'instructions': row.get('Instructions', row.get('instructions', ''))
+                    }
+                    questions.append(question)
         elif file.filename.endswith(('.xlsx', '.xls')):
             # Handle Excel files
             import pandas as pd
@@ -4103,15 +4236,35 @@ def upload_questions():
         seen_questions_in_file = set()
         
         for i, q in enumerate(questions):
-            # Basic validation
-            if not (q['question'] and q['optionA'] and q['optionB'] and 
-                   q['optionC'] and q['optionD'] and q['answer']):
-                invalid_questions.append({
-                    'index': i + 1,
-                    'question': q.get('question', ''),
-                    'reason': 'Missing required fields (question, options, or answer)'
-                })
-                continue
+            # Basic validation - different for technical vs MCQ
+            if is_technical_compiler:
+                # Validate technical compiler questions
+                if not q.get('question') or not q.get('test_cases'):
+                    invalid_questions.append({
+                        'index': i + 1,
+                        'question': q.get('question', ''),
+                        'reason': 'Missing required fields (question or test_cases)'
+                    })
+                    continue
+                
+                # Validate test cases
+                if len(q.get('test_cases', [])) == 0:
+                    invalid_questions.append({
+                        'index': i + 1,
+                        'question': q.get('question', ''),
+                        'reason': 'No test cases defined'
+                    })
+                    continue
+            else:
+                # Validate MCQ questions
+                if not (q.get('question') and q.get('optionA') and q.get('optionB') and 
+                       q.get('optionC') and q.get('optionD') and q.get('answer')):
+                    invalid_questions.append({
+                        'index': i + 1,
+                        'question': q.get('question', ''),
+                        'reason': 'Missing required fields (question, options, or answer)'
+                    })
+                    continue
             
             # Check for duplicates within the file only
             question_text = q['question'].strip().lower()
@@ -4168,18 +4321,32 @@ def upload_questions():
                     'level_id': level_id,
                     'question_type': question_type,
                     'question': q['question'],
-                    'optionA': q['optionA'],
-                    'optionB': q['optionB'],
-                    'optionC': q['optionC'],
-                    'optionD': q['optionD'],
-                    'answer': q['answer'].upper(),
-                    'instructions': q.get('instructions', ''),
                     'used_in_tests': [],
                     'used_count': 0,
                     'last_used': None,
                     'created_at': datetime.utcnow(),
                     'source': 'manual_upload'
                 }
+                
+                # Add format-specific fields
+                if is_technical_compiler:
+                    # Compiler-integrated format
+                    new_question_doc.update({
+                        'language': q.get('language', 'python'),
+                        'instructions': q.get('instructions', ''),
+                        'test_cases': q.get('test_cases', [])
+                    })
+                else:
+                    # MCQ format
+                    new_question_doc.update({
+                        'optionA': q['optionA'],
+                        'optionB': q['optionB'],
+                        'optionC': q['optionC'],
+                        'optionD': q['optionD'],
+                        'answer': q['answer'].upper(),
+                        'instructions': q.get('instructions', '')
+                    })
+                
                 new_questions_to_store.append(new_question_doc)
         
         # Store new questions in database and get their ObjectIds
@@ -4208,18 +4375,33 @@ def upload_questions():
             formatted_question = {
                 '_id': question_id if question_id else ObjectId(),  # Use actual database ObjectId
                 'question': q['question'],
-                'question_type': 'mcq',
-                'optionA': q['optionA'],
-                'optionB': q['optionB'],
-                'optionC': q['optionC'],
-                'optionD': q['optionD'],
-                'answer': q['answer'].upper(),
-                'marks': 1,
-                'instructions': q.get('instructions', ''),
+                'question_type': question_type,
                 'source': 'manual_upload',
                 'status': 'existing' if is_existing else 'new',
                 'existing_id': existing_question_texts.get(question_text_lower) if is_existing else None
             }
+            
+            # Add format-specific fields
+            if is_technical_compiler:
+                # Compiler-integrated format
+                formatted_question.update({
+                    'language': q.get('language', 'python'),
+                    'instructions': q.get('instructions', ''),
+                    'test_cases': q.get('test_cases', []),
+                    'marks': sum(tc.get('points', 5) for tc in q.get('test_cases', []))  # Total marks from test cases
+                })
+            else:
+                # MCQ format
+                formatted_question.update({
+                    'optionA': q['optionA'],
+                    'optionB': q['optionB'],
+                    'optionC': q['optionC'],
+                    'optionD': q['optionD'],
+                    'answer': q['answer'].upper(),
+                    'marks': 1,
+                    'instructions': q.get('instructions', '')
+                })
+            
             formatted_questions.append(formatted_question)
         
         # Update usage count for existing questions that are being used
@@ -4870,7 +5052,7 @@ def get_test_result(result_id):
         if str(result.get('student_id')) != str(current_user_id):
             # Check if user is admin
             user = mongo_db.find_user_by_id(current_user_id)
-            if not user or user.get('role') not in ['superadmin', 'admin', 'campus_admin', 'course_admin']:
+            if not user or user.get('role') not in ['superadmin', 'sub_superadmin', 'admin', 'campus_admin', 'course_admin']:
                 return jsonify({'success': False, 'message': 'Access denied'}), 403
         
         # Get test details

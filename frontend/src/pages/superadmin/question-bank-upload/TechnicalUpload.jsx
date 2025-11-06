@@ -163,23 +163,29 @@ const TechnicalUpload = ({ moduleName, levelId, onUploadSuccess }) => {
         // Parse compiler-integrated questions with enhanced structure
         questions = parsedData.map((row, index) => {
           const testCases = [];
-          
+
           // Parse test cases (up to 10)
           for (let i = 1; i <= 10; i++) {
             const inputKey = `TestCase${i}Input`;
             const outputKey = `TestCase${i}Output`;
             const descriptionKey = `TestCase${i}Description`;
-            
+            const responseTimeKey = `TestCase${i}ResponseTime`;
+            const pointsKey = `TestCase${i}Points`;
+            const isSampleKey = `TestCase${i}IsSample`;
+
             if (row[inputKey] || row[outputKey]) {
               testCases.push({
                 id: i,
                 input: row[inputKey] || '',
-                expectedOutput: row[outputKey] || '',
-                description: row[descriptionKey] || `Test case ${i}`
+                expected_output: row[outputKey] || '', // Changed to snake_case
+                description: row[descriptionKey] || `Test case ${i}`,
+                response_time: parseInt(row[responseTimeKey]) || null, // Optional response time in ms
+                points: parseInt(row[pointsKey]) || 1, // Points for this test case
+                is_sample: row[isSampleKey] ? row[isSampleKey].toLowerCase() === 'true' : i <= 2 // First 2 are sample by default
               });
             }
           }
-          
+
           return {
             questionTitle: row.QuestionTitle || row.title || row.Title || '',
             problemStatement: row.ProblemStatement || row.statement || row.Statement || '',
@@ -285,23 +291,32 @@ const TechnicalUpload = ({ moduleName, levelId, onUploadSuccess }) => {
 
   const downloadCompilerTemplate = () => {
     const headers = [
-      'QuestionTitle', 
-      'ProblemStatement', 
-      'Language', 
-      'Difficulty', 
+      'QuestionTitle',
+      'ProblemStatement',
+      'Language',
+      'Difficulty',
       'Category',
       'TimeLimit',
       'MemoryLimit',
       'Instructions',
-      'TestCase1Input', 
-      'TestCase1Output', 
+      'TestCase1Input',
+      'TestCase1Output',
       'TestCase1Description',
-      'TestCase2Input', 
-      'TestCase2Output', 
+      'TestCase1ResponseTime',
+      'TestCase1Points',
+      'TestCase1IsSample',
+      'TestCase2Input',
+      'TestCase2Output',
       'TestCase2Description',
-      'TestCase3Input', 
-      'TestCase3Output', 
-      'TestCase3Description'
+      'TestCase2ResponseTime',
+      'TestCase2Points',
+      'TestCase2IsSample',
+      'TestCase3Input',
+      'TestCase3Output',
+      'TestCase3Description',
+      'TestCase3ResponseTime',
+      'TestCase3Points',
+      'TestCase3IsSample'
     ];
     generateCSVTemplate(headers, `${moduleName}_Compiler_Template.csv`);
   };
@@ -324,10 +339,11 @@ const TechnicalUpload = ({ moduleName, levelId, onUploadSuccess }) => {
   };
 
   const downloadSampleCompilerData = () => {
-    const sampleData = `QuestionTitle,ProblemStatement,Language,Difficulty,Category,TimeLimit,MemoryLimit,Instructions,TestCase1Input,TestCase1Output,TestCase1Description,TestCase2Input,TestCase2Output,TestCase2Description
-"Perfect Number","Write a program to check whether a given positive integer is a perfect number. A perfect number is a positive integer equal to the sum of its proper divisors except itself.",python,medium,algorithms,30,256,"Implement the function is_perfect_number(n) that returns True if n is a perfect number, False otherwise.",6,"True","Test with smallest perfect number",15,"False","Test with non-perfect number"
-"Array Sum","Write a function to calculate the sum of all elements in an array.",python,easy,arrays,15,128,"Implement the function array_sum(arr) that returns the sum of all elements.",[1,2,3,4,5],15,"Test with positive numbers",[-1,-2,3],0,"Test with mixed numbers"`;
-    
+    const sampleData = `QuestionTitle,ProblemStatement,Language,Difficulty,Category,TimeLimit,MemoryLimit,Instructions,TestCase1Input,TestCase1Output,TestCase1Description,TestCase1Points,TestCase1IsSample,TestCase2Input,TestCase2Output,TestCase2Description,TestCase2Points,TestCase2IsSample,TestCase3Input,TestCase3Output,TestCase3Description,TestCase3Points,TestCase3IsSample
+"Sum of Two Numbers","Write a program that takes two integers as input and outputs their sum. The program should read two numbers from standard input and print their sum to standard output.",python,easy,arithmetic,30,128,"Read two integers from input and print their sum. Input format: two space-separated integers on a single line.",5 3,8,"Basic addition test",1,true,10 20,30,"Larger numbers test",1,true,-5 15,10,"Negative number test",1,false
+"String Reversal","Write a program that reads a string from input and prints it in reverse order. Handle strings with spaces and special characters.",python,easy,strings,30,128,"Read a line of text and output it reversed. Preserve spaces and case.",hello,olleh,"Simple word reversal",1,true,"Hello World","dlroW olleH","String with space",1,true,"123!@#","#@!321","Special characters",1,false
+"Even or Odd","Write a program that determines if a given integer is even or odd. Print 'Even' for even numbers and 'Odd' for odd numbers.",python,easy,conditionals,30,128,"Read an integer and determine if it's even or odd. Output exactly 'Even' or 'Odd'.",4,Even,"Even number test",1,true,7,Odd,"Odd number test",1,true,0,Even,"Zero test",1,false`;
+
     const blob = new Blob([sampleData], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');

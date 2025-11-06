@@ -61,8 +61,8 @@ def get_batches():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        # Super admin can see all batches
-        if user.get('role') == 'superadmin':
+        # Super admin and sub_superadmin can see all batches
+        if user.get('role') in ['superadmin', 'sub_superadmin']:
             batches = list(mongo_db.batches.find())
         else:
             # Campus and course admins can only see batches in their campus
@@ -110,10 +110,10 @@ def create_batch_from_selection():
         user = mongo_db.find_user_by_id(current_user_id)
         
         # Check if user has permission to create batches
-        if not user or user.get('role') not in ['superadmin', 'campus_admin', 'course_admin']:
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']:
             return jsonify({
                 'success': False,
-                'message': 'Access denied. You do not have permission to create batches.'
+                'message': 'Access denied. Admin privileges required.'
             }), 403
         
         data = request.get_json()
@@ -218,11 +218,11 @@ def create_batch():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        # Only super admin can create batches
-        if not user or user.get('role') != 'superadmin':
+        # Only super admin and sub_superadmin can create batches
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin']:
             return jsonify({
                 'success': False,
-                'message': 'Access denied. Only super admin can create batches.'
+                'message': 'Access denied. Admin privileges required.'
             }), 403
         
         if 'student_file' not in request.files:
@@ -1203,8 +1203,8 @@ def get_filtered_students():
         if batch_id:
             query['batch_id'] = ObjectId(batch_id)
         
-        # Super admin can see all students, others only their campus
-        if user.get('role') != 'superadmin':
+        # Super admin and sub_superadmin can see all students, others only their campus
+        if user.get('role') not in ['superadmin', 'sub_superadmin']:
             user_campus_id = user.get('campus_id')
             if user_campus_id:
                 query['campus_id'] = ObjectId(user_campus_id)
@@ -2239,7 +2239,7 @@ def get_student_detailed_insights(student_id):
         user = mongo_db.users.find_one({'_id': ObjectId(current_user_id)})
         
         # Check admin permissions
-        allowed_roles = ['super_admin', 'superadmin', 'campus_admin', 'course_admin']
+        allowed_roles = ['super_admin', 'superadmin', 'campus_admin', 'course_admin', 'sub_superadmin']
         if not user:
             return jsonify({'success': False, 'message': 'User not found.'}), 403
         
@@ -2332,7 +2332,7 @@ def get_progress_system_monitoring():
         user = mongo_db.users.find_one({'_id': ObjectId(current_user_id)})
         
         # Check admin permissions (only super_admin and campus_admin)
-        allowed_roles = ['super_admin', 'campus_admin']
+        allowed_roles = ['super_admin', 'campus_admin','sub_superadmin']
         if not user or user.get('role') not in allowed_roles:
             return jsonify({'success': False, 'message': 'Access denied. Super admin privileges required.'}), 403
         
@@ -2932,7 +2932,7 @@ def bulk_migrate_students_progress():
         current_app.logger.info(f"User data for migration: {current_user}")
         
         # Check permissions - only superadmin can do bulk migration
-        allowed_roles = ['superadmin', 'super_admin']
+        allowed_roles = ['superadmin', 'super_admin','sub_superadmin']
         if current_user.get('role') not in allowed_roles:
             return jsonify({'success': False, 'message': 'Only superadmin can perform bulk migration'}), 403
         
@@ -3203,8 +3203,8 @@ def download_all_filtered_students_credentials():
         if batch_id:
             query['batch_id'] = ObjectId(batch_id)
         
-        # Super admin can see all students, others only their campus
-        if user.get('role') != 'superadmin':
+        # Super admin and sub_superadmin can see all students, others only their campus
+        if user.get('role') not in ['superadmin', 'sub_superadmin']:
             user_campus_id = user.get('campus_id')
             if user_campus_id:
                 query['campus_id'] = ObjectId(user_campus_id)

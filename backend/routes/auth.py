@@ -14,7 +14,129 @@ auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    """User login endpoint"""
+    """
+    User Login
+    ---
+    tags:
+      - Authentication
+    summary: Authenticate user and receive JWT tokens
+    description: |
+      Login endpoint that accepts username/email/mobile and password.
+      Returns JWT access and refresh tokens upon successful authentication.
+      
+      **Username formats accepted:**
+      - Username
+      - Email address
+      - Mobile number
+      
+      **Roles supported:**
+      - superadmin
+      - campus_admin
+      - course_admin
+      - student
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - username
+              - password
+            properties:
+              username:
+                type: string
+                example: "student123"
+                description: Username, email, or mobile number
+              password:
+                type: string
+                format: password
+                example: "password123"
+                description: User password
+    responses:
+      200:
+        description: Login successful
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                access_token:
+                  type: string
+                  example: "eyJ0eXAiOiJKV1QiLCJhbGc..."
+                refresh_token:
+                  type: string
+                  example: "eyJ0eXAiOiJKV1QiLCJhbGc..."
+                user:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      example: "507f1f77bcf86cd799439011"
+                    username:
+                      type: string
+                      example: "student123"
+                    email:
+                      type: string
+                      example: "student@example.com"
+                    name:
+                      type: string
+                      example: "John Doe"
+                    role:
+                      type: string
+                      example: "student"
+                    campus_id:
+                      type: string
+                      nullable: true
+                    course_id:
+                      type: string
+                      nullable: true
+                    batch_id:
+                      type: string
+                      nullable: true
+      400:
+        description: Missing required fields
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: false
+                message:
+                  type: string
+                  example: "Username and password are required"
+      401:
+        description: Invalid credentials or account deactivated
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: false
+                message:
+                  type: string
+                  example: "Invalid username or password"
+      500:
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: false
+                message:
+                  type: string
+                  example: "Login failed: Critical server error"
+    """
     try:
         print("🔍 Login attempt started", file=sys.stderr)
         
@@ -132,7 +254,34 @@ def login():
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
-    """User logout endpoint"""
+    """
+    User Logout
+    ---
+    tags:
+      - Authentication
+    summary: Logout user
+    description: Logout endpoint that invalidates the current session
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: Logout successful
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                message:
+                  type: string
+                  example: "Logout successful"
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         # In a real application, you might want to blacklist the token
         # For now, we'll just return a success message
@@ -150,7 +299,40 @@ def logout():
 @auth_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 def refresh():
-    """Refresh access token"""
+    """
+    Refresh Access Token
+    ---
+    tags:
+      - Authentication
+    summary: Refresh JWT access token using refresh token
+    description: |
+      Use this endpoint to get a new access token using your refresh token.
+      The refresh token should be sent in the Authorization header.
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: Token refreshed successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                message:
+                  type: string
+                  example: "Token refreshed successfully"
+                data:
+                  type: object
+                  properties:
+                    access_token:
+                      type: string
+                      example: "eyJ0eXAiOiJKV1QiLCJhbGc..."
+      401:
+        description: Unauthorized - Invalid refresh token
+    """
     try:
         current_user_id = get_jwt_identity()
         new_access_token = create_access_token(identity=current_user_id)

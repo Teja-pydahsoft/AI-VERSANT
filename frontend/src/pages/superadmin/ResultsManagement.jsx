@@ -634,10 +634,22 @@ const TestDetailsView = ({
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             {student.has_attempted ? (
                                                 <span className={`${
-                                                    student.highest_score >= 70 ? 'text-green-600' :
-                                                    student.highest_score >= 50 ? 'text-yellow-600' : 'text-red-600'
+                                                    (() => {
+                                                        // Use percentage for technical tests, otherwise use highest_score
+                                                        const score = student.percentage !== undefined && student.percentage !== null 
+                                                            ? student.percentage 
+                                                            : student.highest_score;
+                                                        return score >= 70 ? 'text-green-600' :
+                                                               score >= 50 ? 'text-yellow-600' : 'text-red-600';
+                                                    })()
                                                 }`}>
-                                                    {student.highest_score.toFixed(1)}%
+                                                    {(() => {
+                                                        // Use percentage for technical tests, otherwise use highest_score
+                                                        const score = student.percentage !== undefined && student.percentage !== null 
+                                                            ? student.percentage 
+                                                            : student.highest_score;
+                                                        return score.toFixed(1);
+                                                    })()}%
                                                 </span>
                                             ) : (
                                                 <span className="text-gray-400">-</span>
@@ -1739,113 +1751,272 @@ const ResultsManagement = () => {
 
                                             {attempt.detailed_results && attempt.detailed_results.length > 0 && (
                                                 <div className="space-y-3">
-                                                    {attempt.detailed_results.map((result, questionIndex) => (
-                                                        <div key={questionIndex} className="border border-gray-100 rounded-lg p-4">
-                                                            <div className="flex justify-between items-start mb-2">
-                                                                <h5 className="font-medium text-gray-900">
-                                                                    Question {questionIndex + 1}
-                                                                </h5>
-                                                                <div className={`flex items-center gap-1 ${
-                                                                    result.is_correct ? 'text-green-600' : 'text-red-600'
-                                                                }`}>
-                                                                    {result.is_correct ? (
-                                                                        <CheckCircle className="w-5 h-5" />
-                                                                    ) : (
-                                                                        <XCircle className="w-5 h-5" />
-                                                                    )}
-                                                                    <span className="text-sm font-medium">
-                                                                        {result.is_correct ? 'Correct' : 'Incorrect'}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <div className="mb-3">
-                                                                <p className="text-gray-700 mb-2">
-                                                                    {result.question_text || 'Question text not available'}
-                                                                </p>
-                                                            </div>
-
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                <div>
-                                                                    <label className="text-sm font-medium text-gray-600">Student's Answer:</label>
-                                                                    <p className={`mt-1 p-2 rounded ${
-                                                                        result.is_correct ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                                                                    }`}>
-                                                                        {result.student_answer || result.selected_answer || 'No answer provided'}
-                                                                    </p>
-                                                                </div>
-                                                                <div>
-                                                                    <label className="text-sm font-medium text-gray-600">Correct Answer:</label>
-                                                                    <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
-                                                                        {result.correct_answer_text || result.correct_answer || 'Not available'}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Audio-specific details for listening/speaking tests */}
-                                                            {(result.question_type === 'audio' || result.question_type === 'listening' || result.question_type === 'speaking') && (
-                                                                <div className="mt-4 space-y-3">
-                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Student Transcript:</label>
-                                                                            <p className="mt-1 p-2 rounded bg-blue-50 text-blue-800">
-                                                                                {result.student_text || result.student_answer || 'No transcript available'}
+                                                    {attempt.detailed_results.map((result, questionIndex) => {
+                                                        const isCompilerQuestion = result.question_type === 'compiler' || result.question_type === 'technical';
+                                                        
+                                                        // Get test results from multiple sources
+                                                        let testResults = result.test_results || [];
+                                                        
+                                                        // Also check answers object for test results
+                                                        if (isCompilerQuestion && attempt.answers) {
+                                                            const answerData = attempt.answers[result.question_id];
+                                                            if (answerData && answerData.results && answerData.results.test_results) {
+                                                                // Use test results from answers if detailed_results doesn't have them or is incomplete
+                                                                if (testResults.length === 0 || !testResults.length) {
+                                                                    testResults = answerData.results.test_results;
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        // Get code from answers object - always prefer answers object (source of truth)
+                                                        let studentCode = result.student_answer || '';
+                                                        if (isCompilerQuestion && attempt.answers) {
+                                                            const answerData = attempt.answers[result.question_id];
+                                                            if (answerData) {
+                                                                // Always prefer code from answers object
+                                                                if (answerData.code !== undefined && answerData.code !== null) {
+                                                                    studentCode = answerData.code;
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        // Get language from answers if not in detailed_results
+                                                        let questionLanguage = result.language || '';
+                                                        if (isCompilerQuestion && !questionLanguage && attempt.answers) {
+                                                            const answerData = attempt.answers[result.question_id];
+                                                            if (answerData && answerData.language) {
+                                                                questionLanguage = answerData.language;
+                                                            }
+                                                        }
+                                                        
+                                                        return (
+                                                            <div key={questionIndex} className="border border-gray-100 rounded-lg p-4">
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <div className="flex-1">
+                                                                        <h5 className="font-medium text-gray-900">
+                                                                            Question {questionIndex + 1}
+                                                                        </h5>
+                                                                        {(result.question || result.question_text) && (
+                                                                            <p className="text-sm text-gray-600 mt-1">
+                                                                                {result.question || result.question_text}
                                                                             </p>
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Original Text:</label>
-                                                                            <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
-                                                                                {result.original_text || result.correct_answer || 'Not available'}
-                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {isCompilerQuestion && result.score !== undefined && (
+                                                                            <span className="text-xs font-medium text-gray-600">
+                                                                                {result.score}/{result.max_score || 1} ({result.percentage?.toFixed(1) || 0}%)
+                                                                            </span>
+                                                                        )}
+                                                                        <div className={`flex items-center gap-1 ${
+                                                                            result.is_correct ? 'text-green-600' : 'text-red-600'
+                                                                        }`}>
+                                                                            {result.is_correct ? (
+                                                                                <CheckCircle className="w-5 h-5" />
+                                                                            ) : (
+                                                                                <XCircle className="w-5 h-5" />
+                                                                            )}
+                                                                            <span className="text-sm font-medium">
+                                                                                {result.is_correct ? 'Correct' : 'Incorrect'}
+                                                                            </span>
                                                                         </div>
                                                                     </div>
-                                                                    
-                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Similarity Score:</label>
-                                                                            <div className="mt-1 flex items-center gap-2">
-                                                                                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                                                                    <div 
-                                                                                        className={`h-2 rounded-full ${
-                                                                                            result.similarity_score >= 70 ? 'bg-green-500' : 
-                                                                                            result.similarity_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                                                                                        }`}
-                                                                                        style={{ width: `${Math.min(result.similarity_score || 0, 100)}%` }}
-                                                                                    ></div>
-                                                                                </div>
-                                                                                <span className="text-sm font-medium text-gray-700">
-                                                                                    {result.similarity_score?.toFixed(1) || 0}%
+                                                                </div>
+
+                                                                {/* Compiler/Technical Question Display */}
+                                                                {isCompilerQuestion ? (
+                                                                    <div className="space-y-3 mt-3">
+                                                                        {/* Language and Code */}
+                                                                        {questionLanguage && (
+                                                                            <div className="text-xs text-gray-600">
+                                                                                <span className="font-medium">Language: </span>
+                                                                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                                                                                    {questionLanguage}
                                                                                 </span>
                                                                             </div>
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Student Audio:</label>
-                                                                            {result.student_audio_url ? (
-                                                                                <div className="mt-1">
-                                                                                    <audio controls className="w-full">
-                                                                                        <source src={result.student_audio_url} type="audio/webm" />
-                                                                                        <source src={result.student_audio_url} type="audio/wav" />
-                                                                                        <source src={result.student_audio_url} type="audio/mp3" />
-                                                                                        Your browser does not support the audio element.
-                                                                                    </audio>
-                                                                                    <a 
-                                                                                        href={result.student_audio_url} 
-                                                                                        target="_blank" 
-                                                                                        rel="noopener noreferrer"
-                                                                                        className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
-                                                                                    >
-                                                                                        Download Audio
-                                                                                    </a>
+                                                                        )}
+                                                                        
+                                                                        {/* Submitted Code */}
+                                                                        {studentCode ? (
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Student's Code:</label>
+                                                                                <pre className="mt-1 text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto max-h-48 overflow-y-auto">
+                                                                                    <code>{studentCode}</code>
+                                                                                </pre>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="text-xs text-gray-500 italic">
+                                                                                No code submitted
+                                                                            </div>
+                                                                        )}
+                                                                        
+                                                                        {/* Test Case Results */}
+                                                                        {testResults.length > 0 && (
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Test Case Results:</label>
+                                                                                <div className="mt-2 space-y-2">
+                                                                                    {testResults.map((testCase, tcIndex) => (
+                                                                                        <div
+                                                                                            key={tcIndex}
+                                                                                            className={`p-2 rounded border text-xs ${
+                                                                                                testCase.passed
+                                                                                                    ? 'bg-green-50 border-green-200'
+                                                                                                    : testCase.status === 'partial'
+                                                                                                    ? 'bg-yellow-50 border-yellow-200'
+                                                                                                    : 'bg-red-50 border-red-200'
+                                                                                            }`}
+                                                                                        >
+                                                                                            <div className="flex items-center justify-between mb-1">
+                                                                                                <span className="font-medium text-gray-700">
+                                                                                                    Test Case {testCase.test_case_number || tcIndex + 1}
+                                                                                                    {testCase.is_sample && (
+                                                                                                        <span className="ml-2 text-xs text-blue-600">(Sample)</span>
+                                                                                                    )}
+                                                                                                </span>
+                                                                                                <div className="flex items-center gap-2">
+                                                                                                    {testCase.passed && (
+                                                                                                        <span className="text-green-600 font-medium">✓ Passed</span>
+                                                                                                    )}
+                                                                                                    {testCase.status === 'partial' && (
+                                                                                                        <span className="text-yellow-600 font-medium">⚠ Partial</span>
+                                                                                                    )}
+                                                                                                    {!testCase.passed && testCase.status !== 'partial' && (
+                                                                                                        <span className="text-red-600 font-medium">✗ Failed</span>
+                                                                                                    )}
+                                                                                                    <span className="text-gray-600">
+                                                                                                        {testCase.points_earned || 0}/{testCase.points || 1} pts
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                                                                                <div>
+                                                                                                    <span className="text-gray-500">Input: </span>
+                                                                                                    <span className="font-mono bg-gray-100 px-1 rounded">
+                                                                                                        {testCase.input || 'N/A'}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                <div>
+                                                                                                    <span className="text-gray-500">Expected: </span>
+                                                                                                    <span className="font-mono bg-gray-100 px-1 rounded">
+                                                                                                        {testCase.expected_output || 'N/A'}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                <div>
+                                                                                                    <span className="text-gray-500">Actual: </span>
+                                                                                                    <span className={`font-mono px-1 rounded ${
+                                                                                                        testCase.passed ? 'bg-green-100' : 'bg-red-100'
+                                                                                                    }`}>
+                                                                                                        {testCase.actual_output || 'N/A'}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                {testCase.execution_time !== undefined && (
+                                                                                                    <div>
+                                                                                                        <span className="text-gray-500">Time: </span>
+                                                                                                        <span className="font-mono bg-gray-100 px-1 rounded">
+                                                                                                            {testCase.execution_time}ms
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            {testCase.error && (
+                                                                                                <div className="mt-1 text-xs text-red-600 bg-red-50 p-1 rounded">
+                                                                                                    <span className="font-medium">Error: </span>
+                                                                                                    {testCase.error}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    ))}
                                                                                 </div>
-                                                                            ) : (
-                                                                                <p className="mt-1 text-sm text-gray-500">No audio available</p>
-                                                                            )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    /* MCQ Question Display */
+                                                                    <div className="mt-3">
+                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Student's Answer:</label>
+                                                                                <p className={`mt-1 p-2 rounded ${
+                                                                                    result.is_correct ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                                                                                }`}>
+                                                                                    {result.student_answer || result.selected_answer || 'No answer provided'}
+                                                                                </p>
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Correct Answer:</label>
+                                                                                <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
+                                                                                    {result.correct_answer_text || result.correct_answer || 'Not available'}
+                                                                                </p>
+                                                                            </div>
                                                                         </div>
                                                                     </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ))}
+                                                                )}
+
+                                                                {/* Audio-specific details for listening/speaking tests */}
+                                                                {(result.question_type === 'audio' || result.question_type === 'listening' || result.question_type === 'speaking') && (
+                                                                    <div className="mt-4 space-y-3">
+                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Student Transcript:</label>
+                                                                                <p className="mt-1 p-2 rounded bg-blue-50 text-blue-800">
+                                                                                    {result.student_text || result.student_answer || 'No transcript available'}
+                                                                                </p>
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Original Text:</label>
+                                                                                <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
+                                                                                    {result.original_text || result.correct_answer || 'Not available'}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        
+                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Similarity Score:</label>
+                                                                                <div className="mt-1 flex items-center gap-2">
+                                                                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                                                                        <div 
+                                                                                            className={`h-2 rounded-full ${
+                                                                                                result.similarity_score >= 70 ? 'bg-green-500' : 
+                                                                                                result.similarity_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                                                                                            }`}
+                                                                                            style={{ width: `${Math.min(result.similarity_score || 0, 100)}%` }}
+                                                                                        ></div>
+                                                                                    </div>
+                                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                                        {result.similarity_score?.toFixed(1) || 0}%
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Student Audio:</label>
+                                                                                {result.student_audio_url ? (
+                                                                                    <div className="mt-1">
+                                                                                        <audio controls className="w-full">
+                                                                                            <source src={result.student_audio_url} type="audio/webm" />
+                                                                                            <source src={result.student_audio_url} type="audio/wav" />
+                                                                                            <source src={result.student_audio_url} type="audio/mp3" />
+                                                                                            Your browser does not support the audio element.
+                                                                                        </audio>
+                                                                                        <a 
+                                                                                            href={result.student_audio_url} 
+                                                                                            target="_blank" 
+                                                                                            rel="noopener noreferrer"
+                                                                                            className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
+                                                                                        >
+                                                                                            Download Audio
+                                                                                        </a>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <p className="mt-1 text-sm text-gray-500">No audio available</p>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
                                         </div>

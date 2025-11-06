@@ -196,7 +196,7 @@ const StudentDashboard = () => {
       }
     }
     fetchUnlocked()
-  }, [])
+}, [])
 
   const fetchDashboardData = async () => {
     try {
@@ -479,7 +479,7 @@ const StudentDashboard = () => {
                         
                         {examStatus === 'active' && (
                           <Link
-                            to={`/student/exam/${exam._id}`}
+                            to={`/student/exam?testid=${exam._id}`}
                             className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 text-center block"
                           >
                             Start Exam
@@ -613,7 +613,7 @@ const StudentDashboard = () => {
                 Progress Tracker
               </h3>
               <p className="text-gray-600 text-sm">
-                Track your learning progress
+Track your learning progress
               </p>
             </Link>
 
@@ -909,7 +909,7 @@ const StudentDashboard = () => {
                   Maybe Later
                 </button>
                 <Link
-                  to={`/student/exam/${activeExamModal.exam._id}`}
+                  to={`/student/exam?testid=${activeExamModal.exam._id}`}
                   className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 text-center"
                   onClick={() => setActiveExamModal({ show: false, exam: null })}
                 >

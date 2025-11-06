@@ -96,9 +96,13 @@ def subscribe_user():
             'user_id': user_id,
             'endpoint': subscription_endpoint,
             'keys': subscription_keys,
+            'subscription': subscription,  # Store full subscription object
+            'provider': 'vapid',
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow(),
-            'is_active': True
+            'is_active': True,
+            'active': True,
+            'last_seen_at': datetime.utcnow()
         }
 
         # Update or insert subscription by endpoint (ensure uniqueness)
@@ -149,44 +153,54 @@ def get_subscription_status():
     try:
         user_id = get_jwt_identity()
         
-        # Check VAPID subscriptions
-        vapid_subscription = mongo_db.push_subscriptions.find_one({
+        # Get all active subscriptions for user
+        all_subscriptions = list(mongo_db.push_subscriptions.find({
             'user_id': user_id,
-            'is_active': True,
-            'provider': 'vapid'
-        })
-        
-        # Check OneSignal subscriptions
-        onesignal_subscription = mongo_db.push_subscriptions.find_one({
-            'user_id': user_id,
-            'is_active': True,
-            'provider': 'onesignal'
-        })
-        
-        # Also check for subscriptions without provider field (legacy)
-        legacy_subscription = mongo_db.push_subscriptions.find_one({
-            'user_id': user_id,
-            'is_active': True,
-            'provider': {'$exists': False}
-        })
-        
-        is_subscribed = bool(vapid_subscription or onesignal_subscription or legacy_subscription)
-        
+            'is_active': True
+        }))
+
+        # Group by provider
+        vapid_subscriptions = [s for s in all_subscriptions if s.get('provider') == 'vapid']
+        onesignal_subscriptions = [s for s in all_subscriptions if s.get('provider') == 'onesignal']
+        legacy_subscriptions = [s for s in all_subscriptions if not s.get('provider')]
+
+        # Get unique devices
+        unique_devices = set()
+        device_details = {}
+
+        for sub in all_subscriptions:
+            device_id = sub.get('device_id')
+            if device_id:
+                unique_devices.add(device_id)
+                if device_id not in device_details:
+                    device_details[device_id] = {
+                        'device_id': device_id,
+                        'device_info': sub.get('device_info', {}),
+                        'last_seen': sub.get('last_seen_at'),
+                        'providers': []
+                    }
+                if sub.get('provider'):
+                    device_details[device_id]['providers'].append(sub.get('provider'))
+
+        is_subscribed = len(all_subscriptions) > 0
+
         return jsonify({
             'success': True,
             'is_subscribed': is_subscribed,
             'subscriptions': {
-                'vapid': bool(vapid_subscription),
-                'onesignal': bool(onesignal_subscription),
-                'legacy': bool(legacy_subscription)
+                'vapid': len(vapid_subscriptions),
+                'onesignal': len(onesignal_subscriptions),
+                'legacy': len(legacy_subscriptions),
+                'total': len(all_subscriptions)
+            },
+            'devices': {
+                'total': len(unique_devices),
+                'details': list(device_details.values())
             },
             'details': {
-                'vapid_endpoint': vapid_subscription.get('endpoint') if vapid_subscription else None,
-                'onesignal_player_id': onesignal_subscription.get('player_id') if onesignal_subscription else None,
-                'total_devices': mongo_db.push_subscriptions.count_documents({
-                    'user_id': user_id,
-                    'is_active': True
-                })
+                'vapid_endpoints': [s.get('endpoint') for s in vapid_subscriptions],
+                'onesignal_player_ids': [s.get('player_id') for s in onesignal_subscriptions],
+                'legacy_endpoints': [s.get('endpoint') for s in legacy_subscriptions]
             }
         }), 200
         
@@ -222,9 +236,11 @@ def subscription_heartbeat():
             'device_id': device_id,
             'device_info': device_info,
             'is_active': True,
+            'active': True,
+            'last_seen_at': datetime.utcnow(),
             'updated_at': datetime.utcnow()
         }
-        
+
         # Update by endpoint
         result = mongo_db.push_subscriptions.update_one(
             {
@@ -644,4 +660,71 @@ def health_check():
         return jsonify({
             'success': False,
             'message': f'Health check failed: {str(e)}'
+        }), 500
+
+@push_notifications_bp.route('/device-subscriptions/<device_id>', methods=['GET'])
+@jwt_required()
+def get_device_subscriptions(device_id):
+    """Get all subscriptions for a specific device"""
+    try:
+        user_id = get_jwt_identity()
+
+        # Find all subscriptions for this user and device
+        subscriptions = list(mongo_db.push_subscriptions.find({
+            'user_id': user_id,
+            'device_id': device_id,
+            'is_active': True
+        }))
+
+        return jsonify({
+            'success': True,
+            'device_id': device_id,
+            'subscriptions': subscriptions,
+            'count': len(subscriptions),
+            'providers': {
+                'onesignal': len([s for s in subscriptions if s.get('provider') == 'onesignal']),
+                'vapid': len([s for s in subscriptions if s.get('provider') == 'vapid'])
+            }
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting device subscriptions: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to get device subscriptions: {str(e)}'
+        }), 500
+
+@push_notifications_bp.route('/user-devices', methods=['GET'])
+@jwt_required()
+def get_user_devices():
+    """Get all devices for current user"""
+    try:
+        user_id = get_jwt_identity()
+
+        # Find all unique devices for this user
+        device_docs = mongo_db.push_subscriptions.aggregate([
+            {'$match': {'user_id': user_id, 'is_active': True}},
+            {'$group': {
+                '_id': '$device_id',
+                'device_info': {'$first': '$device_info'},
+                'last_seen': {'$max': '$last_seen_at'},
+                'subscription_count': {'$sum': 1},
+                'providers': {'$addToSet': '$provider'}
+            }},
+            {'$sort': {'last_seen': -1}}
+        ])
+
+        devices = list(device_docs)
+
+        return jsonify({
+            'success': True,
+            'devices': devices,
+            'total_devices': len(devices)
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting user devices: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to get user devices: {str(e)}'
         }), 500

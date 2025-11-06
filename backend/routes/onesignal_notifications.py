@@ -34,7 +34,6 @@ from datetime import datetime
 from mongo import mongo_db
 from routes.access_control import require_permission
 from services.oneSignalService import oneSignalService
-from services.vapid_push_service import vapid_service
 from models_push_subscriptions import PushSubscription
 
 onesignal_notifications_bp = Blueprint('onesignal_notifications', __name__)
@@ -408,7 +407,8 @@ def subscribe_user():
             player_id=data['player_id'],
             platform=data.get('platform'),
             browser=data.get('browser'),
-            tags=data.get('tags', [])
+            tags=data.get('tags', []),
+            device_info=data.get('deviceInfo') or {}
         )
 
         if result:
@@ -438,7 +438,7 @@ def unsubscribe_user():
         current_user_id = get_jwt_identity()
         
         # Deactivate OneSignal subscription
-        result = PushSubscription.deactivate_subscription(current_user_id, 'onesignal')
+        result = PushSubscription.deactivate_onesignal_subscription(current_user_id)
 
         if result:
             current_app.logger.info(f"✅ OneSignal subscription deactivated for user {current_user_id}")
@@ -603,6 +603,42 @@ def test_broadcast_notification():
         return jsonify({
             'success': False,
             'message': f'Error sending test notification: {str(e)}'
+        }), 500
+
+@onesignal_notifications_bp.route('/subscription-status', methods=['GET'])
+@jwt_required()
+def get_onesignal_subscription_status():
+    """Get OneSignal subscription status for current user"""
+    try:
+        current_user_id = get_jwt_identity()
+
+        # Check OneSignal subscription in push_subscriptions collection
+        subscription = PushSubscription.get_onesignal_subscription(current_user_id)
+
+        if subscription and subscription.get('is_active'):
+            return jsonify({
+                'success': True,
+                'is_subscribed': True,
+                'player_id': subscription.get('player_id'),
+                'subscription_details': {
+                    'created_at': subscription.get('created_at'),
+                    'last_seen': subscription.get('last_seen_at'),
+                    'platform': subscription.get('platform'),
+                    'browser': subscription.get('browser')
+                }
+            }), 200
+        else:
+            return jsonify({
+                'success': True,
+                'is_subscribed': False,
+                'message': 'No active OneSignal subscription found'
+            }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting OneSignal subscription status: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error getting subscription status: {str(e)}'
         }), 500
 
 @onesignal_notifications_bp.route('/config', methods=['GET'])

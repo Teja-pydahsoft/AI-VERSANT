@@ -4,7 +4,6 @@ import { Bell, BellOff, Check, X } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotification } from '../../contexts/NotificationContext'
 import oneSignalService from '../../services/oneSignalService'
-import pushNotificationService from '../../services/pushNotificationService'
 
 const NotificationSubscribeButton = () => {
   const { user } = useAuth()
@@ -23,33 +22,19 @@ const NotificationSubscribeButton = () => {
 
   const checkSubscriptionStatus = async () => {
     try {
-      console.log('🔍 Checking subscription status...')
+      console.log('🔍 Checking OneSignal subscription status...')
       
-      // First check local status (fast)
+      // Check OneSignal local status
       const oneSignalStatus = oneSignalService.getSubscriptionStatus()
-      const vapidStatus = pushNotificationService.getSubscriptionStatus()
-      const localSubscribed = oneSignalStatus.isSubscribed || vapidStatus.isSubscribed
+      console.log('📊 OneSignal local status:', oneSignalStatus.isSubscribed)
       
-      console.log('📊 Local status:', { oneSignal: oneSignalStatus.isSubscribed, vapid: vapidStatus.isSubscribed })
+      // OneSignal is the source of truth
+      setIsSubscribed(oneSignalStatus.isSubscribed)
       
-      // Then verify with backend (authoritative)
-      try {
-        const backendStatus = await pushNotificationService.checkSubscriptionStatusFromBackend()
-        console.log('📊 Backend status:', backendStatus)
-        
-        // Backend is the source of truth
-        setIsSubscribed(backendStatus.isSubscribed)
-        
-        if (backendStatus.isSubscribed) {
-          console.log('✅ User is subscribed (verified by backend)')
-          console.log('📱 Devices:', backendStatus.details.total_devices)
-        } else {
-          console.log('ℹ️ User is not subscribed')
-        }
-      } catch (backendError) {
-        console.warn('⚠️ Could not verify with backend, using local status:', backendError.message)
-        // Fallback to local status if backend check fails
-        setIsSubscribed(localSubscribed)
+      if (oneSignalStatus.isSubscribed) {
+        console.log('✅ User is subscribed to OneSignal notifications')
+      } else {
+        console.log('ℹ️ User is not subscribed to OneSignal')
       }
       
       setIsInitialized(true)
@@ -77,58 +62,17 @@ const NotificationSubscribeButton = () => {
         return
       }
 
-      // Initialize push notification service if not already initialized
-      // This is optional - if it fails, we'll still have OneSignal
-      try {
-        await pushNotificationService.initialize()
-      } catch (initError) {
-        console.warn('VAPID initialization failed, will use OneSignal only:', initError)
-      }
-
-      // Subscribe to both OneSignal and VAPID
-      const results = await Promise.allSettled([
-        oneSignalService.subscribe(),
-        pushNotificationService.subscribeToVapid()
-      ])
-
-      const oneSignalResult = results[0]
-      const vapidResult = results[1]
-
-      // Log results for debugging
-      console.log('OneSignal subscription:', oneSignalResult)
-      console.log('VAPID subscription:', vapidResult)
-
-      // Check if at least one subscription succeeded
-      // Note: VAPID may return false if not configured, which is OK
-      const oneSignalSuccess = oneSignalResult.status === 'fulfilled' && oneSignalResult.value === true
-      const vapidSuccess = vapidResult.status === 'fulfilled' && vapidResult.value === true
+      console.log('📱 Subscribing to OneSignal notifications...')
       
-      const anySuccess = oneSignalSuccess || vapidSuccess
+      // Subscribe to OneSignal ONLY
+      const oneSignalSuccess = await oneSignalService.subscribe()
 
-      if (anySuccess) {
+      if (oneSignalSuccess) {
         setIsSubscribed(true)
-        
-        // Show appropriate success message
-        if (oneSignalSuccess && vapidSuccess) {
-          success('🔔 Successfully subscribed to push notifications! (OneSignal + VAPID)')
-        } else if (oneSignalSuccess) {
-          success('🔔 Successfully subscribed to push notifications! (OneSignal)')
-        } else if (vapidSuccess) {
-          success('🔔 Successfully subscribed to push notifications! (VAPID)')
-        }
-        
-        // If OneSignal subscription succeeded, notify backend
-        if (oneSignalSuccess) {
-          const playerId = await oneSignalService.getUserId()
-          if (playerId) {
-            await oneSignalService.notifyBackendOfSubscription(playerId)
-          }
-        }
+        success('🔔 Successfully subscribed to push notifications!')
+        console.log('✅ OneSignal subscription successful')
       } else {
-        // If both failed, show error
-        console.error('Both OneSignal and VAPID subscriptions failed')
-        console.error('OneSignal result:', oneSignalResult)
-        console.error('VAPID result:', vapidResult)
+        console.error('OneSignal subscription failed')
         throw new Error('Failed to subscribe to push notifications. Please try again or contact support.')
       }
     } catch (err) {

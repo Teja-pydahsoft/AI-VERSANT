@@ -151,7 +151,18 @@ router.post('/test-created', [
         sent: 0
       });
     }
-
+    const settings = await db.collection('notification_settings').findOne({});
+    logger.info('⚙️ Notification Settings:', settings);
+    console.log("happily got ", settings);
+    if (!settings.pushEnabled && !settings.mailEnabled && !settings.smsEnabled) {
+      logger.warn(`⚠️ No notification types are enabled`);
+      return res.json({
+        success: true,
+        message: 'No notification types are enabled',
+        sent: 0
+      });
+    }
+    if (settings.pushEnabled) {
     // 5. Get push subscriptions for these users
     const subscriptions = await db.collection('push_subscriptions').find({
       user_id: { $in: uniqueUserIds },
@@ -159,16 +170,15 @@ router.post('/test-created', [
     }).toArray();
 
     logger.info(`🔔 Found ${subscriptions.length} active push subscriptions`);
+  
 
-    // 6. Group subscriptions by provider
+    // 6. Filter only OneSignal subscriptions
     const oneSignalSubscriptions = subscriptions.filter(s => s.provider === 'onesignal');
-    const vapidSubscriptions = subscriptions.filter(s => s.provider === 'vapid');
 
     // 7. Send notifications
     const pushNotificationService = require('../services/pushNotificationService');
     const results = {
-      onesignal: { sent: 0, failed: 0 },
-      vapid: { sent: 0, failed: 0 }
+      onesignal: { sent: 0, failed: 0 }
     };
 
     // Notification content
@@ -196,20 +206,6 @@ router.post('/test-created', [
       }
     }
 
-    // Send VAPID notifications
-    if (vapidSubscriptions.length > 0) {
-      for (const sub of vapidSubscriptions) {
-        try {
-          await pushNotificationService.vapidService.send(sub.subscription, title, body, { data });
-          results.vapid.sent++;
-        } catch (error) {
-          results.vapid.failed++;
-          logger.error(`❌ VAPID error for user ${sub.user_id}: ${error.message}`);
-        }
-      }
-      logger.info(`✅ VAPID sent to ${results.vapid.sent} users`);
-    }
-
     res.json({
       success: true,
       message: 'Test created notifications sent',
@@ -221,6 +217,10 @@ router.post('/test-created', [
         results
       }
     });
+    }
+  else{
+    logger.info('⚠️ Push notifications are disabled in settings. Skipping push subscription retrieval.');
+  }
 
   } catch (error) {
     logger.error('❌ Error in test-created notification:', error);
@@ -246,13 +246,23 @@ router.post('/test-reminder', async (req, res) => {
 
     // 1. Get all active tests (endDateTime not passed)
     const activeTests = await db.collection('tests').find({
-      $or: [
-        { endDateTime: { $gt: now } },
-        { end_datetime: { $gt: now } }
-      ],
-      $or: [
-        { is_active: true },
-        { status: 'active' }
+      $and: [
+        {
+          $or: [
+            { endDateTime: { $gt: now } },
+            { end_datetime: { $gt: now } }
+          ]
+        },
+        {
+          $or: [
+            { is_active: true },
+            { status: 'active' },
+            { is_active: { $exists: false } },
+            { is_active: null },
+            { status: { $exists: false } },
+            { status: null }
+          ]
+        }
       ]
     }).toArray();
 
@@ -262,7 +272,7 @@ router.post('/test-reminder', async (req, res) => {
       return res.json({
         success: true,
         message: 'No active tests found',
-        data: { active_tests: 0, total_sent: 0, total_skipped: 0, results: { onesignal: { sent: 0, failed: 0 }, vapid: { sent: 0, failed: 0 } } }
+        data: { active_tests: 0, push_sent: 0, emails_sent: 0, sms_sent: 0, total_skipped: 0, results: { onesignal: { sent: 0, failed: 0 }, email: { sent: 0, failed: 0 }, sms: { sent: 0, failed: 0 } } }
       });
     }
     
@@ -377,7 +387,7 @@ router.post('/test-reminder', async (req, res) => {
       return res.json({
         success: true,
         message: 'No pending tests found',
-        data: { active_tests: activeTests.length, total_sent: 0, total_skipped: studentToTests.size, results: { onesignal: { sent: 0, failed: 0 }, vapid: { sent: 0, failed: 0 } } }
+        data: { active_tests: activeTests.length, push_sent: 0, emails_sent: 0, sms_sent: 0, total_skipped: studentToTests.size, results: { onesignal: { sent: 0, failed: 0 }, email: { sent: 0, failed: 0 }, sms: { sent: 0, failed: 0 } } }
       });
     }
 
@@ -436,7 +446,7 @@ router.post('/test-reminder', async (req, res) => {
       return res.json({
         success: true,
         message: 'No pending tests found after verification',
-        data: { active_tests: activeTests.length, total_sent: 0, total_skipped: studentToTests.size, results: { onesignal: { sent: 0, failed: 0 }, vapid: { sent: 0, failed: 0 } } }
+        data: { active_tests: activeTests.length, push_sent: 0, emails_sent: 0, sms_sent: 0, total_skipped: studentToTests.size, results: { onesignal: { sent: 0, failed: 0 }, email: { sent: 0, failed: 0 }, sms: { sent: 0, failed: 0 } } }
       });
     }
 
@@ -455,12 +465,8 @@ router.post('/test-reminder', async (req, res) => {
     logger.info(`🔔 Found ${subscriptions.length} active push subscriptions`);
 
     if (subscriptions.length === 0) {
-      logger.warn(`⚠️ No active push subscriptions found`);
-      return res.json({
-        success: true,
-        message: 'No active subscriptions found',
-        data: { active_tests: activeTests.length, total_sent: 0, total_skipped: studentPendingTests.size, results: { onesignal: { sent: 0, failed: 0 }, vapid: { sent: 0, failed: 0 } } }
-      });
+      logger.warn(`⚠️ No active push subscriptions found, but continuing with SMS/Email notifications`);
+      // Continue to send SMS/Email even if no push subscriptions
     }
 
     // 8. Send notifications to each user for their pending tests
@@ -468,8 +474,7 @@ router.post('/test-reminder', async (req, res) => {
     
     let totalSent = 0;
     const results = {
-      onesignal: { sent: 0, failed: 0 },
-      vapid: { sent: 0, failed: 0 }
+      onesignal: { sent: 0, failed: 0 }
     };
 
     const pushNotificationService = require('../services/pushNotificationService');
@@ -546,38 +551,109 @@ router.post('/test-reminder', async (req, res) => {
 
       logger.info(`📤 Sending to user ${userId}: "${title}" (${pendingTests.length} pending tests)`);
 
-      // Send based on provider
+      // Send OneSignal notification
       try {
         if (subscription.provider === 'onesignal' && subscription.player_id) {
           await pushNotificationService.oneSignalService.send([subscription.player_id], title, body, { data });
           results.onesignal.sent++;
           totalSent++;
-        } else if (subscription.provider === 'vapid' && subscription.subscription) {
-          await pushNotificationService.vapidService.send(subscription.subscription, title, body, { data });
-          results.vapid.sent++;
-          totalSent++;
         }
       } catch (error) {
-        if (subscription.provider === 'onesignal') {
-          results.onesignal.failed++;
-        } else {
-          results.vapid.failed++;
-        }
+        results.onesignal.failed++;
         logger.error(`❌ Error sending to user ${userId}: ${error.message}`);
       }
     }
 
-    logger.info(`✅ Test reminders complete: ${totalSent} sent`);
+    logger.info(`✅ Push reminders complete: ${totalSent} sent`);
+
+    // Now send SMS and Email reminders
+    logger.info(`📧 Starting SMS and Email reminders...`);
+
+    const notificationService = require('../services/notificationService');
+    let totalEmailsSent = 0;
+    let totalSmsSent = 0;
+    const emailSmsErrors = [];
+
+    for (const [studentId, pendingTests] of studentPendingTests.entries()) {
+      try {
+        // Fetch student details
+        const student = await db.collection('students').findOne({
+          _id: new mongoose.Types.ObjectId(studentId)
+        });
+
+        if (!student) {
+          logger.warn(`⚠️ Student not found: ${studentId}`);
+          continue;
+        }
+
+        const studentName = student.name || 'Student';
+        const studentEmail = student.email;
+        const studentPhone = student.mobile_number;
+
+        // Send reminder for the FIRST pending test (most urgent)
+        const test = pendingTests[0];
+
+        logger.info(`📧📱 Sending SMS/Email reminder to: ${studentName} for test "${test.name}" (${pendingTests.length} pending tests)`);
+
+        // Send email reminder (check if mail is enabled)
+        if (studentEmail) {
+          const emailContent = `This is a reminder to complete your test: "${test.name}".`;
+          const emailMetadata = {
+            subject: `Reminder: Complete Your Test - ${test.name}`,
+            template: 'testReminder',
+            name: studentName,
+            testName: test.name,
+            testId: test.test_id || test._id.toString(),
+            testUrl: `https://crt.pydahsoft.in/student/exam/${test.test_id || test._id}`,
+            endDateTime: test.endDateTime || test.end_datetime
+          };
+          const emailResult = await notificationService.sendNotification('email', studentEmail, emailContent, emailMetadata);
+          if (emailResult.success && emailResult.messageId !== 'disabled-by-settings') {
+            totalEmailsSent++;
+          } else if (!emailResult.success) {
+            emailSmsErrors.push({ studentId, email: studentEmail, error: emailResult.error });
+          }
+        }
+
+        // Send SMS reminder (check if SMS is enabled)
+        if (studentPhone) {
+          const smsContent = `Reminder: You haven't attempted your test "${test.name}". Please complete it. Exam link: https://crt.pydahsoft.in/student/exam/${test.test_id} - Pydah College`;
+          const smsMetadata = { template: 'testReminder' };
+          const smsResult = await notificationService.sendNotification('sms', studentPhone, smsContent, smsMetadata);
+          if (smsResult.success && smsResult.messageId !== 'disabled-by-settings') {
+            totalSmsSent++;
+          } else if (!smsResult.success) {
+            emailSmsErrors.push({ studentId, phone: studentPhone, error: smsResult.error });
+          }
+        }
+
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+      } catch (studentError) {
+        logger.error(`❌ Error processing student ${studentId}:`, studentError.message);
+        emailSmsErrors.push({ studentId, error: studentError.message });
+      }
+    }
+
+    logger.info(`✅ All reminders complete: ${totalSent} push, ${totalEmailsSent} emails, ${totalSmsSent} SMS sent`);
 
     res.json({
       success: true,
-      message: 'Test reminders sent',
+      message: 'Test reminders sent (Push, SMS & Email)',
       data: {
         active_tests: activeTests.length,
         total_students: studentToTests.size,
         students_with_pending: studentPendingTests.size,
-        total_sent: totalSent,
-        results
+        push_sent: totalSent,
+        emails_sent: totalEmailsSent,
+        sms_sent: totalSmsSent,
+        results: {
+          ...results,
+          email: { sent: totalEmailsSent, failed: emailSmsErrors.filter(e => e.email).length },
+          sms: { sent: totalSmsSent, failed: emailSmsErrors.filter(e => e.phone).length }
+        },
+        errors: emailSmsErrors.length > 0 ? emailSmsErrors : undefined
       }
     });
 
@@ -620,13 +696,11 @@ router.post('/broadcast', [
       });
     }
 
-    // 2. Group by provider
+    // 2. Filter only OneSignal subscriptions
     const oneSignalSubs = subscriptions.filter(s => s.provider === 'onesignal');
-    const vapidSubs = subscriptions.filter(s => s.provider === 'vapid');
 
     const results = {
-      onesignal: { sent: 0, failed: 0 },
-      vapid: { sent: 0, failed: 0 }
+      onesignal: { sent: 0, failed: 0 }
     };
 
     const pushNotificationService = require('../services/pushNotificationService');
@@ -653,23 +727,8 @@ router.post('/broadcast', [
       }
     }
 
-    // 4. Send VAPID notifications
-    if (vapidSubs.length > 0) {
-      logger.info(`📱 Sending to ${vapidSubs.length} VAPID subscribers...`);
-      for (const sub of vapidSubs) {
-        try {
-          await pushNotificationService.vapidService.send(sub.subscription, title, message, { data: notificationData });
-          results.vapid.sent++;
-        } catch (error) {
-          results.vapid.failed++;
-          logger.error(`❌ VAPID error for user ${sub.user_id}: ${error.message}`);
-        }
-      }
-      logger.info(`✅ VAPID broadcast sent to ${results.vapid.sent} users`);
-    }
-
-    const totalSent = results.onesignal.sent + results.vapid.sent;
-    const totalFailed = results.onesignal.failed + results.vapid.failed;
+    const totalSent = results.onesignal.sent;
+    const totalFailed = results.onesignal.failed;
 
     res.json({
       success: totalSent > 0,

@@ -3,7 +3,8 @@ const logger = require('../utils/logger');
 
 const connectDatabase = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/versant_notifications';
+    // Use the same database as the backend
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/suma_madam';
     
     const options = {
       useNewUrlParser: true,

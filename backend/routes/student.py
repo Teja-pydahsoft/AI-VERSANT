@@ -806,48 +806,109 @@ def submit_test(test_id):
         current_app.logger.info(f"Student answers: {answers}")
         
         # Process each question and calculate score
+        total_max_score = 0  # For technical tests with variable scoring
         for i, question in enumerate(test.get('questions', [])):
             question_id = str(question.get('_id', i))
             student_answer = answers.get(question_id, '')
+            question_type = question.get('question_type', 'mcq')  # Get question type
             
-            # Get correct answer from question
-            correct_answer_letter = question.get('answer', '')  # A, B, C, or D
-            correct_answer_text = ''
+            # Debug logging for compiler questions
+            if question_type in ['compiler', 'technical']:
+                current_app.logger.info(f"Question {i} (type: {question_type}): question_id={question_id}, found_answer={bool(student_answer)}, answer_keys_in_request={list(answers.keys())[:5]}")
             
-            # Map answer letter to actual option text
-            if correct_answer_letter == 'A':
-                correct_answer_text = question.get('optionA', '')
-            elif correct_answer_letter == 'B':
-                correct_answer_text = question.get('optionB', '')
-            elif correct_answer_letter == 'C':
-                correct_answer_text = question.get('optionC', '')
-            elif correct_answer_letter == 'D':
-                correct_answer_text = question.get('optionD', '')
-            
-            # Check if student answer matches correct answer text
-            is_correct = student_answer == correct_answer_text
-            
-            if is_correct:
-                correct_answers += 1
-                score += 1
-            
-            current_app.logger.info(f"Question {i}: student='{student_answer}', correct='{correct_answer_text}', is_correct={is_correct}")
-            
-            detailed_results.append({
-                'question_index': i,
-                'question_id': question_id,
-                'question': question.get('question', ''),
-                'student_answer': student_answer,
-                'correct_answer_letter': correct_answer_letter,
-                'correct_answer_text': correct_answer_text,
-                'is_correct': is_correct,
-                'score': 1 if is_correct else 0
-            })
+            # Handle different question types
+            if question_type in ['compiler', 'technical'] and isinstance(student_answer, dict):
+                # Compiler/Technical question with pre-calculated results
+                if student_answer.get('results'):
+                    # Use pre-calculated scores from frontend
+                    result_data = student_answer['results']
+                    question_score = result_data.get('total_score', 0)
+                    question_max_score = result_data.get('max_score', 1)
+                    question_percentage = (question_score / question_max_score * 100) if question_max_score > 0 else 0
+                    
+                    total_max_score += question_max_score
+                    score += question_score
+                    
+                    if question_percentage == 100:
+                        correct_answers += 1
+                    
+                    # Get question title/text for compiler questions
+                    question_text = question.get('questionTitle') or question.get('question', '')
+                    
+                    detailed_results.append({
+                        'question_index': i,
+                        'question_id': question_id,
+                        'question': question_text,
+                        'question_type': 'compiler',
+                        'student_answer': student_answer.get('code', ''),
+                        'language': student_answer.get('language', ''),
+                        'is_correct': question_percentage == 100,
+                        'score': question_score,
+                        'max_score': question_max_score,
+                        'percentage': question_percentage,
+                        'test_results': result_data.get('test_results', [])
+                    })
+                else:
+                    # No results provided, count as wrong
+                    question_text = question.get('questionTitle') or question.get('question', '')
+                    detailed_results.append({
+                        'question_index': i,
+                        'question_id': question_id,
+                        'question': question_text,
+                        'question_type': 'compiler',
+                        'student_answer': student_answer.get('code', '') if isinstance(student_answer, dict) else '',
+                        'language': student_answer.get('language', '') if isinstance(student_answer, dict) else '',
+                        'is_correct': False,
+                        'score': 0,
+                        'max_score': 0,
+                        'percentage': 0
+                    })
+                    
+            else:
+                # MCQ question - traditional scoring
+                correct_answer_letter = question.get('answer', '')  # A, B, C, or D
+                correct_answer_text = ''
+                
+                # Map answer letter to actual option text 
+                if correct_answer_letter == 'A':
+                    correct_answer_text = question.get('optionA', '')
+                elif correct_answer_letter == 'B':
+                    correct_answer_text = question.get('optionB', '')
+                elif correct_answer_letter == 'C':
+                    correct_answer_text = question.get('optionC', '')
+                elif correct_answer_letter == 'D':
+                    correct_answer_text = question.get('optionD', '')
+                
+                # Check if student answer matches correct answer text
+                is_correct = student_answer == correct_answer_text
+                
+                if is_correct:
+                    correct_answers += 1
+                    score += 1
+                
+                total_max_score += 1
+                
+                current_app.logger.info(f"Question {i}: student='{student_answer}', correct='{correct_answer_text}', is_correct={is_correct}")
+                
+                detailed_results.append({
+                    'question_index': i,
+                    'question_id': question_id,
+                    'question': question.get('question', ''),
+                    'question_type': 'mcq',
+                    'student_answer': student_answer,
+                    'correct_answer_letter': correct_answer_letter,
+                    'correct_answer_text': correct_answer_text,
+                    'is_correct': is_correct,
+                    'score': 1 if is_correct else 0
+                })
         
-        # Calculate percentage
-        percentage = (score / total_questions) * 100 if total_questions > 0 else 0
+        # Calculate percentage based on actual scoring system
+        if total_max_score > 0:
+            percentage = (score / total_max_score) * 100
+        else:
+            percentage = (score / total_questions) * 100 if total_questions > 0 else 0
         
-        current_app.logger.info(f"Final score: {score}/{total_questions} = {percentage:.2f}%")
+        current_app.logger.info(f"Final score: {score}/{total_max_score} = {percentage:.2f}%")
         
         # Calculate duration
         end_time = datetime.now(pytz.utc)
@@ -905,39 +966,68 @@ def submit_test(test_id):
                         question_obj = test['questions'][question_index]
                         question_id = str(question_obj.get('_id', ''))
                 
-                # Convert option text back to option letter for storage
-                student_answer_letter = ''
-                correct_answer_letter = result.get('correct_answer_letter', '')
+                # Handle different question types
+                question_type = result.get('question_type', 'mcq')
                 
-                # Find which option letter corresponds to the student's text answer
-                question_obj = None
-                for q in test.get('questions', []):
-                    if str(q.get('_id', '')) == question_id:
-                        question_obj = q
-                        break
-                
-                if question_obj:
-                    student_answer_text = result.get('student_answer', '')
-                    # Map student answer text back to option letter
-                    if student_answer_text == question_obj.get('optionA', ''):
-                        student_answer_letter = 'A'
-                    elif student_answer_text == question_obj.get('optionB', ''):
-                        student_answer_letter = 'B'
-                    elif student_answer_text == question_obj.get('optionC', ''):
-                        student_answer_letter = 'C'
-                    elif student_answer_text == question_obj.get('optionD', ''):
-                        student_answer_letter = 'D'
-                
-                results_for_test_results.append({
-                    'question_id': question_id,
-                    'question': result.get('question', ''),
-                    'student_answer': student_answer_letter,
-                    'correct_answer': correct_answer_letter,
-                    'is_correct': result.get('is_correct', False),
-                    'score': {'$numberInt': str(result.get('score', 0) * 100)}  # Convert to percentage format
-                })
+                if question_type == 'compiler':
+                    # For compiler questions, store differently
+                    results_for_test_results.append({
+                        'question_id': question_id,
+                        'question': result.get('question', ''),
+                        'question_type': 'compiler',
+                        'student_answer': result.get('student_answer', ''),
+                        'language': result.get('language', ''),
+                        'is_correct': result.get('is_correct', False),
+                        'score': result.get('score', 0),
+                        'max_score': result.get('max_score', 0),
+                        'percentage': result.get('percentage', 0),
+                        'test_results': result.get('test_results', [])
+                    })
+                else:
+                    # MCQ questions - convert option text back to option letter for storage
+                    student_answer_letter = ''
+                    correct_answer_letter = result.get('correct_answer_letter', '')
+                    
+                    # Find which option letter corresponds to the student's text answer
+                    question_obj = None
+                    for q in test.get('questions', []):
+                        if str(q.get('_id', '')) == question_id:
+                            question_obj = q
+                            break
+                    
+                    if question_obj:
+                        student_answer_text = result.get('student_answer', '')
+                        # Map student answer text back to option letter
+                        if student_answer_text == question_obj.get('optionA', ''):
+                            student_answer_letter = 'A'
+                        elif student_answer_text == question_obj.get('optionB', ''):
+                            student_answer_letter = 'B'
+                        elif student_answer_text == question_obj.get('optionC', ''):
+                            student_answer_letter = 'C'
+                        elif student_answer_text == question_obj.get('optionD', ''):
+                            student_answer_letter = 'D'
+                    
+                    results_for_test_results.append({
+                        'question_id': question_id,
+                        'question': result.get('question', ''),
+                        'question_type': 'mcq',
+                        'student_answer': student_answer_letter,
+                        'correct_answer': correct_answer_letter,
+                        'is_correct': result.get('is_correct', False),
+                        'score': {'$numberInt': str(result.get('score', 0) * 100)}  # Convert to percentage format
+                    })
             
             # Create test_results document
+            # Determine if we need to convert score format
+            # For pure MCQ tests, multiply by 100. For mixed/compiler tests, score is already in points
+            # We can detect by checking if we have variable scoring (total_max_score != total_questions)
+            if total_max_score == total_questions:
+                # Pure MCQ test - convert to percentage format (score * 100)
+                total_score_format = {'$numberInt': str(score * 100)}
+            else:
+                # Mixed test with variable scoring - score is already in actual points
+                total_score_format = {'$numberDouble': str(float(score))}
+            
             test_result_doc = {
                 'student_id': ObjectId(current_user_id) if isinstance(current_user_id, str) else current_user_id,
                 'test_id': ObjectId(test_id),
@@ -945,7 +1035,7 @@ def submit_test(test_id):
                 'subcategory': test.get('subcategory', ''),
                 'level_id': test.get('level_id'),
                 'results': results_for_test_results,
-                'total_score': {'$numberInt': str(score * 100)},  # Total score in percentage format
+                'total_score': total_score_format,
                 'average_score': {'$numberDouble': str(percentage)},  # Average percentage
                 'correct_answers': {'$numberInt': str(correct_answers)},
                 'total_questions': {'$numberInt': str(total_questions)},
@@ -953,6 +1043,10 @@ def submit_test(test_id):
                 'test_type': test.get('test_type', 'online'),
                 'time_taken': {'$numberInt': str(int(duration_seconds))}
             }
+            
+            # Add max_score only for mixed tests
+            if total_max_score != total_questions:
+                test_result_doc['max_score'] = {'$numberDouble': str(float(total_max_score))}
             
             # Insert into test_results collection
             mongo_db.test_results.insert_one(test_result_doc)
@@ -1554,6 +1648,25 @@ def get_single_test(test_id):
                     shuffled_q['shuffled_answer'] = answer_map.get(answer_letter)
                     shuffled_questions.append(shuffled_q)
 
+                elif q.get('question_type') in ['compiler', 'technical', 'compiler_integrated']:
+                    # Handle compiler/technical questions with test cases
+                    clean_q = {
+                        "question_id": str(q.get('_id', f"q_{idx+1}")),
+                        "question": q.get('question'),
+                        "questionTitle": q.get('questionTitle', ''),
+                        "problemStatement": q.get('problemStatement', ''),
+                        "question_type": q.get('question_type'),
+                        "instructions": q.get('instructions', ''),
+                        "language": q.get('language', 'python'),
+                        "test_cases": q.get('test_cases', q.get('testCases', []))
+                    }
+                    processed_questions.append(clean_q)
+                    
+                    # Store shuffled question data for validation
+                    shuffled_q = q.copy()
+                    shuffled_questions.append(shuffled_q)
+                    current_app.logger.info(f"Processed compiler question: {clean_q['question'][:50]}...")
+
                 elif q.get('question_type') in ['sentence', 'listening', 'speaking']:
                     # Handle listening/speaking questions with proper audio support
                     has_audio = q.get('has_audio', False) or bool(q.get('audio_url'))
@@ -1836,17 +1949,32 @@ def get_test_history():
                 
                 # Calculate proper percentage for different test types
                 if attempt.get('test_type') == 'online':
-                    # For online exams, use score field and calculate percentage
-                    score = attempt.get('score', 0)
-                    total_marks = attempt.get('total_marks', 0)
-                    
-                    if total_marks > 0:
-                        calculated_percentage = (score / total_marks) * 100
-                        attempt['score_percentage'] = calculated_percentage
-                        attempt['average_score'] = calculated_percentage
+                    # For technical tests with partial credit, use percentage field if available
+                    # Otherwise, calculate from score and total_marks
+                    if attempt.get('percentage') is not None:
+                        # Technical test with partial credit - use stored percentage
+                        attempt['score_percentage'] = attempt['percentage']
+                        attempt['average_score'] = attempt['percentage']
                     else:
-                        attempt['score_percentage'] = 0
-                        attempt['average_score'] = 0
+                        # For regular MCQ tests, use score field and calculate percentage
+                        score = attempt.get('score', 0)
+                        total_marks = attempt.get('total_marks', 0)
+                        
+                        if total_marks > 0:
+                            calculated_percentage = (score / total_marks) * 100
+                            attempt['score_percentage'] = calculated_percentage
+                            attempt['average_score'] = calculated_percentage
+                        else:
+                            # Fallback: try to calculate from correct_answers and total_questions
+                            correct_answers = attempt.get('correct_answers', 0)
+                            total_questions = attempt.get('total_questions', 0)
+                            if total_questions > 0:
+                                calculated_percentage = (correct_answers / total_questions) * 100
+                                attempt['score_percentage'] = calculated_percentage
+                                attempt['average_score'] = calculated_percentage
+                            else:
+                                attempt['score_percentage'] = 0
+                                attempt['average_score'] = 0
                 elif attempt.get('test_type') == 'practice':
                     # For practice tests, use existing percentage or calculate from score
                     if 'percentage' in attempt and attempt['percentage'] is not None:

@@ -1,6 +1,6 @@
 """
 Push Subscriptions Model
-Stores push notification subscriptions for OneSignal and VAPID
+Stores push notification subscriptions for OneSignal ONLY
 """
 
 from datetime import datetime
@@ -8,10 +8,10 @@ from bson import ObjectId
 from mongo import mongo_db
 
 class PushSubscription:
-    """Model for managing push notification subscriptions"""
+    """Model for managing OneSignal push notification subscriptions"""
     
     @staticmethod
-    def create_onesignal_subscription(user_id, player_id, platform=None, browser=None, tags=None):
+    def create_onesignal_subscription(user_id, player_id, platform=None, browser=None, tags=None, device_info=None):
         """Create or update OneSignal subscription"""
         now = datetime.utcnow()
         
@@ -22,9 +22,11 @@ class PushSubscription:
             'tags': tags or [],
             'platform': platform,
             'browser': browser,
+            'device_info': device_info or {},
             'is_active': True,
             'last_seen_at': now,
             'last_subscribed': now,
+            'last_heartbeat': now,
             'created_at': now,
             'updated_at': now
         }
@@ -33,40 +35,8 @@ class PushSubscription:
         result = mongo_db.db.push_subscriptions.update_one(
             {
                 'user_id': subscription_data['user_id'],
-                'provider': 'onesignal'
-            },
-            {'$set': subscription_data},
-            upsert=True
-        )
-        
-        return result.modified_count > 0 or result.upserted_id is not None
-    
-    @staticmethod
-    def create_vapid_subscription(user_id, subscription, user_agent=None):
-        """Create or update VAPID subscription"""
-        now = datetime.utcnow()
-        
-        subscription_data = {
-            'user_id': user_id if isinstance(user_id, str) else str(user_id),
-            'provider': 'vapid',
-            'endpoint': subscription.get('endpoint'),
-            'keys': subscription.get('keys', {}),
-            'subscription': subscription,
-            'user_agent': user_agent,
-            'is_active': True,
-            'active': True,
-            'timestamp': now,
-            'last_seen_at': now,
-            'created_at': now,
-            'updated_at': now
-        }
-        
-        # Upsert: update if exists, create if not
-        result = mongo_db.db.push_subscriptions.update_one(
-            {
-                'user_id': subscription_data['user_id'],
-                'provider': 'vapid',
-                'endpoint': subscription.get('endpoint')
+                'provider': 'onesignal',
+                'player_id': player_id  # Ensure uniqueness per device
             },
             {'$set': subscription_data},
             upsert=True
@@ -95,30 +65,19 @@ class PushSubscription:
         })
     
     @staticmethod
-    def get_vapid_subscriptions(user_id):
-        """Get all VAPID subscriptions for a user"""
-        user_id_str = user_id if isinstance(user_id, str) else str(user_id)
-        return list(mongo_db.db.push_subscriptions.find({
-            'user_id': user_id_str,
-            'provider': 'vapid',
-            'is_active': True
-        }))
-    
-    @staticmethod
-    def deactivate_subscription(user_id, provider):
-        """Deactivate a subscription"""
+    def deactivate_onesignal_subscription(user_id):
+        """Deactivate OneSignal subscription for a user"""
         user_id_str = user_id if isinstance(user_id, str) else str(user_id)
         now = datetime.utcnow()
         
         result = mongo_db.db.push_subscriptions.update_many(
             {
                 'user_id': user_id_str,
-                'provider': provider
+                'provider': 'onesignal'
             },
             {
                 '$set': {
                     'is_active': False,
-                    'active': False,
                     'last_unsubscribed': now,
                     'updated_at': now
                 }
@@ -127,12 +86,12 @@ class PushSubscription:
         return result.modified_count > 0
     
     @staticmethod
-    def delete_subscription(user_id, provider):
-        """Delete a subscription"""
+    def delete_onesignal_subscription(user_id):
+        """Delete OneSignal subscription for a user"""
         user_id_str = user_id if isinstance(user_id, str) else str(user_id)
         result = mongo_db.db.push_subscriptions.delete_many({
             'user_id': user_id_str,
-            'provider': provider
+            'provider': 'onesignal'
         })
         return result.deleted_count > 0
     
@@ -164,23 +123,17 @@ class PushSubscription:
     
     @staticmethod
     def get_subscription_stats():
-        """Get subscription statistics"""
+        """Get OneSignal subscription statistics"""
         total_onesignal = mongo_db.db.push_subscriptions.count_documents({
             'provider': 'onesignal',
-            'is_active': True
-        })
-        
-        total_vapid = mongo_db.db.push_subscriptions.count_documents({
-            'provider': 'vapid',
             'is_active': True
         })
         
         total_users = mongo_db.db.users.count_documents({})
         
         return {
-            'total_subscriptions': total_onesignal + total_vapid,
+            'total_subscriptions': total_onesignal,
             'onesignal_subscriptions': total_onesignal,
-            'vapid_subscriptions': total_vapid,
             'total_users': total_users,
-            'subscription_rate': round(((total_onesignal + total_vapid) / total_users * 100), 2) if total_users > 0 else 0
+            'subscription_rate': round((total_onesignal / total_users * 100), 2) if total_users > 0 else 0
         }

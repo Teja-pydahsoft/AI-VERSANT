@@ -72,7 +72,7 @@ def release_test_results(test_id):
     try:
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
-        allowed_roles = ['superadmin', 'campus_admin']
+        allowed_roles = ['superadmin', 'campus_admin', 'sub_superadmin']
         if not user or user.get('role') not in allowed_roles:
             return jsonify({
                 'success': False,
@@ -135,7 +135,7 @@ def unrelease_test_results(test_id):
     try:
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
-        allowed_roles = ['superadmin', 'campus_admin']
+        allowed_roles = ['superadmin', 'campus_admin', 'sub_superadmin']
         if not user or user.get('role') not in allowed_roles:
             return jsonify({
                 'success': False,
@@ -199,7 +199,7 @@ def get_test_release_status(test_id):
         # Check user permissions
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
-        allowed_roles = ['superadmin', 'campus_admin']
+        allowed_roles = ['superadmin', 'campus_admin', 'sub_superadmin']
         if not user or user.get('role') not in allowed_roles:
             return jsonify({
                 'success': False,

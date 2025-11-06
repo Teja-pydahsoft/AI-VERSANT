@@ -38,6 +38,7 @@ const Login = () => {
         // Redirect based on user role
         const roleRoutes = {
           superadmin: '/superadmin',
+          sub_superadmin: '/superadmin',  // Sub-superadmins use superadmin dashboard
           campus_admin: '/campus-admin',
           course_admin: '/course-admin',
           student: '/student',

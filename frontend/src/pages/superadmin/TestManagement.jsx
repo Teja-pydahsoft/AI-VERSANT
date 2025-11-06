@@ -9,7 +9,7 @@ import { toast } from 'react-hot-toast'
 
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import api from '../../services/api'
-import { Upload, Plus, Trash2, ChevronLeft, ChevronRight, FileText, CheckCircle, Briefcase, Users, FileQuestion, Sparkles, Eye, Edit, MoreVertical, Play, Pause, AlertTriangle, ChevronDown, Code, Mic, AlertCircle, X, Shuffle } from 'lucide-react'
+import { Upload, Plus, Trash2, ChevronLeft, ChevronRight, FileText, CheckCircle, Briefcase, Users, FileQuestion, Sparkles, Eye, Edit, MoreVertical, Play, Pause, AlertTriangle, ChevronDown, Code, Mic, AlertCircle, X, Shuffle, Download } from 'lucide-react'
 import { MultiSelect } from 'react-multi-select-component'
 import clsx from 'clsx'
 import Papa from 'papaparse'
@@ -2891,6 +2891,11 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
       formData.append('module_id', testData.module);
       formData.append('level_id', testData.level);
 
+      // Add question type for technical tests
+      if (testData.technical_question_type) {
+        formData.append('question_type', testData.technical_question_type);
+      }
+
       if (testData.subcategory) {
         formData.append('subcategory', testData.subcategory);
       }
@@ -3481,15 +3486,46 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
               {testData.technical_question_type === 'compiler' ? (
                 <div className="text-sm text-blue-800">
                   <p className="mb-2"><strong>Required CSV Format for Compiler-Integrated Questions:</strong></p>
-                  <div className="space-y-1 font-mono text-xs">
-                    <div>• QuestionTitle, ProblemStatement</div>
-                    <div>• TestCaseID, Input, ExpectedOutput</div>
-                    <div>• Language (python, java, cpp, javascript)</div>
-                    <div>• Instructions (optional)</div>
+                  <div className="space-y-1 font-mono text-xs bg-white p-3 rounded border border-blue-200">
+                    <div><strong>Columns:</strong></div>
+                    <div>• QuestionTitle - Title of the problem</div>
+                    <div>• ProblemStatement - Detailed problem description</div>
+                    <div>• Language - python, c, cpp, java, html</div>
+                    <div>• Instructions - How to solve (optional)</div>
+                    <div>• TestCaseID - Unique ID (TC001, TC002, etc.)</div>
+                    <div>• Input - Test case input</div>
+                    <div>• ExpectedOutput - Expected output</div>
+                    <div>• Points - Points for this test case (default: 5)</div>
+                    <div>• IsSample - true/false (visible to students)</div>
                   </div>
-                  <p className="mt-3 text-xs">
-                    <strong>Example:</strong> "Reverse String", "Write a function to reverse a string", "TC001", "hello", "olleh", "python"
+                  <p className="mt-3 text-xs bg-white p-2 rounded border border-blue-200">
+                    <strong>Example Row:</strong><br/>
+                    "Reverse String", "Write a function to reverse a string", "python", "Read string and print reversed", "TC001", "hello", "olleh", "5", "true"
                   </p>
+                  <p className="mt-2 text-xs text-blue-700">
+                    <strong>Note:</strong> Multiple test cases for same question = multiple rows with same QuestionTitle
+                  </p>
+                  <button
+                    onClick={() => {
+                      const csvContent = `QuestionTitle,ProblemStatement,Language,Instructions,TestCaseID,Input,ExpectedOutput,Points,IsSample
+Reverse String,Write a function that takes a string as input and returns the reversed string,python,"Read a string from input and print the reversed string",TC001,hello,olleh,5,true
+Reverse String,Write a function that takes a string as input and returns the reversed string,python,"Read a string from input and print the reversed string",TC002,world,dlrow,5,false
+Sum Two Numbers,Write a program that reads two integers and prints their sum,python,"Read two integers from input (one per line) and print their sum",TC001,"5\n3",8,5,true
+Sum Two Numbers,Write a program that reads two integers and prints their sum,python,"Read two integers from input (one per line) and print their sum",TC002,"10\n20",30,5,false`;
+                      const blob = new Blob([csvContent], { type: 'text/csv' });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'CRT_TECHNICAL_SAMPLE.csv';
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                      toast.success('Sample CSV downloaded!');
+                    }}
+                    className="mt-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download Sample CSV
+                  </button>
                 </div>
               ) : (
                 <div className="text-sm text-blue-800">
@@ -3841,7 +3877,7 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
                           )}
                         </>
                       )}
-                      {question.question_type === 'compiler_integrated' && (
+                      {(question.question_type === 'compiler_integrated' || question.question_type === 'compiler') && (
                         <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
                           Compiler
                         </span>
@@ -3911,7 +3947,7 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
                         ))}
                       </div>
                     </div>
-                  ) : question.question_type === 'compiler_integrated' ? (
+                  ) : (question.question_type === 'compiler_integrated' || question.question_type === 'compiler') ? (
                     <div>
                       <div className="mb-3">
                         <h4 className="font-medium text-gray-800 mb-2">{question.questionTitle || question.question}</h4>
@@ -3926,20 +3962,24 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
                             <span className="font-medium">Instructions:</span> {question.instructions}
                           </div>
                         )}
-                        {question.testCases && question.testCases.length > 0 && (
+                        {(question.testCases || question.test_cases) && (question.testCases?.length > 0 || question.test_cases?.length > 0) && (
                           <div className="bg-gray-50 p-2 rounded">
-                            <span className="font-medium">Test Cases:</span> {question.testCases.length} case(s)
+                            <span className="font-medium">Test Cases:</span> {(question.testCases || question.test_cases).length} case(s)
                             <div className="mt-2 space-y-1">
-                              {Array.isArray(question.testCases) ? (
-                                question.testCases.map((testCase, idx) => (
+                              {Array.isArray(question.testCases || question.test_cases) ? (
+                                (question.testCases || question.test_cases).map((testCase, idx) => (
                                   <div key={idx} className="text-xs bg-white p-1 rounded border">
                                     <div><strong>Input:</strong> {testCase.input || testCase}</div>
-                                    <div><strong>Expected:</strong> {testCase.expectedOutput || 'N/A'}</div>
+                                    <div><strong>Expected:</strong> {testCase.expected_output || testCase.expectedOutput || 'N/A'}</div>
+                                    <div><strong>Points:</strong> {testCase.points || 5}</div>
+                                    {testCase.is_sample !== undefined && (
+                                      <div><strong>Sample:</strong> {testCase.is_sample ? 'Yes (Visible)' : 'No (Hidden)'}</div>
+                                    )}
                                   </div>
                                 ))
                               ) : (
                                 <div className="text-xs bg-white p-1 rounded border">
-                                  <div><strong>Test Cases:</strong> {question.testCases}</div>
+                                  <div><strong>Test Cases:</strong> {question.testCases || question.test_cases}</div>
                                 </div>
                               )}
                             </div>
@@ -4078,6 +4118,12 @@ const Step6ConfirmAndGenerate = ({ prevStep, testData, onTestCreated, uploadedQu
   const onSubmit = async (data) => {
     setLoading(true)
     try {
+      // Ensure all questions have test_cases array for consistency
+      const processedQuestions = uploadedQuestions.map(question => ({
+        ...question,
+        test_cases: question.test_cases || [] // Ensure test_cases array exists
+      }));
+
       const payload = {
         test_name: testData.test_name,
         test_type: testData.test_type?.toLowerCase(),
@@ -4085,10 +4131,15 @@ const Step6ConfirmAndGenerate = ({ prevStep, testData, onTestCreated, uploadedQu
         campus_id: testData.campus?.value,
         course_ids: testData.courses.map(c => c.value),
         batch_ids: testData.batches.map(b => b.value),
-        questions: uploadedQuestions,
+        questions: processedQuestions,
         audio_config: isMcqModule ? {} : { accent: data.accent, speed: data.speed },
         assigned_student_ids: studentList && studentList.length > 0 ? studentList.map(s => s.id) : [], // Only assign to confirmed students
       };
+
+      // Add question_type for CRT modules to ensure proper backend identification
+      if (testData.module?.startsWith('CRT_')) {
+        payload.question_type = testData.module === 'CRT_TECHNICAL' ? 'compiler' : 'mcq';
+      }
       if (testData.test_type?.toLowerCase() === 'online') {
         // Always send ISO strings for startDateTime and endDateTime
         if (!testData.startDateTime || !testData.endDateTime) {

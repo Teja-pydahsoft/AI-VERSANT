@@ -19,43 +19,42 @@ const validateRequest = (req, res, next) => {
   next();
 };
 
-// Register user subscription
+/**
+ * Register OneSignal subscription
+ * Expects: userId, userEmail, player_id (OneSignal), deviceInfo, tags
+ */
 router.post('/register', [
   body('userId').notEmpty().withMessage('User ID is required'),
   body('userEmail').isEmail().withMessage('Valid email is required'),
-  body('subscription').isObject().withMessage('Subscription object is required'),
-  body('subscription.endpoint').notEmpty().withMessage('Subscription endpoint is required'),
-  body('subscription.keys.p256dh').notEmpty().withMessage('P256DH key is required'),
-  body('subscription.keys.auth').notEmpty().withMessage('Auth key is required'),
+  body('player_id').notEmpty().withMessage('OneSignal player_id is required'),
   body('deviceInfo').optional().isObject(),
-  body('device_id').optional().isString()
+  body('tags').optional().isArray()
 ], validateRequest, async (req, res) => {
   try {
-    const { userId, userEmail, subscription, deviceInfo = {}, device_id, last_verified } = req.body;
+    const { userId, userEmail, player_id, onesignal_user_id, deviceInfo = {}, tags = [] } = req.body;
 
-    logger.info(`📱 Registering push subscription for user: ${userId} (${userEmail})`);
-    if (device_id) {
-      logger.info(`🔑 Device ID: ${device_id}`);
-    }
+    logger.info(`📱 Registering OneSignal subscription for user: ${userId} (${userEmail})`);
+    logger.info(`🔑 OneSignal Player ID: ${player_id}`);
 
-    // Check if subscription already exists
+    // Check if subscription already exists for this player_id
     const existingSubscription = await UserSubscription.findOne({
-      userId,
-      'subscription.endpoint': subscription.endpoint
+      player_id: player_id
     });
 
     if (existingSubscription) {
       // Update existing subscription
-      existingSubscription.subscription = subscription;
-      existingSubscription.deviceInfo = deviceInfo;
-      existingSubscription.device_id = device_id;
-      existingSubscription.last_verified = last_verified || new Date();
-      existingSubscription.isActive = true;
-      existingSubscription.lastUsed = new Date();
+      existingSubscription.user_id = userId;
+      existingSubscription.userEmail = userEmail;
+      existingSubscription.device_info = deviceInfo;
+      existingSubscription.tags = tags;
+      existingSubscription.provider = 'onesignal';
+      existingSubscription.is_active = true;
+      existingSubscription.last_seen_at = new Date();
       existingSubscription.last_heartbeat = new Date();
+      existingSubscription.last_subscribed = new Date();
       await existingSubscription.save();
 
-      logger.info(`✅ Updated existing subscription for user: ${userId}`);
+      logger.info(`✅ Updated existing OneSignal subscription for user: ${userId}`);
       
       return res.json({
         success: true,
@@ -64,26 +63,28 @@ router.post('/register', [
           subscriptionId: existingSubscription._id,
           userId,
           userEmail,
-          device_id: existingSubscription.device_id
+          player_id: existingSubscription.player_id
         }
       });
     }
 
     // Create new subscription
     const newSubscription = new UserSubscription({
-      userId,
+      user_id: userId,
       userEmail,
-      subscription,
-      deviceInfo,
-      device_id,
-      last_verified: last_verified || new Date(),
+      player_id,
+      provider: 'onesignal',
+      device_info: deviceInfo,
+      tags,
+      is_active: true,
       last_heartbeat: new Date(),
-      isActive: true
+      last_subscribed: new Date(),
+      last_seen_at: new Date()
     });
 
     await newSubscription.save();
 
-    logger.info(`✅ New subscription registered for user: ${userId}`);
+    logger.info(`✅ New OneSignal subscription registered for user: ${userId}`);
 
     res.json({
       success: true,
@@ -92,12 +93,12 @@ router.post('/register', [
         subscriptionId: newSubscription._id,
         userId,
         userEmail,
-        device_id: newSubscription.device_id
+        player_id: newSubscription.player_id
       }
     });
 
   } catch (error) {
-    logger.error('Error registering subscription:', error);
+    logger.error('Error registering OneSignal subscription:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to register subscription',
@@ -106,37 +107,38 @@ router.post('/register', [
   }
 });
 
-// Heartbeat endpoint - verify device is still active
+/**
+ * Heartbeat endpoint - verify device is still active
+ * Expects: userId, player_id
+ */
 router.post('/heartbeat', [
   body('userId').notEmpty().withMessage('User ID is required'),
-  body('device_id').notEmpty().withMessage('Device ID is required'),
-  body('endpoint').notEmpty().withMessage('Endpoint is required')
+  body('player_id').notEmpty().withMessage('OneSignal player_id is required')
 ], validateRequest, async (req, res) => {
   try {
-    const { userId, device_id, endpoint, deviceInfo, timestamp } = req.body;
+    const { userId, player_id, deviceInfo } = req.body;
 
-    logger.info(`💓 Heartbeat received from user: ${userId}, device: ${device_id}`);
+    logger.info(`💓 Heartbeat received from user: ${userId}, player_id: ${player_id}`);
 
     // Find and update subscription
     const subscription = await UserSubscription.findOneAndUpdate(
       {
-        userId,
-        'subscription.endpoint': endpoint
+        user_id: userId,
+        player_id: player_id
       },
       {
         $set: {
           last_heartbeat: new Date(),
-          last_verified: new Date(),
-          deviceInfo: deviceInfo || {},
-          isActive: true,
-          lastUsed: new Date()
+          device_info: deviceInfo || {},
+          is_active: true,
+          last_seen_at: new Date()
         }
       },
       { new: true }
     );
 
     if (!subscription) {
-      logger.warn(`⚠️ Heartbeat received but no subscription found for user ${userId}, device ${device_id}`);
+      logger.warn(`⚠️ Heartbeat received but no subscription found for user ${userId}, player_id ${player_id}`);
       return res.status(404).json({
         success: false,
         message: 'Subscription not found',
@@ -151,7 +153,7 @@ router.post('/heartbeat', [
       message: 'Heartbeat received',
       data: {
         last_heartbeat: subscription.last_heartbeat,
-        last_verified: subscription.last_verified
+        is_active: subscription.is_active
       }
     });
 
@@ -165,7 +167,10 @@ router.post('/heartbeat', [
   }
 });
 
-// Send notification to specific user
+/**
+ * Send notification to specific user
+ * Gets all active OneSignal subscriptions for the user and sends to all devices
+ */
 router.post('/send-to-user', [
   body('userId').notEmpty().withMessage('User ID is required'),
   body('title').notEmpty().withMessage('Title is required'),
@@ -175,45 +180,56 @@ router.post('/send-to-user', [
   try {
     const { userId, title, body, data = {} } = req.body;
 
-    logger.info(`🔔 Sending push notification to user: ${userId}`);
+    logger.info(`🔔 Sending OneSignal push notification to user: ${userId}`);
 
-    // Get user's active subscriptions
+    // Get user's active OneSignal subscriptions
     const subscriptions = await UserSubscription.find({
-      userId,
-      isActive: true
+      user_id: userId,
+      is_active: true
     });
 
     if (subscriptions.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'No active subscriptions found for this user'
+        message: 'No active OneSignal subscriptions found for this user'
       });
     }
 
+    logger.info(`📱 Found ${subscriptions.length} active device(s) for user ${userId}`);
+
     // Send to all user's devices
     const results = [];
-    for (const subscription of subscriptions) {
-      try {
-        const result = await pushNotificationService.send(
-          subscription.subscription,
-          title,
-          body,
-          {
+    const playerIds = subscriptions.map(s => s.player_id);
+    
+    try {
+      const result = await pushNotificationService.oneSignalService.send(
+        playerIds,
+        title,
+        body,
+        {
+          data: {
             ...data,
             userId,
-            userEmail: subscription.userEmail,
-            subscriptionId: subscription._id
+            userEmail: subscriptions[0].userEmail
           }
-        );
-        results.push({ ...result, subscriptionId: subscription._id });
-      } catch (error) {
-        logger.error(`Failed to send to subscription ${subscription._id}:`, error);
-        results.push({
-          success: false,
-          subscriptionId: subscription._id,
-          error: error.message
-        });
-      }
+        }
+      );
+      
+      results.push({
+        success: true,
+        provider: 'OneSignal',
+        messageId: result.messageId,
+        recipients: result.recipients
+      });
+      
+      logger.info(`✅ OneSignal notification sent to ${playerIds.length} devices`);
+      
+    } catch (error) {
+      logger.error(`❌ Failed to send OneSignal notification:`, error);
+      results.push({
+        success: false,
+        error: error.message
+      });
     }
 
     const successful = results.filter(r => r.success).length;
@@ -221,10 +237,10 @@ router.post('/send-to-user', [
 
     res.json({
       success: successful > 0,
-      message: `Push notifications sent: ${successful}/${subscriptions.length} successful`,
+      message: `OneSignal notifications: ${successful}/${subscriptions.length} devices notified`,
       data: {
         userId,
-        total: subscriptions.length,
+        totalDevices: subscriptions.length,
         successful,
         failed,
         results
@@ -241,7 +257,10 @@ router.post('/send-to-user', [
   }
 });
 
-// Send notification to multiple users
+/**
+ * Send notification to multiple users
+ * Batch send to multiple users' OneSignal devices
+ */
 router.post('/send-to-users', [
   body('userIds').isArray({ min: 1 }).withMessage('User IDs array is required'),
   body('title').notEmpty().withMessage('Title is required'),
@@ -251,58 +270,67 @@ router.post('/send-to-users', [
   try {
     const { userIds, title, body, data = {} } = req.body;
 
-    logger.info(`🔔 Sending push notification to ${userIds.length} users`);
+    logger.info(`🔔 Sending OneSignal notifications to ${userIds.length} users`);
 
-    const allResults = [];
-    let totalSubscriptions = 0;
-    let totalSuccessful = 0;
-    let totalFailed = 0;
+    // Get all active subscriptions for these users
+    const subscriptions = await UserSubscription.find({
+      user_id: { $in: userIds },
+      is_active: true
+    });
 
-    for (const userId of userIds) {
-      const subscriptions = await UserSubscription.find({
-        userId,
-        isActive: true
-      });
+    logger.info(`📱 Found ${subscriptions.length} active device(s) across ${userIds.length} users`);
 
-      totalSubscriptions += subscriptions.length;
-
-      for (const subscription of subscriptions) {
-        try {
-          const result = await pushNotificationService.send(
-            subscription.subscription,
-            title,
-            body,
-            {
-              ...data,
-              userId,
-              userEmail: subscription.userEmail,
-              subscriptionId: subscription._id
-            }
-          );
-          allResults.push({ ...result, userId, subscriptionId: subscription._id });
-          if (result.success) totalSuccessful++;
-        } catch (error) {
-          logger.error(`Failed to send to user ${userId}, subscription ${subscription._id}:`, error);
-          allResults.push({
-            success: false,
-            userId,
-            subscriptionId: subscription._id,
-            error: error.message
-          });
-          totalFailed++;
+    if (subscriptions.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No active subscriptions found for these users',
+        data: {
+          totalUsers: userIds.length,
+          totalSubscriptions: 0,
+          successful: 0,
+          failed: 0
         }
-      }
+      });
+    }
+
+    // Collect all player_ids
+    const playerIds = subscriptions.map(s => s.player_id);
+
+    let result;
+    try {
+      result = await pushNotificationService.oneSignalService.send(
+        playerIds,
+        title,
+        body,
+        {
+          data: {
+            ...data,
+            targetUsers: userIds
+          }
+        }
+      );
+      
+      logger.info(`✅ OneSignal batch notification sent to ${playerIds.length} devices`);
+      
+    } catch (error) {
+      logger.error(`❌ Failed to send OneSignal batch notification:`, error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send batch notifications',
+        error: error.message
+      });
     }
 
     res.json({
-      success: totalSuccessful > 0,
-      message: `Push notifications sent: ${totalSuccessful}/${totalSubscriptions} successful`,
+      success: true,
+      message: `OneSignal notifications sent to ${playerIds.length} devices`,
       data: {
         totalUsers: userIds.length,
-        totalSubscriptions,
-        successful: totalSuccessful,
-        failed: totalFailed,
-        results: allResults
+        totalSubscriptions: subscriptions.length,
+        successful: playerIds.length,
+        failed: 0,
+        notificationId: result.messageId,
+        recipients: result.recipients
       }
     });
 
@@ -316,15 +344,17 @@ router.post('/send-to-users', [
   }
 });
 
-// Get user subscriptions
+/**
+ * Get user's OneSignal subscriptions
+ */
 router.get('/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
     const subscriptions = await UserSubscription.find({
-      userId,
-      isActive: true
-    }).select('-subscription.keys -__v');
+      user_id: userId,
+      is_active: true
+    }).select('-__v');
 
     res.json({
       success: true,
@@ -345,14 +375,16 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
-// Deactivate user subscription
+/**
+ * Deactivate user subscription
+ */
 router.delete('/user/:userId/subscription/:subscriptionId', async (req, res) => {
   try {
     const { userId, subscriptionId } = req.params;
 
     const subscription = await UserSubscription.findOneAndUpdate(
-      { _id: subscriptionId, userId },
-      { isActive: false },
+      { _id: subscriptionId, user_id: userId },
+      { is_active: false },
       { new: true }
     );
 
@@ -363,7 +395,7 @@ router.delete('/user/:userId/subscription/:subscriptionId', async (req, res) => 
       });
     }
 
-    logger.info(`✅ Deactivated subscription ${subscriptionId} for user ${userId}`);
+    logger.info(`✅ Deactivated OneSignal subscription ${subscriptionId} for user ${userId}`);
 
     res.json({
       success: true,
@@ -380,15 +412,17 @@ router.delete('/user/:userId/subscription/:subscriptionId', async (req, res) => 
   }
 });
 
-// Get subscription statistics
+/**
+ * Get OneSignal subscription statistics
+ */
 router.get('/stats', async (req, res) => {
   try {
-    const totalSubscriptions = await UserSubscription.countDocuments({ isActive: true });
-    const totalUsers = await UserSubscription.distinct('userId', { isActive: true });
-    const recentSubscriptions = await UserSubscription.find({ isActive: true })
-      .sort({ createdAt: -1 })
+    const totalSubscriptions = await UserSubscription.countDocuments({ is_active: true });
+    const totalUsers = await UserSubscription.distinct('user_id', { is_active: true });
+    const recentSubscriptions = await UserSubscription.find({ is_active: true })
+      .sort({ created_at: -1 })
       .limit(10)
-      .select('userId userEmail createdAt deviceInfo');
+      .select('user_id userEmail player_id created_at device_info');
 
     res.json({
       success: true,

@@ -20,8 +20,8 @@ def get_courses():
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
-        # Super admin can see all courses
-        if user.get('role') == 'superadmin':
+        # Super admin and sub_superadmin can see all courses
+        if user.get('role') in ['superadmin', 'sub_superadmin']:
             courses = list(mongo_db.courses.find())
         else:
             # Campus and course admins can only see courses in their campus
@@ -122,10 +122,10 @@ def create_course(campus_id):
         user = mongo_db.find_user_by_id(current_user_id)
         
         # Check if user has permission to create courses
-        if not user or user.get('role') not in ['superadmin', 'super_admin', 'campus_admin']:
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin', 'super_admin', 'campus_admin']:
             return jsonify({
                 'success': False,
-                'message': 'Access denied. Only super admin and campus admin can create courses.'
+                'message': 'Access denied. Admin privileges required.'
             }), 403
         
         # Campus admin can only create courses in their own campus

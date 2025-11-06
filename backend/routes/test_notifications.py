@@ -1,5 +1,5 @@
 """
-Test broadcast notifications using both OneSignal and VAPID
+Test broadcast notifications using OneSignal ONLY
 """
 import os
 from flask import Blueprint, request, jsonify, current_app
@@ -7,7 +7,6 @@ from flask_jwt_extended import jwt_required, exceptions as jwt_exceptions
 from datetime import datetime
 from mongo import mongo_db
 from services.oneSignalService import oneSignalService
-from services.vapid_push_service import vapid_service
 from models_push_subscriptions import PushSubscription
 
 test_notifications_bp = Blueprint('test_notifications', __name__)

@@ -100,7 +100,10 @@ def create_mcq_test():
 
         # Insert test
         result = mongo_db.tests.insert_one(test_doc)
-        test_id = str(result.inserted_id)
+        test_object_id = str(result.inserted_id)  # MongoDB ObjectId (for internal operations)
+        custom_test_id = test_doc.get('test_id')  # Custom test_id (ABC123 format)
+        
+        current_app.logger.info(f"✅ MCQ test created - ObjectId: {test_object_id}, Custom ID: {custom_test_id}")
         
         # Create auto-release schedule for online tests
         if test_type.lower() == 'online':
@@ -113,9 +116,9 @@ def create_mcq_test():
                 if startDateTime and endDateTime:
                     end_date = datetime.fromisoformat(endDateTime.replace('Z', '+00:00'))
                 
-                scheduler.create_schedule_for_test(test_id, test_type.lower(), created_at, end_date)
+                scheduler.create_schedule_for_test(test_object_id, test_type.lower(), created_at, end_date)
             except Exception as e:
-                current_app.logger.warning(f"Failed to create auto-release schedule for test {test_id}: {e}")
+                current_app.logger.warning(f"Failed to create auto-release schedule for test {test_object_id}: {e}")
         
         # Update question usage count for questions from the bank
         if questions:
@@ -127,46 +130,13 @@ def create_mcq_test():
                             {
                                 '$inc': {'used_count': 1},
                                 '$set': {'last_used': datetime.now(pytz.utc)},
-                                '$push': {'used_in_tests': test_id}
+                                '$push': {'used_in_tests': custom_test_id}  # Use custom ID
                             }
                         )
                     except Exception as e:
                         current_app.logger.warning(f"Failed to update usage count for question {question.get('_id')}: {e}")
 
-        # Send test notifications to students in background
-        try:
-            from utils.test_student_selector import get_students_by_batch_course_combination
-            from utils.batch_processor import create_test_notification_batch_job
-            
-            # Get students for this test
-            students = get_students_by_batch_course_combination(batch_ids, course_ids)
-            
-            if students:
-                # Format start date for notification
-                start_date_str = startDateTime if test_type.lower() == 'online' else 'Immediately'
-                
-                # Get the custom test_id from the test document
-                test_doc = mongo_db.tests.find_one({'_id': ObjectId(test_id)})
-                custom_test_id = test_doc.get('test_id', test_id) if test_doc else test_id
-                
-                # Create batch job for test notifications
-                batch_result = create_test_notification_batch_job(
-                    test_id=custom_test_id,  # Custom test_id for SMS
-                    object_id=test_id,  # MongoDB _id for emails
-                    test_name=test_name,
-                    start_date=start_date_str,
-                    students=students,
-                    batch_size=100,
-                    interval_minutes=3
-                )
-                
-                current_app.logger.info(f"📧📱 Test notification batch created: {batch_result}")
-            else:
-                current_app.logger.warning(f"⚠️ No students found for test notification: batch_ids={batch_ids}, course_ids={course_ids}")
-                
-        except Exception as e:
-            current_app.logger.error(f"❌ Failed to create test notification batch: {e}")
-            # Don't fail test creation if notifications fail
+
 
         # Send push notifications via notification-service (fire-and-forget)
         try:
@@ -177,19 +147,19 @@ def create_mcq_test():
             
             push_notification_url = f"{notification_service_url}/api/test-notifications/test-created"
             
-            current_app.logger.info(f"📱 Sending push notifications for test: {test_id}")
+            current_app.logger.info(f"📱 Sending push notifications for test: {test_object_id}")
             
             # Fire-and-forget: don't wait for response
             response = requests.post(
                 push_notification_url,
-                json={'test_id': test_id},
+                json={'test_id': test_object_id},  # Use ObjectId for notification service
                 timeout=1  # Very short timeout - fire and forget
             )
             
-            current_app.logger.info(f"✅ Push notifications queued for test: {test_id}")
+            current_app.logger.info(f"✅ Push notifications queued for test: {test_object_id}")
                 
         except requests.exceptions.Timeout:
-            current_app.logger.debug(f"📱 Push notification request sent (timeout expected): {test_id}")
+            current_app.logger.debug(f"📱 Push notification request sent (timeout expected): {test_object_id}")
         except Exception as e:
             current_app.logger.warning(f"⚠️ Failed to queue push notifications: {e}")
             # Don't fail test creation if push notifications fail
@@ -203,16 +173,16 @@ def create_mcq_test():
             
             email_sms_notification_url = f"{notification_service_url}/api/notifications/test-created"
             
-            current_app.logger.info(f"📧📱 Sending email & SMS notifications for test: {test_id}")
+            current_app.logger.info(f"📧📱 Sending email & SMS notifications for test: {test_object_id}")
             
             # Fire-and-forget: don't wait for response
             response = requests.post(
                 email_sms_notification_url,
-                json={'test_id': test_id},
+                json={'test_id': test_object_id},  # Use ObjectId for notification service
                 timeout=1  # Very short timeout - fire and forget
             )
             
-            current_app.logger.info(f"✅ Email & SMS notifications queued for test: {test_id}")
+            current_app.logger.info(f"✅ Email & SMS notifications queued for test: {test_object_id}")
                 
         except requests.exceptions.ConnectionError:
             current_app.logger.warning(f"⚠️ Cannot connect to notification service for push notifications")
@@ -224,7 +194,8 @@ def create_mcq_test():
             'success': True,
             'message': 'MCQ test created successfully',
             'data': {
-                'test_id': test_id
+                'test_id': test_object_id,  # Return MongoDB ObjectId
+                'custom_test_id': custom_test_id  # Return custom ABC123 ID
             }
         }), 201
 
@@ -314,7 +285,7 @@ def validate_mcq_test(test_id):
             }
             
             if not validation['has_options']:
-                validation['is_valid'] = False
+                validation['is_valid'] = False  
                 validation['errors'].append('Missing MCQ options')
             
             if not validation['has_answer']:

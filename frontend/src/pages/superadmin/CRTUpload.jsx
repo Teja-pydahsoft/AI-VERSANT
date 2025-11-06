@@ -11,7 +11,7 @@ const CRT_MODULES = [
     name: 'Aptitude', 
     color: 'from-blue-500 to-blue-600',
     icon: '🧮',
-    description: 'Upload aptitude questions covering numerical, verbal, and logical reasoning'
+    description: 'Upload aptitude questions covering numericalMonday verbal, and logical reasoning'
   },
   { 
     id: 'CRT_REASONING', 
@@ -54,6 +54,9 @@ const CRTUpload = () => {
   const [selectedTopicForView, setSelectedTopicForView] = useState(null);
   const [topicQuestions, setTopicQuestions] = useState([]);
   const [viewMode, setViewMode] = useState('upload'); // 'upload', 'topics', 'topic-questions'
+
+  // Question type selection for CRT modules
+  const [selectedQuestionType, setSelectedQuestionType] = useState('mcq'); // 'mcq' or 'compiler'
   
   // Upload response states
   const [uploadResponse, setUploadResponse] = useState(null);
@@ -331,6 +334,8 @@ const CRTUpload = () => {
   const handleModuleSelect = (module) => {
     setSelectedModule(module.id);
     setCurrentStep('upload');
+    // Reset question type to default when switching modules
+    setSelectedQuestionType(module.id === 'CRT_TECHNICAL' ? 'compiler' : 'mcq');
     fetchExistingQuestionsForModule(module.id);
   };
 
@@ -368,48 +373,44 @@ const CRTUpload = () => {
 
   const downloadTemplate = () => {
     let templateData;
-    
+
     if (selectedModule === 'CRT_TECHNICAL') {
+      // Wide format: all test cases in a single row
       templateData = [
         {
           QuestionTitle: 'Perfect Number',
           ProblemStatement: 'Write a program to check whether a given positive integer is a perfect number. A perfect number is a positive integer equal to the sum of its proper divisors except itself.',
-          TestCaseID: 'TC1',
-          Input: '6',
-          ExpectedOutput: '6 is a perfect number',
-          Language: 'python'
+          Language: 'python',
+          TestCase1Input: '6',
+          TestCase1Output: '6 is a perfect number',
+          TestCase1Points: '5',
+          TestCase1ResponseTime: '1000',
+          TestCase1IsSample: 'true',
+          TestCase2Input: '15',
+          TestCase2Output: '15 is not a perfect number',
+          TestCase2Points: '5',
+          TestCase2ResponseTime: '1000',
+          TestCase2IsSample: 'false',
+          TestCase3Input: '28',
+          TestCase3Output: '28 is a perfect number',
+          TestCase3Points: '5',
+          TestCase3ResponseTime: '',
+          TestCase3IsSample: 'false'
         },
         {
-          QuestionTitle: 'Perfect Number',
-          ProblemStatement: 'Write a program to check whether a given positive integer is a perfect number. A perfect number is a positive integer equal to the sum of its proper divisors except itself.',
-          TestCaseID: 'TC2',
-          Input: '15',
-          ExpectedOutput: '15 is not a perfect number',
-          Language: 'python'
-        },
-        {
-          QuestionTitle: 'Non-Repeating Elements Array',
-          ProblemStatement: 'Write a program to find and print all elements that do not repeat in a given array of integers.',
-          TestCaseID: 'TC1',
-          Input: '4 5 4 3 6 3 7',
-          ExpectedOutput: '5 6 7',
-          Language: 'python'
-        },
-        {
-          QuestionTitle: 'Non-Repeating Elements Array',
-          ProblemStatement: 'Write a program to find and print all elements that do not repeat in a given array of integers.',
-          TestCaseID: 'TC2',
-          Input: '1 2 1 2 3 4 5',
-          ExpectedOutput: '3 4 5',
-          Language: 'python'
-        },
-        {
-          QuestionTitle: 'Non-Repeating Elements Array',
-          ProblemStatement: 'Write a program to find and print all elements that do not repeat in a given array of integers.',
-          TestCaseID: 'TC3',
-          Input: '10 10 20 30 20',
-          ExpectedOutput: '30',
-          Language: 'python'
+          QuestionTitle: 'Array Sum',
+          ProblemStatement: 'Write a function to calculate the sum of all elements in an array.',
+          Language: 'python',
+          TestCase1Input: '[1,2,3,4,5]',
+          TestCase1Output: '15',
+          TestCase1Points: '10',
+          TestCase1ResponseTime: '500',
+          TestCase1IsSample: 'true',
+          TestCase2Input: '[-1,-2,3]',
+          TestCase2Output: '0',
+          TestCase2Points: '10',
+          TestCase2ResponseTime: '',
+          TestCase2IsSample: 'false'
         }
       ];
     } else {
@@ -465,22 +466,36 @@ const CRTUpload = () => {
     const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
     const fileExtension = file.name.toLowerCase().split('.').pop();
     const allowedExtensions = ['csv', 'xlsx', 'xls'];
-    
+
     if (!allowedExtensions.includes(fileExtension)) {
       toast.error('Please upload a CSV or Excel file (.csv, .xlsx, .xls)');
       return;
     }
 
     setLoading(true);
+    console.log('Starting file upload process...');
+    console.log('Selected module:', selectedModule);
+    console.log('Selected question type:', selectedQuestionType);
+    console.log('Selected topic:', selectedTopic);
+
     try {
       let questions = [];
-      
-      // Parse the file based on module type
+
+      // Parse the file based on module type and question type
       if (selectedModule === 'CRT_TECHNICAL') {
-        questions = await parseTechnicalFile(file);
+        if (selectedQuestionType === 'compiler') {
+          console.log('Parsing as compiler questions...');
+          questions = await parseTechnicalFile(file);
+        } else {
+          console.log('Parsing as MCQ questions...');
+          questions = await parseMCQFile(file);
+        }
       } else {
+        console.log('Parsing as MCQ questions for non-technical module...');
         questions = await parseMCQFile(file);
       }
+
+      console.log('Parsed questions count:', questions.length);
 
       if (questions.length === 0) {
         toast.error('No valid questions found in the file');
@@ -489,16 +504,20 @@ const CRTUpload = () => {
 
       // If topic is selected, upload to topic-specific endpoint
       if (selectedTopic) {
+        console.log('Uploading to topic-specific endpoint...');
         const response = await api.post(`/test-management/crt-topics/${selectedTopic}/questions`, {
           questions: questions
         });
 
         if (response.data.success) {
+          console.log('Upload successful:', response.data);
           setUploadResponse(response.data);
           setIsResponseModalOpen(true);
           handleUploadSuccess();
+          toast.success('Questions uploaded successfully!');
         } else {
           // Handle detailed error response
+          console.error('Upload failed:', response.data);
           if (response.data.details) {
             setUploadResponse(response.data);
             setIsResponseModalOpen(true);
@@ -508,21 +527,28 @@ const CRTUpload = () => {
         }
       } else {
         // Send questions to general CRT endpoint
+        console.log('Uploading to general CRT endpoint...');
         const payload = {
           module_id: selectedModule, // selectedModule is already CRT_APTITUDE, CRT_REASONING, or CRT_TECHNICAL
           level_id: selectedModule, // For CRT modules, use module_id as level_id
           questions: questions,
-          topic_id: selectedTopic || null // Include topic_id if selected
+          topic_id: selectedTopic || null, // Include topic_id if selected
+          question_type: selectedModule === 'CRT_TECHNICAL' ? selectedQuestionType : 'mcq' // Include question type for CRT Technical
         };
+
+        console.log('Upload payload:', payload);
 
         const response = await api.post('/test-management/module-question-bank/upload', payload);
 
         if (response.data.success) {
+          console.log('Upload successful:', response.data);
           setUploadResponse(response.data);
           setIsResponseModalOpen(true);
           handleUploadSuccess();
+          toast.success('Questions uploaded successfully!');
         } else {
           // Handle detailed error response
+          console.error('Upload failed:', response.data);
           if (response.data.details) {
             setUploadResponse(response.data);
             setIsResponseModalOpen(true);
@@ -548,133 +574,96 @@ const CRTUpload = () => {
           let parsedQuestions = [];
 
           if (fileExtension === 'csv' || file.type === 'text/csv') {
-            const result = Papa.parse(e.target.result, { 
-              header: true, 
-              skipEmptyLines: true, 
-              trimHeaders: true, 
-              trimValues: true 
+            const result = Papa.parse(e.target.result, {
+              header: true,
+              skipEmptyLines: true,
+              trimHeaders: true,
+              trimValues: true
             });
-            
+
             result.data.forEach(row => {
-              // Check if this is compiler-integrated format or MCQ format
-              const hasCompilerFormat = row.QuestionTitle && row.ProblemStatement && row.TestCaseID && row.Input && row.ExpectedOutput;
-              const hasMCQFormat = row.Question && (row.A || row.optionA) && (row.B || row.optionB) && (row.C || row.optionC) && (row.D || row.optionD) && row.Answer;
-              
-              if (hasCompilerFormat) {
-                // Compiler-integrated format
-                parsedQuestions.push({
-                  question: `${row.QuestionTitle}: ${row.ProblemStatement}`,
-                  testCases: row.Input,
-                  expectedOutput: row.ExpectedOutput,
-                  language: row.Language || 'python',
-                  questionType: 'technical',
-                  testCaseId: row.TestCaseID,
-                  // For compatibility with existing system
-                  optionA: 'A',
-                  optionB: 'B', 
-                  optionC: 'C',
-                  optionD: 'D',
-                  answer: 'A'
+              const questionTitle = row.QuestionTitle || row.Title || '';
+              if (!questionTitle) return;
+
+              const testCases = [];
+
+              // Extract test cases from the wide format (TestCase1Input, TestCase1Output, etc.)
+              for (let i = 1; ; i++) {
+                const inputKey = `TestCase${i}Input`;
+                const outputKey = `TestCase${i}Output`;
+                const pointsKey = `TestCase${i}Points`;
+                const responseTimeKey = `TestCase${i}ResponseTime`;
+                const isSampleKey = `TestCase${i}IsSample`;
+
+                if (!row[inputKey] && !row[outputKey]) break; // No more test cases
+
+                testCases.push({
+                  input: row[inputKey] || '',
+                  expected_output: row[outputKey] || '',
+                  response_time: row[responseTimeKey] ? parseInt(row[responseTimeKey]) : null,
+                  points: parseInt(row[pointsKey] || '1') || 1,
+                  is_sample: row[isSampleKey] === 'true' || row[isSampleKey] === true || false
                 });
-              } else if (hasMCQFormat) {
-                // MCQ format for technical questions
+              }
+
+              if (testCases.length > 0) {
                 parsedQuestions.push({
-                  question: row.Question || row.question || '',
-                  optionA: row.A || row.optionA || '',
-                  optionB: row.B || row.optionB || '',
-                  optionC: row.C || row.optionC || '',
-                  optionD: row.D || row.optionD || '',
-                  answer: row.Answer || row.answer || '',
-                  questionType: 'mcq',
-                  instructions: row.instructions || row.Instructions || ''
-                });
-              } else {
-                // Legacy format - try to parse as old technical format
-                parsedQuestions.push({
-              question: row.Question || row.question || '',
-              testCases: row.TestCases || row.testCases || '',
-              expectedOutput: row.ExpectedOutput || row.expectedOutput || row.ExpectedOu || '',
-              language: row.Language || row.language || 'python',
-                  questionType: 'technical',
-                  // For compatibility with existing system
-              optionA: 'A',
-              optionB: 'B',
-              optionC: 'C', 
-              optionD: 'D',
-              answer: 'A'
+                  question: `${questionTitle}: ${row.ProblemStatement || row.Statement || ''}`,
+                  questionTitle: questionTitle,
+                  problemStatement: row.ProblemStatement || row.Statement || '',
+                  test_cases: testCases,
+                  language: row.Language || row.language || 'python',
+                  questionType: 'compiler'
                 });
               }
             });
+
           } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
             const workbook = XLSX.read(e.target.result, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             const jsonData = XLSX.utils.sheet_to_json(worksheet);
-            
+
             jsonData.forEach(row => {
-              // Check if this is compiler-integrated format or MCQ format
-              const hasCompilerFormat = row.QuestionTitle && row.ProblemStatement && row.TestCaseID && row.Input && row.ExpectedOutput;
-              const hasMCQFormat = row.Question && (row.A || row.optionA) && (row.B || row.optionB) && (row.C || row.optionC) && (row.D || row.optionD) && row.Answer;
-              
-              if (hasCompilerFormat) {
-                // Compiler-integrated format
-                parsedQuestions.push({
-                  question: `${row.QuestionTitle}: ${row.ProblemStatement}`,
-                  testCases: row.Input,
-                  expectedOutput: row.ExpectedOutput,
-                  language: row.Language || 'python',
-                  questionType: 'technical',
-                  testCaseId: row.TestCaseID,
-                  // For compatibility with existing system
-                  optionA: 'A',
-                  optionB: 'B',
-                  optionC: 'C', 
-                  optionD: 'D',
-                  answer: 'A'
+              const questionTitle = row.QuestionTitle || row.Title || '';
+              if (!questionTitle) return;
+
+              const testCases = [];
+
+              // Extract test cases from the wide format (TestCase1Input, TestCase1Output, etc.)
+              for (let i = 1; ; i++) {
+                const inputKey = `TestCase${i}Input`;
+                const outputKey = `TestCase${i}Output`;
+                const pointsKey = `TestCase${i}Points`;
+                const responseTimeKey = `TestCase${i}ResponseTime`;
+                const isSampleKey = `TestCase${i}IsSample`;
+
+                if (!row[inputKey] && !row[outputKey]) break; // No more test cases
+
+                testCases.push({
+                  input: row[inputKey] || '',
+                  expected_output: row[outputKey] || '',
+                  response_time: row[responseTimeKey] ? parseInt(row[responseTimeKey]) : null,
+                  points: parseInt(row[pointsKey] || '1') || 1,
+                  is_sample: row[isSampleKey] === 'true' || row[isSampleKey] === true || false
                 });
-              } else if (hasMCQFormat) {
-                // MCQ format for technical questions
+              }
+
+              if (testCases.length > 0) {
                 parsedQuestions.push({
-                  question: row.Question || row.question || '',
-                  optionA: row.A || row.optionA || '',
-                  optionB: row.B || row.optionB || '',
-                  optionC: row.C || row.optionC || '',
-                  optionD: row.D || row.optionD || '',
-                  answer: row.Answer || row.answer || '',
-                  questionType: 'mcq',
-                  instructions: row.instructions || row.Instructions || ''
-                });
-              } else {
-                // Legacy format - try to parse as old technical format
-                parsedQuestions.push({
-              question: row.Question || row.question || '',
-              testCases: row.TestCases || row.testCases || '',
-              expectedOutput: row.ExpectedOutput || row.expectedOutput || row.ExpectedOu || '',
-              language: row.Language || row.language || 'python',
-                  questionType: 'technical',
-                  // For compatibility with existing system
-              optionA: 'A',
-              optionB: 'B',
-              optionC: 'C', 
-              optionD: 'D',
-              answer: 'A'
+                  question: `${questionTitle}: ${row.ProblemStatement || row.Statement || ''}`,
+                  questionTitle: questionTitle,
+                  problemStatement: row.ProblemStatement || row.Statement || '',
+                  test_cases: testCases,
+                  language: row.Language || row.language || 'python',
+                  questionType: 'compiler'
                 });
               }
             });
           }
 
           const validQuestions = parsedQuestions.filter(q => {
-            if (!q || !q.question) return false;
-            
-            // Check based on question type
-            if (q.questionType === 'technical') {
-              return q.testCases && q.expectedOutput && q.language;
-            } else if (q.questionType === 'mcq') {
-              return q.optionA && q.optionB && q.optionC && q.optionD && q.answer;
-            } else {
-              // Legacy format - check for technical fields
-              return q.testCases && q.expectedOutput && q.language;
-            }
+            return q && q.question && q.test_cases && q.test_cases.length > 0 && q.language;
           });
 
           resolve(validQuestions);
@@ -682,9 +671,9 @@ const CRTUpload = () => {
           reject(error);
         }
       };
-      
+
       reader.onerror = () => reject(new Error('Failed to read file'));
-      
+
       if (file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')) {
         reader.readAsText(file, 'UTF-8');
       } else {
@@ -938,6 +927,43 @@ const CRTUpload = () => {
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload Questions</h2>
         
+        {/* Question Type Selection for CRT Technical */}
+        {selectedModule === 'CRT_TECHNICAL' && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Question Type
+            </label>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setSelectedQuestionType('compiler')}
+                className={`px-4 py-2 rounded-md border transition-colors ${
+                  selectedQuestionType === 'compiler'
+                    ? 'bg-purple-500 text-white border-purple-500'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                ⚙️ Compiler-Integrated Questions
+              </button>
+              <button
+                onClick={() => setSelectedQuestionType('mcq')}
+                className={`px-4 py-2 rounded-md border transition-colors ${
+                  selectedQuestionType === 'mcq'
+                    ? 'bg-blue-500 text-white border-blue-500'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                📝 MCQ Questions
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mt-2">
+              {selectedQuestionType === 'compiler'
+                ? 'Upload programming questions with test cases for code execution and validation.'
+                : 'Upload multiple choice questions with options A, B, C, D.'
+              }
+            </p>
+          </div>
+        )}
+
         {/* Topic Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -986,8 +1012,24 @@ const CRTUpload = () => {
             Download the CSV template to see the required format for uploading questions.
             {selectedModule === 'CRT_TECHNICAL' && (
               <span className="block mt-1">
-                <strong>Compiler-integrated format:</strong> QuestionTitle, ProblemStatement, TestCaseID, Input, ExpectedOutput, Language<br/>
-                <strong>MCQ format:</strong> Question, A, B, C, D, Answer
+                {selectedQuestionType === 'compiler' ? (
+                  <>
+                    <strong>Compiler-integrated format (Wide format - all test cases in one row):</strong><br/>
+                    • QuestionTitle, ProblemStatement, Language<br/>
+                    • TestCase1Input, TestCase1Output, TestCase1Points, TestCase1IsSample, TestCase1ResponseTime<br/>
+                    • TestCase2Input, TestCase2Output, TestCase2Points, TestCase2IsSample, TestCase2ResponseTime<br/>
+                    • ... (add more test cases as needed)<br/>
+                    • ResponseTime: optional in milliseconds (null if not provided)<br/>
+                    • Points: default 1<br/>
+                    • IsSample: true/false, default false
+                  </>
+                ) : (
+                  <>
+                    <strong>MCQ format:</strong><br/>
+                    • Question, A, B, C, D, Answer<br/>
+                    • Answer should be A, B, C, or D
+                  </>
+                )}
               </span>
             )}
           </p>
@@ -999,7 +1041,10 @@ const CRTUpload = () => {
             accept=".csv,.xlsx,.xls"
             onChange={(e) => {
               const file = e.target.files[0];
-              if (file) handleFileUpload(file);
+              if (file) {
+                console.log('File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
+                handleFileUpload(file);
+              }
             }}
             className="hidden"
             id="file-upload"
@@ -1011,11 +1056,24 @@ const CRTUpload = () => {
           >
             <div className="text-4xl mb-4">📁</div>
             <p className="text-lg font-medium text-gray-900 mb-2">
-              {loading ? 'Uploading...' : 'Click to upload file'}
+              {loading ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-gray-900" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Uploading...
+                </span>
+              ) : 'Click to upload file'}
             </p>
             <p className="text-sm text-gray-600">
               Supports CSV, Excel files
             </p>
+            {selectedModule === 'CRT_TECHNICAL' && (
+              <p className="text-xs text-blue-600 mt-2">
+                Selected: {selectedQuestionType === 'compiler' ? 'Compiler-Integrated Questions' : 'MCQ Questions'}
+              </p>
+            )}
           </label>
         </div>
       </div>
@@ -1059,11 +1117,31 @@ const CRTUpload = () => {
                 <div className="space-y-2 text-sm">
                   <div className="p-2 bg-gray-50 rounded border">
                     <strong>Test Cases:</strong>
-                    <pre className="mt-1 text-xs font-mono bg-white p-2 rounded border">{question.testCases || 'N/A'}</pre>
-                  </div>
-                  <div className="p-2 bg-gray-50 rounded border">
-                    <strong>Expected Output:</strong>
-                    <pre className="mt-1 text-xs font-mono bg-white p-2 rounded border">{question.expectedOutput || 'N/A'}</pre>
+                    <div className="mt-1 space-y-2">
+                      {(question.testCases || question.test_cases) && Array.isArray(question.testCases || question.test_cases) ? (
+                        (question.testCases || question.test_cases).map((tc, idx) => (
+                          <div key={idx} className="bg-white p-2 rounded border text-xs">
+                            <div className="font-medium">Test Case {idx + 1} {tc.is_sample ? '(Sample)' : ''}</div>
+                            <div className="mt-1">
+                              <span className="text-gray-600">Input:</span> <code className="bg-gray-50 px-1 rounded">{tc.input}</code>
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-gray-600">Expected:</span> <code className="bg-gray-50 px-1 rounded">{tc.expected_output}</code>
+                            </div>
+                            {tc.response_time && (
+                              <div className="mt-1">
+                                <span className="text-gray-600">Max Time:</span> {tc.response_time}ms
+                              </div>
+                            )}
+                            <div className="mt-1">
+                              <span className="text-gray-600">Points:</span> {tc.points || 1}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <pre className="text-xs font-mono bg-white p-2 rounded border">{question.testCases || question.test_cases || 'N/A'}</pre>
+                      )}
+                    </div>
                   </div>
                   <div className="p-2 bg-gray-50 rounded border">
                     <strong>Language:</strong> {question.language || 'python'}
@@ -1415,11 +1493,31 @@ const CRTUpload = () => {
                   <div className="space-y-2 text-sm">
                     <div className="p-2 bg-gray-50 rounded border">
                       <strong>Test Cases:</strong>
-                      <pre className="mt-1 text-xs font-mono bg-white p-2 rounded border">{question.testCases || 'N/A'}</pre>
-                    </div>
-                    <div className="p-2 bg-gray-50 rounded border">
-                      <strong>Expected Output:</strong>
-                      <pre className="mt-1 text-xs font-mono bg-white p-2 rounded border">{question.expectedOutput || 'N/A'}</pre>
+                      <div className="mt-1 space-y-2">
+                        {(question.testCases || question.test_cases) && Array.isArray(question.testCases || question.test_cases) ? (
+                          (question.testCases || question.test_cases).map((tc, idx) => (
+                            <div key={idx} className="bg-white p-2 rounded border text-xs">
+                              <div className="font-medium">Test Case {idx + 1} {tc.is_sample ? '(Sample)' : ''}</div>
+                              <div className="mt-1">
+                                <span className="text-gray-600">Input:</span> <code className="bg-gray-50 px-1 rounded">{tc.input}</code>
+                              </div>
+                              <div className="mt-1">
+                                <span className="text-gray-600">Expected:</span> <code className="bg-gray-50 px-1 rounded">{tc.expected_output}</code>
+                              </div>
+                              {tc.response_time && (
+                                <div className="mt-1">
+                                  <span className="text-gray-600">Max Time:</span> {tc.response_time}ms
+                                </div>
+                              )}
+                              <div className="mt-1">
+                                <span className="text-gray-600">Points:</span> {tc.points || 1}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <pre className="text-xs font-mono bg-white p-2 rounded border">{question.testCases || question.test_cases || 'N/A'}</pre>
+                        )}
+                      </div>
                     </div>
                     <div className="p-2 bg-gray-50 rounded border">
                       <strong>Language:</strong> {question.language || 'python'}

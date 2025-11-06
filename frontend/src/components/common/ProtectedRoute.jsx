@@ -35,6 +35,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     const roleRoutes = {
       superadmin: '/superadmin',
       super_admin: '/superadmin',
+      sub_superadmin: '/superadmin',  // Sub-superadmins use superadmin dashboard
       campus_admin: '/campus-admin',
       course_admin: '/course-admin',
       student: '/student',

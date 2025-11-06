@@ -13,7 +13,7 @@ class OneSignalService {
   }
 
   /**
-   * Initialize OneSignal
+   * Initialize OneSignal with proper state restoration
    */
   async initialize() {
     if (!this.isSupported) {
@@ -23,7 +23,7 @@ class OneSignalService {
 
     try {
       console.log('🔔 Initializing OneSignal...');
-      
+
       // Load OneSignal SDK if not already loaded
       if (typeof window.OneSignal === 'undefined') {
         await this.loadOneSignalSDK();
@@ -82,7 +82,7 @@ class OneSignalService {
       console.log('✅ OneSignal initialized successfully');
       console.log('📍 OneSignal App ID:', this.appId);
 
-      // Check subscription status
+      // Check subscription status with backend restoration
       await this.checkSubscriptionStatus();
 
       // Add event listeners for OneSignal's default bell button
@@ -175,7 +175,7 @@ class OneSignalService {
         return;
       }
 
-      const response = await fetch('/api/notifications/onesignal/subscribe', {
+      const response = await fetch('/api/onesignal/subscribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -208,7 +208,7 @@ class OneSignalService {
         return;
       }
 
-      const response = await fetch('/api/notifications/onesignal/unsubscribe', {
+      const response = await fetch('/api/onesignal/unsubscribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -283,7 +283,7 @@ class OneSignalService {
   }
 
   /**
-   * Check subscription status
+   * Check subscription status and restore from backend if needed
    */
   async checkSubscriptionStatus() {
     try {
@@ -298,10 +298,41 @@ class OneSignalService {
         return false;
       }
 
-      // Use OneSignal v16 API
+      // First check backend for subscription status
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const response = await fetch('/api/onesignal/subscription-status', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (response.ok) {
+            const backendStatus = await response.json();
+            if (backendStatus.success && backendStatus.is_subscribed) {
+              console.log('✅ Backend shows OneSignal subscription active');
+              this.isSubscribed = true;
+
+              // Get player ID from backend
+              const playerId = backendStatus.player_id;
+              if (playerId) {
+                console.log('✅ Restored OneSignal Player ID from backend:', playerId);
+              }
+
+              return true;
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not check backend subscription status:', error.message);
+      }
+
+      // Fallback to OneSignal API check
       const permission = this.oneSignal.Notifications.permission;
       this.isSubscribed = permission === true;
-      
+
       // Get player ID if subscribed
       if (this.isSubscribed) {
         const playerId = await this.getUserId();
@@ -309,7 +340,7 @@ class OneSignalService {
       } else {
         console.log('ℹ️ OneSignal not subscribed yet');
       }
-      
+
       console.log('📊 OneSignal status:', {
         permission,
         isSubscribed: this.isSubscribed

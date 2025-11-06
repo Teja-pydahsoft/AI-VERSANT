@@ -1,5 +1,6 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
+const { getNotificationSettings } = require('./notificationService');
 
 /**
  * BulkSMS Service
@@ -85,6 +86,14 @@ class BulkSmsService {
    * Send SMS using BulkSMS API
    */
   async sendSms({ phone, message, isUnicode = false }) {
+    // Get settings first to decide whether to proceed
+    const settings = await getNotificationSettings();
+    if (!settings.smsEnabled) {
+      logger.warn(`⚠️ SMS notifications are disabled in global settings. Skipping SMS to ${phone}.`);
+      // Return a success-like response to prevent breaking the calling function
+      return { success: true, message: 'SMS notifications disabled', messageId: 'disabled-by-settings' };
+    }
+
     if (!this.isConfigured) {
       throw new Error('BulkSMS service not configured');
     }

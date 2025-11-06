@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useNotification } from '../../contexts/NotificationContext';
 import api from '../../services/api';
+import TechnicalCodeEditor from '../../components/TechnicalCodeEditor';
 
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
@@ -81,6 +82,18 @@ const PracticeModuleTaking = () => {
     setAnswers(prev => ({ ...prev, [questionId]: answer }));
   };
 
+  const handleCodeSubmit = (questionId, code, language, results) => {
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: {
+        code,
+        language,
+        type: 'code',
+        results: results // Store validation results
+      }
+    }));
+  };
+
   // Audio recording logic for Speaking module (placeholder, implement as needed)
 
   const handleSubmit = async () => {
@@ -92,7 +105,26 @@ const PracticeModuleTaking = () => {
       questions.forEach((question, index) => {
         const questionId = question.question_id || question._id;
         if (answers[questionId]) {
-          formData.append(`answer_${index}`, answers[questionId]);
+          const answer = answers[questionId];
+          // If it's a code answer with results, send structured data
+          if (answer && typeof answer === 'object' && answer.type === 'code') {
+            if (answer.results) {
+              // For compiler questions, send pre-calculated results
+              formData.append(`answer_${index}`, JSON.stringify({
+                code: answer.code,
+                language: answer.language,
+                results: answer.results,
+                total_score: answer.results.total_score,
+                max_score: answer.results.max_score,
+                passed_count: answer.results.passed_count,
+                failed_count: answer.results.failed_count
+              }));
+            } else {
+              formData.append(`answer_${index}`, JSON.stringify(answer));
+            }
+          } else {
+            formData.append(`answer_${index}`, answer);
+          }
         }
       });
       
@@ -133,8 +165,22 @@ const PracticeModuleTaking = () => {
 
   const currentQuestion = questions[currentQuestionIndex];
   
-  // Create options object from individual option fields if not already present
-  if (currentQuestion && currentQuestion.question_type === 'mcq' && !currentQuestion.options) {
+  // Debug: Log question type
+  console.log('Current question:', currentQuestion);
+  console.log('Question type:', currentQuestion?.question_type);
+  console.log('Has test_cases:', currentQuestion?.test_cases);
+  
+  // Detect if this is a compiler question (has test_cases)
+  const isCompilerQuestion = currentQuestion && (
+    currentQuestion.question_type === 'compiler' || 
+    currentQuestion.question_type === 'technical' ||
+    (currentQuestion.test_cases && currentQuestion.test_cases.length > 0)
+  );
+  
+  console.log('Is compiler question:', isCompilerQuestion);
+  
+  // Create options object from individual option fields if not already present (only for MCQ)
+  if (currentQuestion && !isCompilerQuestion && currentQuestion.question_type === 'mcq' && !currentQuestion.options) {
     currentQuestion.options = {
       'A': currentQuestion.optionA || '',
       'B': currentQuestion.optionB || '',
@@ -155,11 +201,15 @@ const PracticeModuleTaking = () => {
                 <strong>Tab switching or leaving the exam is not allowed!</strong> ({cheatCount} warning{cheatCount > 1 ? 's' : ''})
               </div>
             )}
-            <div ref={examRef} className="bg-white rounded-2xl shadow-lg mx-auto p-4 sm:p-8 max-w-md w-full min-h-[350px] flex flex-col justify-center select-none">
+            <div ref={examRef} className={`bg-white rounded-2xl shadow-lg mx-auto p-4 sm:p-8 w-full min-h-[350px] flex flex-col select-none ${
+              isCompilerQuestion
+                ? 'max-w-6xl' 
+                : 'max-w-md justify-center'
+            }`}>
               <div className="text-center mb-6 text-sm font-semibold text-gray-500">
                 Question {currentQuestionIndex + 1} of {questions.length}
               </div>
-              <div className="text-center">
+              <div className={isCompilerQuestion ? 'text-left' : 'text-center'}>
                 {currentQuestion.question_type === 'audio' && currentQuestion.audio_url && (
                   <audio controls className="mx-auto mb-4">
                     <source src={currentQuestion.audio_url} type="audio/mpeg" />
@@ -167,8 +217,13 @@ const PracticeModuleTaking = () => {
                   </audio>
                 )}
                 <p className="text-lg sm:text-xl text-gray-800 mb-8 break-words">{currentQuestion.question}</p>
+                {isCompilerQuestion && currentQuestion.instructions && (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                    <p className="text-sm text-blue-800"><strong>Instructions:</strong> {currentQuestion.instructions}</p>
+                  </div>
+                )}
               </div>
-              {currentQuestion.question_type === 'mcq' && (
+              {!isCompilerQuestion && currentQuestion.question_type === 'mcq' && currentQuestion.options && (
                 <div className="space-y-4 max-w-lg mx-auto w-full">
                   {Object.entries(currentQuestion.options).map(([key, value]) => (
                     <label
@@ -193,6 +248,17 @@ const PracticeModuleTaking = () => {
                       <span className="ml-3 text-gray-800">{value}</span>
                     </label>
                   ))}
+                </div>
+              )}
+              {isCompilerQuestion && (
+                <div className="w-full">
+                  <TechnicalCodeEditor
+                    question={currentQuestion}
+                    onCodeChange={(code, language) => handleCodeSubmit(currentQuestion.question_id || currentQuestion._id, code, language)}
+                    onSubmit={(results) => handleCodeSubmit(currentQuestion.question_id || currentQuestion._id, answers[currentQuestion.question_id || currentQuestion._id]?.code || '', answers[currentQuestion.question_id || currentQuestion._id]?.language || currentQuestion.language || 'python', results)}
+                    initialCode={answers[currentQuestion.question_id || currentQuestion._id]?.code || ''}
+                    initialLanguage={answers[currentQuestion.question_id || currentQuestion._id]?.language || currentQuestion.language || 'python'}
+                  />
                 </div>
               )}
               {/* Add more question types as needed */}
@@ -294,6 +360,55 @@ const ResultView = ({ result, onBack }) => {
                         <source src={q.student_audio_url} type="audio/wav" />
                         Your browser does not support the audio element.
                       </audio>
+                    </div>
+                  )}
+                </>
+              ) : q.question_type === 'compiler' || q.question_type === 'technical' ? (
+                <>
+                  <div className="mb-2 font-semibold">{q.question}</div>
+                  <div className="mb-2">
+                    <span className="font-semibold">Language:</span> {q.language}
+                  </div>
+                  <div className="mb-2">
+                    <span className="font-semibold">Test Cases:</span> 
+                    <span className={q.passed_cases === q.total_cases ? 'text-green-700 font-semibold ml-2' : 'text-red-700 font-semibold ml-2'}>
+                      {q.passed_cases}/{q.total_cases} Passed
+                    </span>
+                  </div>
+                  {q.test_results && q.test_results.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <div className="font-semibold text-sm">Test Case Results:</div>
+                      {q.test_results.map((tc, tcIdx) => (
+                        <div key={tcIdx} className={`p-3 rounded border ${tc.passed ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-sm">Test Case {tcIdx + 1}</span>
+                            <span className={`text-xs font-bold ${tc.passed ? 'text-green-700' : 'text-red-700'}`}>
+                              {tc.passed ? '✓ PASSED' : '✗ FAILED'}
+                            </span>
+                          </div>
+                          {tc.is_sample && (
+                            <>
+                              <div className="text-xs mt-1"><strong>Input:</strong> {tc.input}</div>
+                              <div className="text-xs"><strong>Expected:</strong> {tc.expected_output}</div>
+                              <div className="text-xs"><strong>Your Output:</strong> {tc.actual_output || 'No output'}</div>
+                            </>
+                          )}
+                          {!tc.is_sample && (
+                            <div className="text-xs text-gray-600 italic">Hidden test case</div>
+                          )}
+                          {tc.error && (
+                            <div className="text-xs text-red-600 mt-1"><strong>Error:</strong> {tc.error}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {q.student_code && (
+                    <div className="mt-3">
+                      <div className="font-semibold text-sm mb-1">Your Code:</div>
+                      <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-x-auto">
+                        <code>{q.student_code}</code>
+                      </pre>
                     </div>
                   )}
                 </>

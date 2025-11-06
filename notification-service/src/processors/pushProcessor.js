@@ -1,15 +1,7 @@
 const { Notification } = require('../models/Notification');
 const logger = require('../utils/logger');
-
-// Only configure web push if VAPID keys are provided
-if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-  const webpush = require('web-push');
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || 'mailto:admin@versant.com',
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
-  );
-}
+const notificationService = require('../services/notificationService');
+const pushNotificationService = require('../services/pushNotificationService');
 
 module.exports = async (job) => {
   const { notificationId, recipient, content, template, metadata } = job.data;
@@ -17,45 +9,56 @@ module.exports = async (job) => {
   try {
     logger.info(`🔔 Processing push notification: ${notificationId}`);
 
+    // Check if push notifications are enabled
+    const settings = await notificationService.getNotificationSettings();
+    if (!settings.pushEnabled) {
+      logger.info('⚠️ Push notifications are disabled. Skipping job.');
+      await Notification.findByIdAndUpdate(notificationId, {
+        status: 'skipped',
+        metadata: { ...metadata, reason: 'Push notifications disabled' }
+      });
+      return { success: true, message: 'Push notifications disabled' };
+    }
+
     // Update notification status to processing
     await Notification.findByIdAndUpdate(notificationId, {
       status: 'processing'
     });
 
-    // Check if VAPID keys are configured
-    if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
-      logger.warn('⚠️ VAPID keys not configured, skipping push notification');
+    // Check if OneSignal is configured
+    const pushStatus = pushNotificationService.getStatus();
+    if (!pushStatus.oneSignal.configured) {
+      logger.warn('⚠️ OneSignal not configured, skipping push notification');
       
       await Notification.findByIdAndUpdate(notificationId, {
         status: 'sent',
         sentAt: new Date(),
         metadata: {
           ...metadata,
-          messageId: 'skipped-no-vapid-keys'
+          messageId: 'skipped-no-onesignal'
         }
       });
       
-      return { success: true, message: 'Skipped - no VAPID keys' };
+      return { success: true, message: 'Skipped - OneSignal not configured' };
     }
 
-    const webpush = require('web-push');
-    
     // Get subscription from recipient (this would typically come from a database)
     // For now, we'll assume the recipient is a subscription object
     const subscription = typeof recipient === 'string' 
       ? JSON.parse(recipient) 
       : recipient;
 
-    const payload = JSON.stringify({
-      title: metadata.title || 'VERSANT Notification',
-      body: content,
-      icon: metadata.icon || '/icon-192x192.png',
-      badge: metadata.badge || '/badge-72x72.png',
-      data: metadata.data || {}
-    });
-
-    // Send push notification
-    const result = await webpush.sendNotification(subscription, payload);
+    // Send push notification using OneSignal
+    const result = await pushNotificationService.send(
+      subscription,
+      metadata.title || 'VERSANT Notification',
+      content,
+      {
+        data: metadata.data || {},
+        icon: metadata.icon || '/icon-192x192.png',
+        badge: metadata.badge || '/badge-72x72.png'
+      }
+    );
 
     // Update notification as sent
     await Notification.findByIdAndUpdate(notificationId, {
@@ -63,7 +66,7 @@ module.exports = async (job) => {
       sentAt: new Date(),
       metadata: {
         ...metadata,
-        messageId: result.headers['location'] || Date.now().toString()
+        messageId: result.messageId || Date.now().toString()
       }
     });
 

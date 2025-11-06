@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const axios = require('axios');
 const logger = require('../utils/logger');
+const notificationService = require('./notificationService');
 
 class TestReminderScheduler {
   constructor() {
@@ -49,6 +50,13 @@ class TestReminderScheduler {
     try {
       const now = new Date();
       const hour = now.getHours();
+
+      // Check notification settings before proceeding
+      const settings = await notificationService.getNotificationSettings();
+      if (!settings.pushEnabled && !settings.mailEnabled && !settings.smsEnabled) {
+        logger.info('⚠️ All notifications are disabled. Skipping scheduled test reminders.');
+        return;
+      }
 
       // Double-check time (12 PM or 6 PM)
       if (hour !== 12 && hour !== 18) {

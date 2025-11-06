@@ -2,6 +2,8 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const testNotificationService = require('../services/testNotificationService');
 const logger = require('../utils/logger');
+const notificationService = require('../services/notificationService');
+const { db } = require('../models/NotificationSettings');
 
 const router = express.Router();
 
@@ -41,6 +43,12 @@ router.post('/test-created', [
     // Process in background
     setImmediate(async () => {
       try {
+        const settings = await db.collection('notification_settings').findOne({});
+        logger.info('⚙️ Notification Settings:', settings)
+        if (!settings.mailEnabled && !settings.smsEnabled) {
+          logger.warn('⚠️ Email and SMS notifications are disabled. Skipping test creation notifications.');
+          return;
+        }
         await testNotificationService.sendTestCreatedNotifications(test_id);
       } catch (error) {
         logger.error(`❌ Failed to process test-created notifications for ${test_id}:`, error.message);
@@ -69,12 +77,17 @@ router.post('/test-reminder', async (req, res) => {
     // Respond immediately
     res.json({
       success: true,
-      message: 'Test reminders queued for processing'
+      message: 'Test reminders (Push, SMS & Email) queued for processing'
     });
 
     // Process in background
     setImmediate(async () => {
       try {
+        const settings = await notificationService.getNotificationSettings();
+        if (!settings.pushEnabled && !settings.mailEnabled && !settings.smsEnabled) {
+          logger.info('⚠️ All notifications are disabled. Skipping test reminder processing.');
+          return;
+        }
         await testNotificationService.sendTestReminders();
       } catch (error) {
         logger.error('❌ Failed to process test reminders:', error.message);
@@ -102,12 +115,17 @@ router.get('/test-reminder/trigger', async (req, res) => {
     // Respond immediately
     res.json({
       success: true,
-      message: 'Test reminders triggered manually'
+      message: 'Test reminders (Push, SMS & Email) triggered manually'
     });
 
     // Process in background
     setImmediate(async () => {
       try {
+        const settings = await notificationService.getNotificationSettings();
+        if (!settings.pushEnabled && !settings.mailEnabled && !settings.smsEnabled) {
+          logger.info('⚠️ All notifications are disabled. Skipping manual test reminder.');
+          return;
+        }
         const result = await testNotificationService.sendTestReminders();
         logger.info('✅ Manual test reminder completed:', result);
       } catch (error) {

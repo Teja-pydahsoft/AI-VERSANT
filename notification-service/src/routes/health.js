@@ -71,7 +71,7 @@ router.get('/metrics', async (req, res) => {
       services: {
         email: process.env.BREVO_API_KEY ? 'configured' : 'not configured',
         sms: process.env.BULKSMS_API_KEY ? 'configured' : 'not configured',
-        push: (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) ? 'configured' : 'not configured'
+        push: process.env.ONESIGNAL_APP_ID ? 'configured' : 'not configured'
       },
       system: {
         uptime: process.uptime(),

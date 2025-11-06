@@ -31,6 +31,7 @@ class MongoDB:
         self.results_release_settings = self.db.results_release_settings
         self.auto_release_jobs = self.db.auto_release_jobs
         self.release_history = self.db.release_history
+        self.notification_settings = self.db.notification_settings
         
         # Create indexes for better performance (only once)
         self._create_indexes_once()

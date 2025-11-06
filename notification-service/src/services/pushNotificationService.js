@@ -1,77 +1,5 @@
 const logger = require('../utils/logger');
-
-// VAPID Push Notification Service
-class VAPIDPushService {
-  constructor() {
-    this.webpush = null;
-    this.isConfigured = false;
-    this.initialize();
-  }
-
-  initialize() {
-    try {
-      // Check for both possible private key variable names
-      const privateKey = process.env.VAPID_PRIVATE_KEY || process.env.VAPID_PRIVATE_KEY_FILE;
-      
-      if (process.env.VAPID_PUBLIC_KEY && privateKey) {
-        const webpush = require('web-push');
-        // Ensure VAPID subject is in proper mailto: format
-        let vapidSubject = process.env.VAPID_SUBJECT || 
-          (process.env.VAPID_EMAIL ? `mailto:${process.env.VAPID_EMAIL}` : 'mailto:admin@versant.com');
-        
-        // Fix VAPID subject if it doesn't start with mailto:
-        if (!vapidSubject.startsWith('mailto:')) {
-          vapidSubject = `mailto:${vapidSubject}`;
-        }
-        
-        webpush.setVapidDetails(
-          vapidSubject,
-          process.env.VAPID_PUBLIC_KEY,
-          privateKey
-        );
-        this.webpush = webpush;
-        this.isConfigured = true;
-        logger.info('✅ VAPID push notifications configured');
-        logger.info(`📧 VAPID Subject: ${vapidSubject}`);
-      } else {
-        logger.warn('⚠️ VAPID keys not configured, VAPID push notifications disabled');
-        logger.warn(`🔍 VAPID_PUBLIC_KEY: ${process.env.VAPID_PUBLIC_KEY ? '✅' : '❌'}`);
-        logger.warn(`🔍 VAPID_PRIVATE_KEY: ${process.env.VAPID_PRIVATE_KEY ? '✅' : '❌'}`);
-        logger.warn(`🔍 VAPID_PRIVATE_KEY_FILE: ${process.env.VAPID_PRIVATE_KEY_FILE ? '✅' : '❌'}`);
-      }
-    } catch (error) {
-      logger.error('❌ VAPID initialization failed:', error);
-    }
-  }
-
-  async send(subscription, title, body, data = {}) {
-    if (!this.isConfigured) {
-      throw new Error('VAPID not configured');
-    }
-
-    try {
-      const payload = JSON.stringify({
-        title,
-        body,
-        icon: data.icon || '/icon-192x192.png',
-        badge: data.badge || '/badge-72x72.png',
-        data: data.data || {},
-        actions: data.actions || [],
-        requireInteraction: data.requireInteraction || false
-      });
-
-      const result = await this.webpush.sendNotification(subscription, payload);
-      return {
-        success: true,
-        messageId: result.headers['location'] || Date.now().toString(),
-        provider: 'VAPID'
-      };
-    } catch (error) {
-      logger.error('❌ VAPID push notification failed:', error);
-      throw error;
-    }
-  }
-}
+const notificationService = require('./notificationService');
 
 // OneSignal Push Notification Service
 class OneSignalPushService {
@@ -144,54 +72,63 @@ class OneSignalPushService {
   }
 }
 
-// Main Push Notification Service with fallback
+// Main Push Notification Service - OneSignal Only
 class PushNotificationService {
   constructor() {
-    this.vapidService = new VAPIDPushService();
     this.oneSignalService = new OneSignalPushService();
   }
 
   async send(subscription, title, body, data = {}) {
-    const results = [];
-    let lastError = null;
+    const settings = await notificationService.getNotificationSettings();
+    if (!settings.pushEnabled) {
+      logger.info('⚠️ Push notifications are disabled in settings. Skipping send.');
+      return {
+        success: false,
+        message: 'Push notifications are disabled',
+        provider: 'None'
+      };
+    }
 
-    // Try OneSignal first (if configured)
-    if (this.oneSignalService.isConfigured) {
-      try {
-        logger.info('📱 Attempting OneSignal push notification...');
-        const result = await this.oneSignalService.send(subscription, title, body, data);
-        results.push(result);
-        logger.info('✅ OneSignal push notification sent successfully');
-        return result;
-      } catch (error) {
-        logger.warn('⚠️ OneSignal push notification failed, trying VAPID...', error.message);
-        lastError = error;
-        results.push({ success: false, provider: 'OneSignal', error: error.message });
+    // Send via OneSignal
+    try {
+      logger.info('📱 Sending OneSignal push notification...');
+
+      // Handle different subscription formats
+      let playerIds = [];
+
+      if (subscription.player_id) {
+        // OneSignal subscription with player_id
+        playerIds = [subscription.player_id];
+      } else if (subscription.user_id) {
+        // User ID format - OneSignal will lookup the player_id automatically
+        logger.info(`📱 Sending to user_id: ${subscription.user_id} (OneSignal will handle player_id lookup)`);
+        // For user_id format, we need to get the player_id from backend
+        const { getDatabase } = require('../config/database');
+        const db = getDatabase();
+
+        const userSubscription = await db.collection('push_subscriptions').findOne({
+          user_id: subscription.user_id,
+          provider: 'onesignal',
+          is_active: true
+        });
+
+        if (userSubscription && userSubscription.player_id) {
+          playerIds = [userSubscription.player_id];
+        } else {
+          throw new Error(`No OneSignal subscription found for user: ${subscription.user_id}`);
+        }
+      } else {
+        throw new Error('Invalid subscription format - missing player_id or user_id');
       }
-    }
 
-    // Try VAPID as fallback (if configured)
-    if (this.vapidService.isConfigured) {
-      try {
-        logger.info('📱 Attempting VAPID push notification...');
-        const result = await this.vapidService.send(subscription, title, body, data);
-        results.push(result);
-        logger.info('✅ VAPID push notification sent successfully');
-        return result;
-      } catch (error) {
-        logger.warn('⚠️ VAPID push notification failed', error.message);
-        lastError = error;
-        results.push({ success: false, provider: 'VAPID', error: error.message });
-      }
-    }
+      const result = await this.oneSignalService.send(playerIds, title, body, data);
+      logger.info('✅ OneSignal push notification sent successfully');
+      return result;
 
-    // If both failed
-    if (results.length === 0) {
-      throw new Error('No push notification services configured');
+    } catch (error) {
+      logger.error('❌ OneSignal push notification failed:', error.message);
+      throw error;
     }
-
-    // Return the last error if all services failed
-    throw lastError || new Error('All push notification services failed');
   }
 
   // Send to multiple recipients
@@ -223,15 +160,11 @@ class PushNotificationService {
   // Get service status
   getStatus() {
     return {
-      vapid: {
-        configured: this.vapidService.isConfigured,
-        status: this.vapidService.isConfigured ? 'ready' : 'not configured'
-      },
       oneSignal: {
         configured: this.oneSignalService.isConfigured,
         status: this.oneSignalService.isConfigured ? 'ready' : 'not configured'
       },
-      overall: this.vapidService.isConfigured || this.oneSignalService.isConfigured ? 'ready' : 'not configured'
+      overall: this.oneSignalService.isConfigured ? 'ready' : 'not configured'
     };
   }
 }

@@ -127,7 +127,7 @@ def send_to_user():
         mongo_db = get_mongo_database()
         user = mongo_db.users.find_one({'_id': current_user_id})
         
-        if not user or user.get('role') not in ['superadmin', 'campus_admin', 'course_admin']:
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']:
             return jsonify({
                 'success': False,
                 'message': 'Insufficient permissions'
@@ -180,7 +180,7 @@ def send_to_role():
         mongo_db = get_mongo_database()
         user = mongo_db.users.find_one({'_id': current_user_id})
         
-        if not user or user.get('role') not in ['superadmin', 'campus_admin', 'course_admin']:
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']:
             return jsonify({
                 'success': False,
                 'message': 'Insufficient permissions'
@@ -284,7 +284,7 @@ def get_stats():
         mongo_db = get_mongo_database()
         user = mongo_db.users.find_one({'_id': current_user_id})
         
-        if not user or user.get('role') not in ['superadmin', 'campus_admin', 'course_admin']:
+        if not user or user.get('role') not in ['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']:
             return jsonify({
                 'success': False,
                 'message': 'Insufficient permissions'

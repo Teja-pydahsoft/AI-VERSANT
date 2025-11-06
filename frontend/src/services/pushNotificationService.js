@@ -35,7 +35,7 @@ class PushNotificationService {
   }
 
   /**
-   * Initialize both push notification services
+   * Initialize OneSignal ONLY (No VAPID conflicts)
    * NOTE: Should only be called after user authentication
    */
   async initialize() {
@@ -47,51 +47,47 @@ class PushNotificationService {
         return false;
       }
 
-      console.log('🔔 Initializing push notification services...');
+      console.log('🔔 Initializing OneSignal ONLY (No VAPID)...');
 
       // Generate device fingerprint
       const deviceId = this.getDeviceId();
       console.log('🔑 Device ID:', deviceId);
 
-      // Initialize OneSignal first (it registers its own service worker)
+      // ONLY initialize OneSignal (no VAPID)
+      console.log('📱 Initializing OneSignal as ONLY notification service...');
       const oneSignalInitialized = await oneSignalService.initialize();
       console.log('OneSignal initialization:', oneSignalInitialized ? '✅' : '❌');
 
-      // Then initialize VAPID if supported
-      if (this.isSupported) {
-        const vapidInitialized = await this.initializeVapid();
-        console.log('VAPID initialization:', vapidInitialized ? '✅' : '❌');
+      if (oneSignalInitialized) {
+        // Check OneSignal subscription status
+        const oneSignalStatus = await oneSignalService.checkSubscriptionStatus();
+        this.isOneSignalSubscribed = oneSignalStatus;
+        this.isVapidSubscribed = false; // No VAPID
+
+        console.log('✅ OneSignal initialized as ONLY notification service');
       } else {
-        console.warn('⚠️ VAPID push notifications not supported in this browser');
+        console.error('❌ OneSignal initialization failed');
+        return false;
       }
 
       // Setup notification click handler
       this.setupNotificationClickHandler();
 
-      console.log('✅ Push notification services initialized');
+      console.log('✅ OneSignal-only push notification service initialized');
       console.log('📊 Local Status:', {
         oneSignal: this.isOneSignalSubscribed,
-        vapid: this.isVapidSubscribed,
-        deviceId: deviceId
+        vapid: false, // No VAPID
+        deviceId: deviceId,
+        service: 'OneSignal ONLY'
       });
 
-      // Verify with backend
+      // Restore subscription state from backend
       try {
-        const backendStatus = await this.checkSubscriptionStatusFromBackend();
-        console.log('📊 Backend Status:', backendStatus);
-        
-        // Sync local state with backend
-        if (backendStatus.isSubscribed) {
-          if (backendStatus.subscriptions.onesignal) {
-            this.isOneSignalSubscribed = true;
-          }
-          if (backendStatus.subscriptions.vapid) {
-            this.isVapidSubscribed = true;
-          }
-        }
+        console.log('🔄 Restoring OneSignal subscription state from backend...');
+        const restoreResult = await this.restoreSubscriptionState();
+        console.log('📊 OneSignal subscription state restored:', restoreResult);
       } catch (error) {
-        console.warn('⚠️ Could not verify subscription with backend:', error.message);
-        // Continue anyway - local state is still valid
+        console.warn('⚠️ Could not restore OneSignal subscription state:', error.message);
       }
 
       // Start health monitoring
@@ -102,7 +98,7 @@ class PushNotificationService {
 
       return true;
     } catch (error) {
-      console.error('❌ Push notification service initialization failed:', error);
+      console.error('❌ OneSignal-only push notification service initialization failed:', error);
       return false;
     }
   }
@@ -155,7 +151,7 @@ class PushNotificationService {
   }
 
   /**
-   * Subscribe to all available push notification services
+   * Subscribe to OneSignal ONLY (No VAPID)
    */
   async subscribeToAll() {
     try {
@@ -165,57 +161,63 @@ class PushNotificationService {
         throw new Error('Notification permission denied');
       }
 
-      // Subscribe to both services
-      const oneSignalPromise = oneSignalService.subscribe();
-      const vapidPromise = this.subscribeToVapid();
-
-      const [oneSignalResult, vapidResult] = await Promise.allSettled([
-        oneSignalPromise,
-        vapidPromise
-      ]);
+      // Subscribe ONLY to OneSignal
+      const oneSignalResult = await oneSignalService.subscribe();
 
       return {
-        oneSignal: oneSignalResult.status === 'fulfilled',
-        vapid: vapidResult.status === 'fulfilled',
-        success: oneSignalResult.status === 'fulfilled' || vapidResult.status === 'fulfilled'
+        oneSignal: oneSignalResult,
+        vapid: false, // No VAPID
+        success: oneSignalResult
       };
     } catch (error) {
-      console.error('Failed to subscribe to notifications:', error);
+      console.error('Failed to subscribe to OneSignal notifications:', error);
       return { oneSignal: false, vapid: false, success: false };
     }
   }
 
   /**
    * Register service worker for VAPID
-   * Uses existing OneSignal service worker if available
+   * PRIORITY: Use OneSignal service worker if available, fallback to VAPID
    */
   async registerServiceWorker() {
     try {
-      // Check if there's already a service worker registered (likely OneSignal)
+      // Check if OneSignal service worker is already registered
       const existingReg = await navigator.serviceWorker.getRegistration();
-      
-      if (existingReg) {
-        console.log('✅ Using existing service worker:', existingReg.active?.scriptURL);
-        this.registration = existingReg;
-        return true;
+
+      if (existingReg && existingReg.active) {
+        const scriptURL = existingReg.active.scriptURL;
+        console.log('✅ Using existing service worker:', scriptURL);
+
+        // Check if it's OneSignal service worker
+        if (scriptURL.includes('OneSignalSDKWorker.js') || scriptURL.includes('OneSignal')) {
+          console.log('📱 OneSignal service worker detected - using as primary');
+          this.registration = existingReg;
+          return true;
+        }
+
+        // Check if it's our VAPID service worker
+        if (scriptURL.includes('service-worker.js')) {
+          console.log('🔄 VAPID service worker already registered');
+          this.registration = existingReg;
+          return true;
+        }
       }
-      
-      // If no existing registration, register our VAPID service worker
-      console.log('📝 Registering VAPID service worker...');
-      this.registration = await navigator.serviceWorker.register('/service-worker.js', {
-        scope: '/'
-      });
-      
-      console.log('✅ VAPID service worker registered');
-      return true;
+
+      // No existing service worker - register OneSignal first, then VAPID as fallback
+      console.log('📝 No existing service worker - will rely on OneSignal service worker');
+
+      // Don't register VAPID service worker if OneSignal is available
+      // OneSignal will handle service worker registration
+      console.log('ℹ️ Skipping VAPID service worker registration - OneSignal will handle it');
+      return false;
     } catch (error) {
-      console.error('❌ Service Worker registration failed:', error);
+      console.error('❌ Service Worker registration check failed:', error);
       throw error;
     }
   }
 
   /**
-   * Check existing VAPID subscription
+   * Check existing VAPID subscription and restore state
    */
   async checkExistingSubscription() {
     try {
@@ -223,26 +225,38 @@ class PushNotificationService {
         console.warn('⚠️ No service worker registration, skipping subscription check');
         return false;
       }
-      
+
       const subscription = await this.registration.pushManager.getSubscription();
       this.vapidSubscription = subscription;
       this.isVapidSubscribed = !!subscription;
-      
+
       if (subscription) {
         console.log('✅ Found existing VAPID subscription');
         console.log('📍 Endpoint:', subscription.endpoint.substring(0, 50) + '...');
-        
+
+        // Check if subscription is still valid (not expired)
+        if (subscription.expirationTime && subscription.expirationTime < Date.now()) {
+          console.log('⚠️ VAPID subscription expired, removing...');
+          await subscription.unsubscribe();
+          this.vapidSubscription = null;
+          this.isVapidSubscribed = false;
+          return false;
+        }
+
         // Verify subscription is still valid with backend
         try {
           await this.updateVapidSubscription(subscription);
+          console.log('✅ VAPID subscription verified with backend');
         } catch (error) {
           console.warn('⚠️ Failed to verify subscription with backend:', error.message);
           // Don't throw - subscription might still be valid locally
+          // But mark as potentially invalid
+          console.log('⚠️ VAPID subscription may be invalid - will re-verify on next heartbeat');
         }
       } else {
         console.log('ℹ️ No existing VAPID subscription found');
       }
-      
+
       return this.isVapidSubscribed;
     } catch (error) {
       console.error('❌ Failed to check subscription:', error);
@@ -251,37 +265,25 @@ class PushNotificationService {
   }
 
   /**
-   * Subscribe to push notifications (both OneSignal and VAPID)
+   * Subscribe to OneSignal ONLY (No VAPID)
    */
   async subscribe() {
     try {
-      const results = await Promise.allSettled([
-        this.subscribeToOneSignal(),
-        this.subscribeToVapid()
-      ]);
+      console.log('📝 Subscribing to OneSignal ONLY...');
 
-      // Check results
-      const oneSignalResult = results[0];
-      const vapidResult = results[1];
+      const oneSignalResult = await this.subscribeToOneSignal();
 
-      // Log results
-      if (oneSignalResult.status === 'fulfilled' && oneSignalResult.value) {
+      if (oneSignalResult) {
         console.log('✅ OneSignal subscription successful');
         this.isOneSignalSubscribed = true;
+        this.isVapidSubscribed = false; // No VAPID
       } else {
-        console.warn('⚠️ OneSignal subscription failed:', oneSignalResult.reason);
+        console.warn('⚠️ OneSignal subscription failed');
       }
 
-      if (vapidResult.status === 'fulfilled' && vapidResult.value) {
-        console.log('✅ VAPID subscription successful');
-        this.isVapidSubscribed = true;
-      } else {
-        console.warn('⚠️ VAPID subscription failed:', vapidResult.reason);
-      }
-
-      return this.isOneSignalSubscribed || this.isVapidSubscribed;
+      return this.isOneSignalSubscribed;
     } catch (error) {
-      console.error('❌ Push notification subscription failed:', error);
+      console.error('❌ OneSignal subscription failed:', error);
       return false;
     }
   }
@@ -302,7 +304,7 @@ class PushNotificationService {
         console.warn('⚠️ No service worker registration - cannot subscribe to VAPID');
         return false;
       }
-      
+
       if (!this.vapidPublicKey) {
         console.warn('⚠️ VAPID public key not available - skipping VAPID subscription');
         return false;
@@ -314,6 +316,9 @@ class PushNotificationService {
         console.log('✅ Already subscribed to VAPID');
         this.vapidSubscription = existingSubscription;
         this.isVapidSubscribed = true;
+
+        // Update backend with device info
+        await this.updateVapidSubscription(existingSubscription);
         return true;
       }
 
@@ -328,7 +333,7 @@ class PushNotificationService {
       this.vapidSubscription = subscription;
       this.isVapidSubscribed = true;
 
-      // Send to backend
+      // Send to backend with device information
       await this.updateVapidSubscription(subscription);
 
       console.log('✅ VAPID subscription successful');
@@ -355,13 +360,14 @@ class PushNotificationService {
       }
 
       const deviceId = this.getDeviceId();
+      const deviceInfo = this.deviceFingerprint;
 
-      const response = await api.post('/vapid/subscribe', {
+      const response = await api.post('/push-notifications/subscribe', {
         subscription: subscription.toJSON(),
         browser: navigator.userAgent,
         platform: 'web',
         device_id: deviceId,
-        device_info: this.deviceFingerprint,
+        device_info: deviceInfo,
         last_verified: new Date().toISOString()
       });
 
@@ -372,6 +378,7 @@ class PushNotificationService {
       this.lastVerified = new Date();
       console.log('✅ VAPID subscription updated on backend with device info');
       console.log('🔑 Device ID:', deviceId);
+      console.log('📱 Device Info:', deviceInfo);
       return true;
     } catch (error) {
       console.error('❌ Failed to update subscription:', error);
@@ -560,21 +567,23 @@ class PushNotificationService {
   }
 
   /**
-   * Get subscription status (local)
+   * Get subscription status (OneSignal ONLY)
    */
   getSubscriptionStatus() {
     return {
       isSupported: this.isSupported,
-      isSubscribed: this.isOneSignalSubscribed || this.isVapidSubscribed,
+      isSubscribed: this.isOneSignalSubscribed,
       oneSignal: this.isOneSignalSubscribed,
-      vapid: this.isVapidSubscribed,
+      vapid: false, // No VAPID
       hasPermission: Notification.permission === 'granted',
-      subscription: this.vapidSubscription
+      subscription: null, // No VAPID subscription
+      deviceId: this.deviceId,
+      service: 'OneSignal ONLY'
     };
   }
 
   /**
-   * Check subscription status from backend
+   * Check subscription status from backend and restore local state
    */
   async checkSubscriptionStatusFromBackend() {
     try {
@@ -582,11 +591,30 @@ class PushNotificationService {
       if (response.data.success) {
         const status = response.data;
         console.log('📊 Backend subscription status:', status);
-        return {
+
+        const result = {
           isSubscribed: status.is_subscribed,
           subscriptions: status.subscriptions,
           details: status.details
         };
+
+        // Restore local state based on backend data
+        if (status.is_subscribed) {
+          if (status.subscriptions.onesignal) {
+            this.isOneSignalSubscribed = true;
+            console.log('✅ Restored OneSignal subscription state from backend');
+          }
+          if (status.subscriptions.vapid) {
+            this.isVapidSubscribed = true;
+            console.log('✅ Restored VAPID subscription state from backend');
+          }
+        } else {
+          this.isOneSignalSubscribed = false;
+          this.isVapidSubscribed = false;
+          console.log('ℹ️ No active subscriptions found in backend');
+        }
+
+        return result;
       } else {
         throw new Error(response.data.message || 'Failed to check subscription status');
       }
@@ -770,23 +798,26 @@ class PushNotificationService {
         console.log('ℹ️ No auth token, skipping heartbeat');
         return false;
       }
-      
+
       const deviceId = this.getDeviceId();
+      const deviceInfo = this.deviceFingerprint;
       const subscription = await this.registration?.pushManager.getSubscription();
-      
+
       if (!subscription) {
         console.warn('⚠️ No subscription for heartbeat');
         return false;
       }
-      
+
       const response = await api.post('/push-notifications/heartbeat', {
         device_id: deviceId,
         endpoint: subscription.endpoint,
-        device_info: this.deviceFingerprint,
+        device_info: deviceInfo,
         timestamp: new Date().toISOString(),
-        subscription_valid: true
+        subscription_valid: true,
+        user_agent: navigator.userAgent,
+        platform: 'web'
       });
-      
+
       if (response.data.success) {
         this.lastVerified = new Date();
         console.log('💓 Heartbeat sent successfully');
@@ -918,7 +949,24 @@ class PushNotificationService {
   async ensureSubscribed() {
     try {
       console.log('🔍 Ensuring subscription is active...');
-      
+
+      // First, check backend status to restore local state
+      try {
+        console.log('🔄 Restoring subscription state from backend...');
+        await this.checkSubscriptionStatusFromBackend();
+        console.log('✅ Backend state restored');
+      } catch (error) {
+        console.warn('⚠️ Could not restore from backend:', error.message);
+      }
+
+      // Check if current device needs subscription
+      const deviceNeedsSubscription = await this.checkDeviceSubscriptionStatus();
+      if (deviceNeedsSubscription) {
+        console.log('📱 Current device needs subscription - prompting user...');
+        await this.promptForSubscription();
+        return;
+      }
+
       // Check service worker
       const health = await this.checkServiceWorkerHealth();
       if (!health.healthy) {
@@ -926,7 +974,7 @@ class PushNotificationService {
         await this.autoRecover();
         return;
       }
-      
+
       // Check subscription
       const validation = await this.validateSubscription();
       if (!validation.valid) {
@@ -934,8 +982,8 @@ class PushNotificationService {
         await this.autoRecover();
         return;
       }
-      
-      // Verify with backend
+
+      // Final verification with backend
       try {
         const backendStatus = await this.checkSubscriptionStatusFromBackend();
         if (!backendStatus.isSubscribed) {
@@ -949,6 +997,125 @@ class PushNotificationService {
       }
     } catch (error) {
       console.error('❌ Error ensuring subscription:', error);
+    }
+  }
+
+  /**
+   * Check if current device needs subscription
+   */
+  async checkDeviceSubscriptionStatus() {
+    try {
+      const deviceId = this.getDeviceId();
+      console.log('🔍 Checking subscription status for device:', deviceId);
+
+      // Restore subscription state for this device
+      const deviceState = await this.restoreSubscriptionState();
+
+      // If device has no subscriptions, it needs subscription
+      if (deviceState.total === 0) {
+        console.log('📱 Device has no subscriptions - needs subscription');
+        return true;
+      }
+
+      // If device has subscriptions but they're not active locally, check if we need to re-subscribe
+      if (!this.isOneSignalSubscribed && !this.isVapidSubscribed) {
+        console.log('📱 Device subscriptions exist in backend but not active locally - may need re-subscription');
+        return true;
+      }
+
+      console.log('✅ Device subscription is active');
+      return false;
+    } catch (error) {
+      console.error('❌ Error checking device subscription status:', error);
+      return true; // Default to needing subscription on error
+    }
+  }
+
+  /**
+   * Prompt user for subscription if needed
+   */
+  async promptForSubscription() {
+    try {
+      console.log('🔄 Prompting user for push notification subscription...');
+
+      // Check if we already have permission
+      if (Notification.permission === 'granted') {
+        console.log('✅ Notification permission already granted - subscribing...');
+        await this.subscribe();
+        return;
+      }
+
+      // Request permission
+      const permission = await Notification.requestPermission();
+
+      if (permission === 'granted') {
+        console.log('✅ Notification permission granted - subscribing...');
+        await this.subscribe();
+      } else {
+        console.log('❌ Notification permission denied by user');
+      }
+    } catch (error) {
+      console.error('❌ Error prompting for subscription:', error);
+    }
+  }
+
+  /**
+   * Restore subscription state after browser restart
+   */
+  async restoreSubscriptionState() {
+    try {
+      console.log('🔄 Restoring subscription state after browser restart...');
+
+      // Get device ID
+      const deviceId = this.getDeviceId();
+      console.log('🔑 Current device ID:', deviceId);
+
+      // Check backend for existing subscriptions for this device
+      const response = await api.get(`/push-notifications/device-subscriptions/${deviceId}`);
+
+      if (response.data.success && response.data.subscriptions) {
+        const subscriptions = response.data.subscriptions;
+
+        console.log(`📊 Found ${subscriptions.length} subscriptions for device ${deviceId}`);
+
+        // Restore OneSignal state
+        const oneSignalSub = subscriptions.find(s => s.provider === 'onesignal');
+        if (oneSignalSub) {
+          this.isOneSignalSubscribed = true;
+          console.log('✅ Restored OneSignal subscription state');
+        }
+
+        // Restore VAPID state
+        const vapidSub = subscriptions.find(s => s.provider === 'vapid');
+        if (vapidSub) {
+          this.isVapidSubscribed = true;
+          console.log('✅ Restored VAPID subscription state');
+        }
+
+        return {
+          oneSignal: !!oneSignalSub,
+          vapid: !!vapidSub,
+          total: subscriptions.length
+        };
+      } else {
+        console.log('ℹ️ No existing subscriptions found for this device');
+
+        // Check if user has subscriptions on other devices
+        try {
+          const allDevicesResponse = await api.get('/push-notifications/user-devices');
+          if (allDevicesResponse.data.success && allDevicesResponse.data.devices.length > 0) {
+            console.log('📱 User has subscriptions on other devices:', allDevicesResponse.data.devices.length);
+            console.log('🔄 This device needs subscription for push notifications');
+          }
+        } catch (deviceError) {
+          console.warn('⚠️ Could not check other devices:', deviceError.message);
+        }
+
+        return { oneSignal: false, vapid: false, total: 0 };
+      }
+    } catch (error) {
+      console.error('❌ Error restoring subscription state:', error);
+      return { oneSignal: false, vapid: false, total: 0 };
     }
   }
 }

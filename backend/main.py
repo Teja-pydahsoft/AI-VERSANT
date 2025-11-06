@@ -33,7 +33,7 @@ def create_app():
     app = Flask(__name__)
 
     # Configuration
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'versant_jwt_secret_key_2024_secure_and_unique')
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', ' CRT Application jwt_secret_key_2024_secure_and_unique')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = JWT_ACCESS_TOKEN_EXPIRES
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = JWT_REFRESH_TOKEN_EXPIRES
     app.config['JWT_TOKEN_LOCATION'] = ['headers']
@@ -44,6 +44,86 @@ def create_app():
     jwt = JWTManager(app)
     bcrypt.init_app(app)
     socketio.init_app(app)
+    
+    # Initialize Swagger API Documentation
+    from flasgger import Swagger
+    swagger_config = {
+        "headers": [],
+        "specs": [
+            {
+                "endpoint": 'apispec',
+                "route": '/apispec.json',
+                "rule_filter": lambda rule: True,
+                "model_filter": lambda tag: True,
+            }
+        ],
+        "static_url_path": "/flasgger_static",
+        "swagger_ui": True,
+        "specs_route": "/api-docs",
+        "openapi": "3.0.3"  # Use OpenAPI 3.0
+    }
+    
+    swagger_template = {
+        "swagger": "3.0",
+        "info": {
+            "title": " CRT Application API Documentation",
+            "description": " CRT Application English Language Testing System API - Complete API documentation for all endpoints",
+            "version": "1.0.0",
+            "contact": {
+                "name": " CRT Application Support",
+                "email": "support@pydahsoft.in"
+            }
+        },
+        "servers": [
+            {
+                "url": os.getenv('API_BASE_URL', 'http://localhost:8000'),
+                "description": "Production Server"
+            },
+            {
+                "url": "http://localhost:8000",
+                "description": "Development Server"
+            }
+        ],
+        "components": {
+            "securitySchemes": {
+                "BearerAuth": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "bearerFormat": "JWT",
+                    "description": "JWT token obtained from /auth/login endpoint"
+                }
+            }
+        },
+        "tags": [
+            {
+                "name": "Authentication",
+                "description": "User authentication and authorization endpoints"
+            },
+            {
+                "name": "Student",
+                "description": "Student-facing endpoints for tests and progress"
+            },
+            {
+                "name": "Super Admin",
+                "description": "Super admin management endpoints"
+            },
+            {
+                "name": "Test Management",
+                "description": "Test creation, management, and submission endpoints"
+            },
+            {
+                "name": "Technical Tests",
+                "description": "Technical/Compiler test endpoints"
+            },
+            {
+                "name": "Analytics",
+                "description": "Analytics and reporting endpoints"
+            }
+        ]
+    }
+    
+    swagger = Swagger(app, config=swagger_config, template=swagger_template)
+    print("✅ Swagger API documentation initialized at /api-docs")
     
     # Initialize analytics middleware (must be done early)
     from middleware.analytics_middleware import init_analytics_middleware
@@ -129,47 +209,47 @@ def create_app():
              expose_headers=["Content-Type", "Authorization"],
              max_age=3600)
 
-    # CORS after_request handler
-    @app.after_request
-    def after_request(response):
-        """Add CORS headers to all responses"""
-        from flask import request
-        
-        # Get the origin from the request
-        origin = request.headers.get('Origin')
-        
-        # Check if origin is allowed
-        if allow_all_origins or (origin and origin in cors_origins.split(',')):
-            response.headers.add('Access-Control-Allow-Origin', origin if origin else '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-            response.headers.add('Access-Control-Max-Age', '3600')
-        
-        return response
+    # CORS after_request handler (removed - Flask-CORS handles it automatically)
+    # @app.after_request
+    # def after_request(response):
+    #     """Add CORS headers to all responses"""
+    #     from flask import request
+    #
+    #     # Get the origin from the request
+    #     origin = request.headers.get('Origin')
+    #
+    #     # Check if origin is allowed
+    #     if allow_all_origins or (origin and origin in cors_origins.split(',')):
+    #         response.headers.add('Access-Control-Allow-Origin', origin if origin else '*')
+    #         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers')
+    #         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
+    #         response.headers.add('Access-Control-Allow-Credentials', 'true')
+    #         response.headers.add('Access-Control-Max-Age', '3600')
+    #
+    #     return response
 
-    # CORS preflight handler
-    @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
-    @app.route('/<path:path>', methods=['OPTIONS'])
-    def handle_options(path):
-        """Handle CORS preflight requests"""
-        from flask import request
-        
-        # Get the origin from the request
-        origin = request.headers.get('Origin')
-        
-        # Check if origin is allowed
-        if allow_all_origins or (origin and origin in cors_origins.split(',')):
-            response = jsonify({'message': 'CORS preflight handled'})
-            response.headers.add('Access-Control-Allow-Origin', origin if origin else '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-            response.headers.add('Access-Control-Max-Age', '3600')
-            return response
-        else:
-            # Return 403 for disallowed origins
-            return jsonify({'error': 'CORS policy violation'}), 403
+    # CORS preflight handler (removed - Flask-CORS handles it automatically)
+    # @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+    # @app.route('/<path:path>', methods=['OPTIONS'])
+    # def handle_options(path):
+    #     """Handle CORS preflight requests"""
+    #     from flask import request
+    #
+    #     # Get the origin from the request
+    #     origin = request.headers.get('Origin')
+    #
+    #     # Check if origin is allowed
+    #     if allow_all_origins or (origin and origin in cors_origins.split(',')):
+    #         response = jsonify({'message': 'CORS preflight handled'})
+    #         response.headers.add('Access-Control-Allow-Origin', origin if origin else '*')
+    #         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers')
+    #         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
+    #         response.headers.add('Access-Control-Allow-Credentials', 'true')
+    #         response.headers.add('Access-Control-Max-Age', '3600')
+    #         return response
+    #     else:
+    #         # Return 403 for disallowed origins
+    #         return jsonify({'error': 'CORS policy violation'}), 403
 
     # Root route for API status
     @app.route('/')
@@ -202,7 +282,8 @@ def create_app():
                 'course_management': '/course-management',
                 'batch_management': '/batch-management',
                 'access_control': '/access-control',
-                'admin_management': '/admin-management'
+                'admin_management': '/admin-management',
+                'sub_superadmin': '/sub-superadmin'
             }
         }), 200
 
@@ -368,6 +449,14 @@ def create_app():
     # Notification Preferences
     from routes.notification_preferences import notification_preferences_bp
     app.register_blueprint(notification_preferences_bp, url_prefix='/notification-preferences')
+
+    # Notification Settings
+    from routes.notification_settings import notification_settings_bp
+    app.register_blueprint(notification_settings_bp, url_prefix='/notification-settings')
+
+    # Sub Superadmin Management
+    from routes.sub_superadmin import sub_superadmin_bp
+    app.register_blueprint(sub_superadmin_bp, url_prefix='/sub-superadmin')
     
     # Register Global Settings blueprint
     app.register_blueprint(global_settings_bp, url_prefix='/global-settings')
@@ -565,11 +654,11 @@ if __name__ == "__main__":
     mongo_db = get_mongo_database()
     start_scheduler(mongo_db)
     
-    # Start test reminder scheduler
-    print("📱 Starting test reminder scheduler...")
-    from test_reminder_scheduler import start_reminder_system, reminder_scheduler
-    start_reminder_system()
-    print("✅ Test reminder scheduler started successfully")
+    # Start test reminder scheduler (DISABLED - using notification service instead)
+    print("📱 Test reminder scheduler disabled - using notification service cron")
+    # from test_reminder_scheduler import start_reminder_system, reminder_scheduler
+    # start_reminder_system()
+    # print("✅ Test reminder scheduler started successfully")
     
     # Register cleanup function
     def cleanup():
@@ -581,12 +670,12 @@ if __name__ == "__main__":
         stop_worker_monitoring()
         stop_log_analytics()
         stop_scheduler()
-        # Stop test reminder scheduler
-        try:
-            reminder_scheduler.shutdown()
-            print("✅ Test reminder scheduler stopped")
-        except Exception as e:
-            print(f"⚠️ Error stopping test reminder scheduler: {e}")
+        # Stop test reminder scheduler (disabled)
+        # try:
+        #     reminder_scheduler.shutdown()
+        #     print("✅ Test reminder scheduler stopped")
+        # except Exception as e:
+        #     print(f"⚠️ Error stopping test reminder scheduler: {e}")
     
     atexit.register(cleanup)
     

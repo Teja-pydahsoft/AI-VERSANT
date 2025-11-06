@@ -1,0 +1,6 @@
+{
+  "to": "ravi@pydahsoft.in",
+  "subject": "Test Email from Notification Service",
+  "htmlContent": "<h1>Test Email</h1><p>This is a test email from the notification service.</p>",
+  "name": "Test User"
+}

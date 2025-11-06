@@ -20,6 +20,7 @@ const { validateApiKey } = require('./middleware/auth');
 
 // Import routes
 const notificationRoutes = require('./routes/notifications');
+const notificationSettingsRoutes = require('./routes/notificationSettings');
 const templateRoutes = require('./routes/templates');
 const analyticsRoutes = require('./routes/analytics');
 const healthRoutes = require('./routes/health');
@@ -65,6 +66,7 @@ app.use('/api/analytics', validateApiKey);
 
 // Routes
 app.use('/api/notifications', testNotificationRoutesNew); // New test notification routes
+app.use('/api/notification-settings', notificationSettingsRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/health', healthRoutes);
@@ -127,10 +129,10 @@ async function startServer() {
       logger.warn('⚠️ Old test reminder scheduler not found (expected)');
     }
 
-    // Start test reminder cron job (new)
+    // Start test reminder cron jobs (new)
     const testReminderCron = require('./services/testReminderCron');
     testReminderCron.start();
-    logger.info('✅ Test Reminder Cron Job started');
+    logger.info('✅ Test Reminder Cron Jobs started');
 
     // Start server
     app.listen(PORT, () => {
@@ -139,6 +141,8 @@ async function startServer() {
       logger.info(`📧 Email service: http://localhost:${PORT}/api/email/status`);
       logger.info(`📱 SMS service: http://localhost:${PORT}/api/sms/status`);
       logger.info(`📋 Test notifications: http://localhost:${PORT}/api/notifications/status`);
+      logger.info(`🔔 Push reminders: Every 6 hours IST`);
+      logger.info(`📧 SMS/Email reminders: 6 PM IST daily`);
     });
 
   } catch (error) {

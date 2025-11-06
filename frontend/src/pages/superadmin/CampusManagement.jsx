@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNotification } from '../../contexts/NotificationContext';
-
+import PermissionWrapper from '../../components/common/PermissionWrapper';
+import { useModulePermission } from '../../hooks/useModulePermission';
 
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
@@ -26,6 +27,7 @@ const CampusManagement = () => {
     const [loadingCourses, setLoadingCourses] = useState(false);
 
     const { success, error, info } = useNotification();
+    const { canCreate, canEdit, canDelete, isReadOnly } = useModulePermission('campus_management');
 
     const fetchCampuses = async () => {
         try {
@@ -124,7 +126,7 @@ const CampusManagement = () => {
     };
 
     return (
-        <>
+        <PermissionWrapper module="campus_management">
         <main className="px-6 lg:px-10 py-12">
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                         <div className="flex justify-between items-center mb-8">
@@ -132,7 +134,16 @@ const CampusManagement = () => {
                                 <h1 className="text-3xl font-bold text-gray-900">Campus Management</h1>
                                 <p className="mt-2 text-gray-600">Oversee all institutional campuses.</p>
                             </div>
-                            <button onClick={() => openModal()} className="flex items-center gap-2 bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition">
+                            <button 
+                                onClick={() => openModal()} 
+                                disabled={!canCreate}
+                                className={`flex items-center gap-2 font-semibold px-4 py-2 rounded-lg shadow-md transition ${
+                                    canCreate 
+                                        ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
+                                title={!canCreate ? 'You do not have permission to create campuses' : 'Add Campus'}
+                            >
                                 <PlusCircle size={20} />
                                 Add Campus
                             </button>
@@ -174,8 +185,29 @@ const CampusManagement = () => {
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                            <button onClick={(e) => { e.stopPropagation(); openModal(campus); }} className="text-indigo-600 hover:text-indigo-900 mr-4"><Edit size={18} /></button>
-                                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(campus.id); }} className="text-red-600 hover:text-red-900"><Trash2 size={18}/></button>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); openModal(campus); }} 
+                                                                disabled={!canEdit}
+                                                                className={`mr-4 ${
+                                                                    canEdit 
+                                                                        ? 'text-indigo-600 hover:text-indigo-900' 
+                                                                        : 'text-gray-400 cursor-not-allowed'
+                                                                }`}
+                                                                title={!canEdit ? 'You do not have permission to edit campuses' : 'Edit Campus'}
+                                                            >
+                                                                <Edit size={18} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleDelete(campus.id); }} 
+                                                                disabled={!canDelete}
+                                                                className={canDelete 
+                                                                    ? 'text-red-600 hover:text-red-900' 
+                                                                    : 'text-gray-400 cursor-not-allowed'
+                                                                }
+                                                                title={!canDelete ? 'You do not have permission to delete campuses' : 'Delete Campus'}
+                                                            >
+                                                                <Trash2 size={18}/>
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                     <AnimatePresence>
@@ -239,7 +271,7 @@ const CampusManagement = () => {
                                 </div>
                                 <div className="mt-8 flex justify-end">
                                     <button type="button" onClick={closeModal} className="mr-3 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300">Cancel</button>
-                                    <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700" disabled={isSubmitting}>
+                                    <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700" disabled={isSubmitting || isReadOnly}>
                                         {isSubmitting ? 'Submitting...' : (isEditMode ? 'Update' : 'Create Campus')}
                                     </button>
                                 </div>
@@ -248,7 +280,7 @@ const CampusManagement = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
-        </>
+        </PermissionWrapper>
     );
 };
 

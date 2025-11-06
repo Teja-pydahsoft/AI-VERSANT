@@ -1,64 +1,80 @@
 const mongoose = require('mongoose');
 
+// OneSignal-only subscription model - matches backend schema
 const userSubscriptionSchema = new mongoose.Schema({
-  userId: {
+  user_id: {
     type: String,
     required: true,
     index: true
   },
   userEmail: {
     type: String,
-    required: true,
     index: true
   },
-  subscription: {
-    endpoint: {
-      type: String,
-      required: true
-    },
-    keys: {
-      p256dh: {
-        type: String,
-        required: true
-      },
-      auth: {
-        type: String,
-        required: true
-      }
-    }
+  // OneSignal player_id - unique identifier for the device/subscription
+  player_id: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
   },
-  deviceInfo: {
-    userAgent: String,
-    platform: String,
-    browser: String,
-    isMobile: Boolean
+  // Provider
+  provider: {
+    type: String,
+    default: 'onesignal',
+    index: true
   },
-  isActive: {
+  tags: {
+    type: [String],
+    default: []
+  },
+  platform: {
+    type: String
+  },
+  browser: {
+    type: String
+  },
+  device_info: {
+    type: mongoose.Schema.Types.Mixed
+  },
+  is_active: {
     type: Boolean,
-    default: true
+    default: true,
+    index: true
   },
-  lastUsed: {
+  last_seen_at: {
     type: Date,
     default: Date.now
   },
-  createdAt: {
+  last_subscribed: {
     type: Date,
     default: Date.now
   },
-  updatedAt: {
+  last_heartbeat: {
+    type: Date,
+    default: Date.now
+  },
+  created_at: {
+    type: Date,
+    default: Date.now
+  },
+  updated_at: {
     type: Date,
     default: Date.now
   }
+}, { 
+  collection: 'push_subscriptions'
 });
 
 // Indexes for better performance
-userSubscriptionSchema.index({ userId: 1, isActive: 1 });
-userSubscriptionSchema.index({ userEmail: 1, isActive: 1 });
-userSubscriptionSchema.index({ 'subscription.endpoint': 1 });
+userSubscriptionSchema.index({ user_id: 1, is_active: 1 });
+userSubscriptionSchema.index({ player_id: 1 });
+userSubscriptionSchema.index({ provider: 1, is_active: 1 });
+userSubscriptionSchema.index({ user_id: 1, provider: 1, player_id: 1 });
 
-// Update the updatedAt field before saving
+// Update the updated_at field before saving
 userSubscriptionSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
+  this.updated_at = new Date();
   next();
 });
 

@@ -222,4 +222,413 @@ class BatchCourseInstance:
         return result.inserted_id
 
     def get_by_id(self, instance_id):
-        return self.collection.find_one({'_id': instance_id}) 
+        return self.collection.find_one({'_id': instance_id})
+
+# NotificationSettings model (MongoDB collection)
+class NotificationSettings:
+    def __init__(self, db):
+        self.collection = db.notification_settings
+
+    def find_one(self):
+        """Get the notification settings document"""
+        return self.collection.find_one({})
+
+    def find_or_create(self):
+        """Get settings or create default if none exist"""
+        settings = self.collection.find_one({})
+        if not settings:
+            default_settings = {
+                'pushEnabled': True,
+                'smsEnabled': True,
+                'mailEnabled': True,
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow()
+            }
+            result = self.collection.insert_one(default_settings)
+            settings = self.collection.find_one({'_id': result.inserted_id})
+        return settings
+
+    def update_settings(self, push_enabled=None, sms_enabled=None, mail_enabled=None):
+        """Update notification settings"""
+        update_data = {'updated_at': datetime.utcnow()}
+
+        if push_enabled is not None:
+            update_data['pushEnabled'] = push_enabled
+        if sms_enabled is not None:
+            update_data['smsEnabled'] = sms_enabled
+        if mail_enabled is not None:
+            update_data['mailEnabled'] = mail_enabled
+
+        result = self.collection.update_one(
+            {},  # Update the first (and should be only) document
+            {'$set': update_data},
+            upsert=True  # Create if doesn't exist
+        )
+
+        # Return updated document
+        return self.collection.find_one({})
+
+    def create_default(self):
+        """Create default notification settings"""
+        default_settings = {
+            'pushEnabled': True,
+            'smsEnabled': True,
+            'mailEnabled': True,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        return self.collection.insert_one(default_settings)
+
+    def delete_all(self):
+        """Delete all notification settings (for testing)"""
+        return self.collection.delete_many({})
+
+# Sub Superadmin Models
+class SubSuperadmin:
+   """Model for Sub Superadmin management with granular permissions"""
+
+   @staticmethod
+   def create_sub_superadmin_user_with_permissions(name, email, phone, username, password, role_name, permissions, created_by):
+       """Create a new sub superadmin user with custom role and permissions"""
+       import bcrypt
+       from mongo import mongo_db
+       now = datetime.utcnow()
+
+       # Hash password using bcrypt (same as other users)
+       password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+       # Create user account with permissions stored directly
+       user_data = {
+           'name': name,
+           'email': email,
+           'phone': phone,
+           'username': username,
+           'password_hash': password_hash,  # Use bcrypt hashed password
+           'role': 'sub_superadmin',
+           'role_name': role_name,  # Custom or template role name
+           'permissions': permissions,  # Permissions stored on user
+           'is_active': True,
+           'created_by': created_by,
+           'created_at': now,
+           'updated_at': now
+       }
+
+       result = mongo_db.db.users.insert_one(user_data)
+       return str(result.inserted_id)
+   
+   @staticmethod
+   def create_sub_superadmin_user(name, email, phone, username, password, sub_role_id, created_by):
+       """Create a new sub superadmin user with complete profile (legacy method)"""
+       import bcrypt
+       from mongo import mongo_db
+       now = datetime.utcnow()
+
+       # Hash password using bcrypt (same as other users)
+       password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+       # Create user account
+       user_data = {
+           'name': name,
+           'email': email,
+           'phone': phone,
+           'username': username,
+           'password_hash': password_hash,  # Use bcrypt hashed password
+           'role': 'sub_superadmin',
+           'sub_role_id': sub_role_id,  # Reference to sub_roles collection
+           'is_active': True,
+           'created_by': created_by,
+           'created_at': now,
+           'updated_at': now
+       }
+
+       result = mongo_db.db.users.insert_one(user_data)
+       return str(result.inserted_id)
+
+   @staticmethod
+   def get_sub_superadmin(user_id):
+       """Get sub superadmin details by user_id"""
+       from mongo import mongo_db
+       return mongo_db.db.users.find_one({
+           '_id': ObjectId(user_id),
+           'role': 'sub_superadmin',
+           'is_active': True
+       })
+
+   @staticmethod
+   def get_all_sub_superadmins():
+       """Get all active sub superadmins with their sub-role details"""
+       from mongo import mongo_db
+       sub_admins = list(mongo_db.db.users.find({
+           'role': 'sub_superadmin',
+           'is_active': True
+       }))
+       
+       # Populate sub-role details
+       for admin in sub_admins:
+           admin['_id'] = str(admin['_id'])
+           if 'sub_role_id' in admin and admin['sub_role_id']:
+               sub_role = mongo_db.db.sub_roles.find_one({'_id': ObjectId(admin['sub_role_id'])})
+               if sub_role:
+                   admin['sub_role'] = {
+                       'id': str(sub_role['_id']),
+                       'name': sub_role['name'],
+                       'permissions': sub_role['permissions']
+                   }
+       
+       return sub_admins
+
+   @staticmethod
+   def update_sub_role(user_id, sub_role_id):
+       """Update sub-role for a sub superadmin"""
+       from mongo import mongo_db
+       now = datetime.utcnow()
+       result = mongo_db.db.users.update_one(
+           {'_id': ObjectId(user_id), 'role': 'sub_superadmin', 'is_active': True},
+           {
+               '$set': {
+                   'sub_role_id': sub_role_id,
+                   'updated_at': now
+               }
+           }
+       )
+       return result.modified_count > 0
+
+   @staticmethod
+   def deactivate_sub_superadmin(user_id):
+       """Deactivate a sub superadmin"""
+       from mongo import mongo_db
+       now = datetime.utcnow()
+       result = mongo_db.db.users.update_one(
+           {'_id': ObjectId(user_id), 'role': 'sub_superadmin'},
+           {
+               '$set': {
+                   'is_active': False,
+                   'updated_at': now
+               }
+           }
+       )
+       return result.modified_count > 0
+
+   @staticmethod
+   def get_user_permissions(user_id):
+       """Get permissions for a specific user (from user document or sub-role)"""
+       from mongo import mongo_db
+       user = mongo_db.db.users.find_one({
+           '_id': ObjectId(user_id),
+           'role': 'sub_superadmin',
+           'is_active': True
+       })
+       
+       if not user:
+           return {}
+       
+       # New approach: permissions stored directly on user
+       if 'permissions' in user:
+           return user.get('permissions', {})
+       
+       # Legacy approach: permissions from sub_role_id
+       if 'sub_role_id' in user:
+           sub_role = mongo_db.db.sub_roles.find_one({'_id': ObjectId(user['sub_role_id'])})
+           if sub_role:
+               return sub_role.get('permissions', {})
+       
+       return {}
+
+   @staticmethod
+   def has_permission(user_id, page, required_access='read'):
+       """Check if user has required permission for a page"""
+       permissions = SubSuperadmin.get_user_permissions(user_id)
+       
+       user_access = permissions.get(page, 'none')
+       
+       if user_access == 'none':
+           return False
+       if required_access == 'read' and user_access in ['read', 'write']:
+           return True
+       if required_access == 'write' and user_access == 'write':
+           return True
+       
+       return False
+
+# Sub-Role Models
+class SubRole:
+   """Model for managing sub-roles with permissions"""
+   
+   @staticmethod
+   def create_sub_role(name, description, permissions, created_by):
+       """Create a new sub-role"""
+       from mongo import mongo_db
+       now = datetime.utcnow()
+       
+       sub_role_data = {
+           'name': name,
+           'description': description,
+           'permissions': permissions,  # Dict of module -> access (read/write/none)
+           'is_active': True,
+           'created_by': created_by,
+           'created_at': now,
+           'updated_at': now
+       }
+       
+       result = mongo_db.db.sub_roles.insert_one(sub_role_data)
+       return str(result.inserted_id)
+   
+   @staticmethod
+   def get_all_sub_roles():
+       """Get all active sub-roles"""
+       from mongo import mongo_db
+       roles = list(mongo_db.db.sub_roles.find({'is_active': True}))
+       for role in roles:
+           role['_id'] = str(role['_id'])
+       return roles
+   
+   @staticmethod
+   def get_sub_role(role_id):
+       """Get sub-role by ID"""
+       from mongo import mongo_db
+       role = mongo_db.db.sub_roles.find_one({'_id': ObjectId(role_id), 'is_active': True})
+       if role:
+           role['_id'] = str(role['_id'])
+       return role
+   
+   @staticmethod
+   def update_sub_role(role_id, name=None, description=None, permissions=None):
+       """Update sub-role"""
+       from mongo import mongo_db
+       now = datetime.utcnow()
+       update_data = {'updated_at': now}
+       
+       if name:
+           update_data['name'] = name
+       if description:
+           update_data['description'] = description
+       if permissions:
+           update_data['permissions'] = permissions
+       
+       result = mongo_db.db.sub_roles.update_one(
+           {'_id': ObjectId(role_id), 'is_active': True},
+           {'$set': update_data}
+       )
+       return result.modified_count > 0
+   
+   @staticmethod
+   def delete_sub_role(role_id):
+       """Soft delete sub-role"""
+       from mongo import mongo_db
+       now = datetime.utcnow()
+       result = mongo_db.db.sub_roles.update_one(
+           {'_id': ObjectId(role_id)},
+           {'$set': {'is_active': False, 'updated_at': now}}
+       )
+       return result.modified_count > 0
+
+# Permission Templates
+class PermissionTemplate:
+   """Predefined permission templates for common roles"""
+
+   TEMPLATES = {
+       'student_manager': {
+           'student_management': 'write',
+           'batch_management': 'read',
+           'test_management': 'read',
+           'question_bank': 'read',
+           'analytics': 'read',
+           'user_management': 'read',
+           'campus_management': 'read',
+           'course_management': 'read',
+           'form_management': 'read',
+           'results_management': 'write',
+           'submission_viewer': 'write',
+           'notification_settings': 'read',
+           'global_settings': 'read'
+       },
+       'content_manager': {
+           'student_management': 'read',
+           'batch_management': 'read',
+           'test_management': 'write',
+           'question_bank': 'write',
+           'analytics': 'read',
+           'user_management': 'read',
+           'campus_management': 'read',
+           'course_management': 'read',
+           'form_management': 'write',
+           'results_management': 'read',
+           'submission_viewer': 'read',
+           'notification_settings': 'read',
+           'global_settings': 'read'
+       },
+       'analytics_manager': {
+           'student_management': 'read',
+           'batch_management': 'read',
+           'test_management': 'read',
+           'question_bank': 'read',
+           'analytics': 'write',
+           'user_management': 'read',
+           'campus_management': 'read',
+           'course_management': 'read',
+           'form_management': 'read',
+           'results_management': 'read',
+           'submission_viewer': 'read',
+           'notification_settings': 'read',
+           'global_settings': 'read'
+       },
+       'system_admin': {
+           'student_management': 'write',
+           'batch_management': 'write',
+           'test_management': 'write',
+           'question_bank': 'write',
+           'analytics': 'write',
+           'user_management': 'write',
+           'campus_management': 'write',
+           'course_management': 'write',
+           'form_management': 'write',
+           'results_management': 'write',
+           'submission_viewer': 'write',
+           'notification_settings': 'write',
+           'global_settings': 'write'
+       },
+       'read_only': {
+           'student_management': 'read',
+           'batch_management': 'read',
+           'test_management': 'read',
+           'question_bank': 'read',
+           'analytics': 'read',
+           'user_management': 'read',
+           'campus_management': 'read',
+           'course_management': 'read',
+           'form_management': 'read',
+           'results_management': 'read',
+           'submission_viewer': 'read',
+           'notification_settings': 'read',
+           'global_settings': 'read'
+       }
+   }
+
+   @staticmethod
+   def get_template(role_name):
+       """Get permission template by role name"""
+       return PermissionTemplate.TEMPLATES.get(role_name, {})
+
+   @staticmethod
+   def get_all_templates():
+       """Get all available permission templates"""
+       return {
+           name: {
+               'name': name,
+               'permissions': template,
+               'description': PermissionTemplate.get_template_description(name)
+           }
+           for name, template in PermissionTemplate.TEMPLATES.items()
+       }
+
+   @staticmethod
+   def get_template_description(role_name):
+       """Get description for a template"""
+       descriptions = {
+           'student_manager': 'Can manage students and view results',
+           'content_manager': 'Can manage tests and questions',
+           'analytics_manager': 'Can view and analyze all data',
+           'system_admin': 'Full access to all features',
+           'read_only': 'Read-only access to all features'
+       }
+       return descriptions.get(role_name, 'Custom permissions')
