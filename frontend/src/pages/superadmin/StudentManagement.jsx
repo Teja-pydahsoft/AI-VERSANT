@@ -3,9 +3,9 @@ import { motion } from 'framer-motion';
 import { useNotification } from '../../contexts/NotificationContext';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
-import { Users, Filter, Search, Trash2, ListChecks, CheckCircle, BookOpen, Lock, Unlock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User } from 'lucide-react';
+import { Users, Filter, Search, Trash2, ListChecks, CheckCircle, BookOpen, Lock, Unlock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Edit2 } from 'lucide-react';
 import Modal from '../../components/common/Modal';
-import { getStudentAccessStatus, authorizeStudentModule, lockStudentModule, authorizeStudentLevel, lockStudentLevel, getStudentDetailedInsights, bulkMigrateStudentsProgress } from '../../services/api';
+import { getStudentAccessStatus, authorizeStudentModule, lockStudentModule, authorizeStudentLevel, lockStudentLevel, getStudentDetailedInsights, bulkMigrateStudentsProgress, getStudentDetails, updateStudent } from '../../services/api';
 
 const StudentManagement = () => {
     const [students, setStudents] = useState([]);
@@ -65,6 +65,12 @@ const StudentManagement = () => {
     const [showBulkActions, setShowBulkActions] = useState(false);
     const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
     const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+
+    // Edit student state
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingStudent, setEditingStudent] = useState(null);
+    const [editForm, setEditForm] = useState({ name: '', email: '', roll_number: '', mobile_number: '' });
+    const [savingEdit, setSavingEdit] = useState(false);
 
     // Fetch campuses on mount
     useEffect(() => {
@@ -188,6 +194,58 @@ const StudentManagement = () => {
             } catch (err) {
                 error(err.response?.data?.message || 'Failed to delete student.');
             }
+        }
+    };
+
+    const handleOpenEditStudent = async (student) => {
+        const targetId = student.student_id || student._id;
+        let merged = student;
+        try {
+            const res = await getStudentDetails(targetId);
+            if (res.data?.success && res.data.data) {
+                merged = { ...student, ...res.data.data, student_id: targetId };
+            }
+        } catch (err) {
+            // If detailed fetch fails (e.g., 404 student not found), fall back to list data
+            console.warn('Using list data for student edit due to fetch error', err);
+        }
+
+        setEditingStudent(merged);
+        setEditForm({
+            name: merged.name || '',
+            email: merged.email || '',
+            roll_number: merged.roll_number || '',
+            mobile_number: merged.mobile_number || '',
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const handleSaveStudent = async () => {
+        if (!editingStudent) return;
+        
+        // Basic mobile number validation: require exactly 10 digits
+        if (editForm.mobile_number && editForm.mobile_number.length !== 10) {
+            error('Mobile number must be exactly 10 digits.');
+            return;
+        }
+
+        setSavingEdit(true);
+        try {
+            const targetId = editingStudent.student_id || editingStudent._id;
+            await updateStudent(targetId, {
+                name: editForm.name,
+                email: editForm.email,
+                roll_number: editForm.roll_number,
+                mobile_number: editForm.mobile_number,
+            });
+            success('Student updated successfully.');
+            setIsEditModalOpen(false);
+            setEditingStudent(null);
+            await fetchStudents(1, searchTerm);
+        } catch (err) {
+            error(err.response?.data?.message || 'Failed to update student.');
+        } finally {
+            setSavingEdit(false);
         }
     };
 
@@ -1033,12 +1091,27 @@ const StudentManagement = () => {
                                                             </div>
                                                         </td>
                                                         <td className="px-8 py-6 whitespace-nowrap">
-                                                            <div className="text-sm text-gray-600 font-mono bg-gray-50 px-3 py-1 rounded">
-                                                                {student.username || student.roll_number || 'N/A'}
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-sm text-gray-600 font-mono bg-gray-50 px-3 py-1 rounded">
+                                                                    {student.username || student.roll_number || 'N/A'}
+                                                                </span>
+                                                                <span className="text-sm text-gray-600">
+                                                                    {student.mobile_number ? `📱 ${student.mobile_number}` : '📱 N/A'}
+                                                                </span>
                                                             </div>
                                                         </td>
                                                         <td className="px-8 py-6 whitespace-nowrap text-right">
                                                             <div className="flex items-center justify-end gap-3">
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleOpenEditStudent(student);
+                                                                    }} 
+                                                                    className="p-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all duration-200 hover:shadow-md group/btn"
+                                                                    title="Edit Student"
+                                                                >
+                                                                    <Edit2 className="w-5 h-5 group-hover/btn:scale-110 transition-transform" />
+                                                                </button>
                                                                 <button 
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
@@ -1082,6 +1155,96 @@ const StudentManagement = () => {
                                     </div>
                                 )}
                             </div>
+
+                            {/* Edit Student Modal */}
+                            {isEditModalOpen && (
+                                <Modal 
+                                    isOpen={isEditModalOpen} 
+                                    onClose={() => setIsEditModalOpen(false)} 
+                                    title="Edit Student"
+                                >
+                                    <div className="space-y-6">
+                                        <div className="border border-gray-200 rounded-xl divide-y">
+                                            <div className="flex items-center px-6 py-3">
+                                                <div className="w-1/4 text-sm font-medium text-gray-700">
+                                                    Name
+                                                </div>
+                                                <div className="w-3/4">
+                                                    <input
+                                                        type="text"
+                                                        value={editForm.name}
+                                                        onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                                                        className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center px-6 py-3">
+                                                <div className="w-1/4 text-sm font-medium text-gray-700">
+                                                    Email
+                                                </div>
+                                                <div className="w-3/4">
+                                                    <input
+                                                        type="email"
+                                                        value={editForm.email}
+                                                        onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                                                        className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center px-6 py-3">
+                                                <div className="w-1/4 text-sm font-medium text-gray-700">
+                                                    Roll Number
+                                                </div>
+                                                <div className="w-3/4">
+                                                    <input
+                                                        type="text"
+                                                        value={editForm.roll_number}
+                                                        onChange={(e) => setEditForm(prev => ({ ...prev, roll_number: e.target.value }))}
+                                                        className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center px-6 py-3">
+                                                <div className="w-1/4 text-sm font-medium text-gray-700">
+                                                    Mobile Number
+                                                </div>
+                                                <div className="w-3/4">
+                                                    <input
+                                                        type="tel"
+                                                        inputMode="numeric"
+                                                        maxLength={10}
+                                                        value={editForm.mobile_number}
+                                                        onChange={(e) => {
+                                                            // Allow only digits and limit to 10 characters
+                                                            const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                                            setEditForm(prev => ({ ...prev, mobile_number: digitsOnly }));
+                                                        }}
+                                                        className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                        placeholder="10-digit mobile number"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsEditModalOpen(false)}
+                                                className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={savingEdit}
+                                                onClick={handleSaveStudent}
+                                                className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400"
+                                            >
+                                                {savingEdit ? 'Saving...' : 'Save'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </Modal>
+                            )}
                             
                             {/* Load More Section */}
                             {students.length > 0 && (

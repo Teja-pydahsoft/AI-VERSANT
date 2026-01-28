@@ -315,7 +315,19 @@ const TestManagement = () => {
         return <ModuleQuestionUpload onBack={() => setView('list')} />
       case 'list':
       default:
-        return <TestListView tests={tests} loading={loading} setView={setView} onViewTest={handleViewTest} onDeleteTest={handleDeleteTest} onTestEmail={handleTestEmail} onFixAudioUrls={handleFixAudioUrls} user={user} />
+        return (
+          <TestListView
+            tests={tests}
+            loading={loading}
+            setView={setView}
+            onViewTest={handleViewTest}
+            onDeleteTest={handleDeleteTest}
+            onTestEmail={handleTestEmail}
+            onFixAudioUrls={handleFixAudioUrls}
+            user={user}
+            refreshTests={fetchTests}
+          />
+        )
     }
   }
 
@@ -445,7 +457,7 @@ const TestManagement = () => {
   )
 }
 
-const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTestEmail, onFixAudioUrls, user }) => {
+const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTestEmail, onFixAudioUrls, user, refreshTests }) => {
   const [filters, setFilters] = useState({
     module: '',
     level: '',
@@ -453,6 +465,9 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
     batch: '',
     status: '',
   });
+  const [showEditEndTimeModal, setShowEditEndTimeModal] = useState(false);
+  const [editingTest, setEditingTest] = useState(null);
+  const [newEndDateTime, setNewEndDateTime] = useState('');
 
   const filteredTests = useMemo(() => {
     return tests.filter(test => {
@@ -524,6 +539,56 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
 
   const clearFilters = () => {
     setFilters({ module: '', level: '', campus: '', batch: '', status: '' });
+  };
+
+  const handleOpenEditEndTime = async (test) => {
+    try {
+      // Always fetch latest test details so we have the current endDateTime
+      const res = await api.get(`/test-management/tests/${test._id}`);
+      const fullTest = res.data?.data || test;
+      setEditingTest(fullTest);
+
+      if (fullTest.endDateTime) {
+        const dt = new Date(fullTest.endDateTime);
+        const pad = (n) => n.toString().padStart(2, '0');
+        const isoLocal = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(
+          dt.getDate()
+        )}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+        setNewEndDateTime(isoLocal);
+      } else {
+        setNewEndDateTime('');
+      }
+      setShowEditEndTimeModal(true);
+    } catch (err) {
+      console.error('Error loading test details for edit', err);
+      toast.error('Failed to load test details for editing');
+    }
+  };
+
+  const handleSaveEndTime = async () => {
+    if (!editingTest || !newEndDateTime) {
+      return;
+    }
+
+    try {
+      const iso = new Date(newEndDateTime).toISOString();
+      await api.put(`/test-management/tests/${editingTest._id}/end-time`, {
+        endDateTime: iso,
+      });
+      toast.success('Test end date updated successfully');
+      setShowEditEndTimeModal(false);
+      setEditingTest(null);
+      setNewEndDateTime('');
+      // Refresh tests list in parent
+      if (typeof refreshTests === 'function') {
+        await refreshTests();
+      }
+    } catch (err) {
+      console.error('Error updating test end date', err);
+      toast.error(
+        err.response?.data?.message || 'Failed to update test end date'
+      );
+    }
   };
 
   return (
@@ -633,12 +698,13 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                       {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created At</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created (IST)</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Ends (IST)</th>
                   <th scope="col" className="px-4 py-3 relative"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredTests.map((test, index) => (
+              {filteredTests.map((test, index) => (
                   <tr key={test._id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50 hover:bg-indigo-50'}>
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700">{index + 1}</td>
                     <td className="px-4 py-3 whitespace-normal break-words text-sm font-medium text-gray-900">{test.name}</td>
@@ -648,7 +714,9 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                     <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">{test.campus || 'N/A'}</td>
                     <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">{test.batches}</td>
                     <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">{test.courses}</td>
-                    <td className="px-3 py-3 whitespace-normal break-words text-sm text-gray-500 text-center">{test.question_count}</td>
+                    <td className="px-3 py-3 whitespace-normal break-words text-sm text-gray-500 text-center">
+                      {test.question_count}
+                    </td>
                     <td className="px-4 py-3 whitespace-normal break-words text-sm">
                       <span className={clsx('px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full', {
                         'bg-green-100 text-green-800': test.status === 'active',
@@ -669,11 +737,40 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                         hour12: false
                       }) : 'N/A'}
                     </td>
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">
+                      {test.endDateTime ? new Date(test.endDateTime).toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                      }) : 'N/A'}
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center space-x-2">
-                        <button onClick={() => onViewTest(test._id)} className="text-indigo-600 hover:text-indigo-900 p-1 rounded-full hover:bg-gray-200" title="View Test"><Eye className="h-5 w-5" /></button>
-                        <button className="text-gray-400 cursor-not-allowed p-1 rounded-full" title="Edit Test (soon)"><Edit className="h-5 w-5" /></button>
-                        <button onClick={() => onDeleteTest(test._id)} className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-gray-200" title="Delete Test"><Trash2 className="h-5 w-5" /></button>
+                        <button
+                          onClick={() => onViewTest(test._id)}
+                          className="text-indigo-600 hover:text-indigo-900 p-1 rounded-full hover:bg-gray-200"
+                          title="View Test"
+                        >
+                          <Eye className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={() => handleOpenEditEndTime(test)}
+                          className="text-blue-600 hover:text-blue-800 p-1 rounded-full hover:bg-gray-200"
+                          title="Edit Test End Date"
+                        >
+                          <Edit className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={() => onDeleteTest(test._id)}
+                          className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-gray-200"
+                          title="Delete Test"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -683,6 +780,47 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
           )}
         </div>
       </div>
+
+      {/* Edit End Time Modal */}
+      {showEditEndTimeModal && editingTest && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">
+              Edit Test End Date &amp; Time
+            </h2>
+            <p className="text-sm text-gray-600 mb-4 break-words">
+              {editingTest.name}
+            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              New End Date &amp; Time
+            </label>
+            <input
+              type="datetime-local"
+              value={newEndDateTime}
+              onChange={(e) => setNewEndDateTime(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEditEndTimeModal(false);
+                  setEditingTest(null);
+                }}
+                className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEndTime}
+                className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                disabled={!newEndDateTime}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   )
 }

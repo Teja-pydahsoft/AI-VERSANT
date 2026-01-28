@@ -618,6 +618,7 @@ def get_all_tests():
                     'test_type': 1,
                     'status': 1,
                     'created_at': 1,
+                    'endDateTime': 1,
                     'question_count': {'$size': '$questions'},
                     'module_id': 1,
                     'level_id': 1,
@@ -639,7 +640,8 @@ def get_all_tests():
             test = convert_objectids(test)
             
             # Format dates
-            test['created_at'] = safe_isoformat(test['created_at']) if test.get('created_at') else None
+            test['created_at'] = safe_isoformat(test.get('created_at')) if test.get('created_at') else None
+            test['endDateTime'] = safe_isoformat(test.get('endDateTime')) if test.get('endDateTime') else None
             
             # Format campus, batch, and course names properly
             test['campus'] = ', '.join(test.get('campus_names', [])) if test.get('campus_names') else 'N/A'
@@ -730,6 +732,78 @@ def delete_test(test_id):
     except Exception as e:
         current_app.logger.error(f"Error deleting test {test_id}: {e}")
         return jsonify({'success': False, 'message': 'An error occurred while deleting the test.'}), 500
+
+
+@test_management_bp.route('/tests/<test_id>/end-time', methods=['PUT'])
+@jwt_required()
+def update_test_end_time(test_id):
+    """Update the endDateTime for an existing online test."""
+    try:
+        current_user_id = get_jwt_identity()
+        user = mongo_db.find_user_by_id(current_user_id)
+
+        if not user:
+            return jsonify({
+                'success': False,
+                'message': 'Access denied. Authentication required.'
+            }), 401
+
+        if user.get('role') not in ['superadmin', 'sub_superadmin', 'campus_admin', 'course_admin']:
+            return jsonify({
+                'success': False,
+                'message': 'Access denied. Admin privileges required.'
+            }), 403
+
+        data = request.get_json() or {}
+        endDateTime = data.get('endDateTime')
+
+        if not endDateTime:
+            return jsonify({
+                'success': False,
+                'message': 'endDateTime is required'
+            }), 400
+
+        try:
+            new_end_dt = datetime.fromisoformat(endDateTime.replace('Z', '+00:00'))
+        except Exception:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid endDateTime format'
+            }), 400
+
+        test_obj_id = ObjectId(test_id)
+        test_doc = mongo_db.tests.find_one({'_id': test_obj_id})
+
+        if not test_doc:
+            return jsonify({
+                'success': False,
+                'message': 'Test not found'
+            }), 404
+
+        # Optional: ensure startDateTime exists and is before new endDateTime
+        start_dt = test_doc.get('startDateTime')
+        if start_dt and isinstance(start_dt, datetime) and start_dt >= new_end_dt:
+            return jsonify({
+                'success': False,
+                'message': 'End date must be after start date'
+            }), 400
+
+        mongo_db.tests.update_one(
+            {'_id': test_obj_id},
+            {'$set': {'endDateTime': new_end_dt}}
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'Test end date updated successfully'
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error updating test end time: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to update test end time: {e}'
+        }), 500
 
 @test_management_bp.route('/student-count', methods=['POST'])
 @jwt_required()

@@ -1228,7 +1228,10 @@ def get_filtered_students():
             batch = mongo_db.batches.find_one({'_id': student.get('batch_id')})
             
             student_details.append({
+                # This is the user document ID
                 '_id': str(student['_id']),
+                # This is the corresponding student profile ID (used by /batch-management/student/<student_id>)
+                'student_id': str(student_profile['_id']) if student_profile else None,
                 'name': student.get('name', ''),
                 'email': student.get('email', ''),
                 'roll_number': student_profile.get('roll_number', '') if student_profile else '',
