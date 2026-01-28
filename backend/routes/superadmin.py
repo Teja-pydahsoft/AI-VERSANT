@@ -2435,7 +2435,8 @@ def get_online_tests_overview():
                     'category': '$test_details.module_id',
                     'created_at': '$test_details.created_at',
                     'total_attempts': 1,
-                    'unique_students_count': {'$size': '$unique_students'},
+                    # Number of students who have attempted at least once
+                    'attempted_students_count': {'$size': '$unique_students'},
                     'highest_score': {'$max': '$all_scores'},
                     'average_score': {'$avg': '$all_scores'},
                     'campus_ids': {
@@ -2462,7 +2463,8 @@ def get_online_tests_overview():
                 }
             },
             {
-                '$sort': {'test_name': 1}
+                # Sort by created_at so latest tests appear first instead of alphabetical order
+                '$sort': {'created_at': -1}
             }
         ]
         
@@ -2487,15 +2489,22 @@ def get_online_tests_overview():
                 'category': test.get('module_id', 'Unknown Category'),
                 'created_at': test.get('created_at'),
                 'total_attempts': 0,
-                'unique_students_count': 0,
+                # No students have attempted yet
+                'attempted_students_count': 0,
                 'highest_score': 0,
                 'average_score': 0,
                 'campus_ids': [str(cid) for cid in test.get('campus_ids', [])],
                 'course_ids': [str(cid) for cid in test.get('course_ids', [])],
                 'batch_ids': [str(bid) for bid in test.get('batch_ids', [])]
             })
+
+        # Ensure final stats are sorted by created_at descending so the newest tests are always first
+        test_stats.sort(
+            key=lambda x: x.get('created_at') or datetime.min,
+            reverse=True
+        )
         
-        # Format response
+        # Format response (initially without accurate total_assigned_students)
         tests_overview = []
         for stat in test_stats:
             tests_overview.append({
@@ -2503,7 +2512,11 @@ def get_online_tests_overview():
                 'test_name': stat.get('test_name', 'Unknown Test'),
                 'category': stat.get('category', 'Unknown Category'),
                 'total_attempts': stat.get('total_attempts', 0),
-                'unique_students': stat.get('unique_students_count', 0),
+                # Attempted students based on attempts collection
+                'attempted_students': stat.get('attempted_students_count', 0),
+                # Placeholders, will be updated with accurate values below
+                'total_assigned_students': 0,
+                'pending_students': 0,
                 'highest_score': round(stat.get('highest_score', 0), 2),
                 'average_score': round(stat.get('average_score', 0), 2),
                 'created_at': safe_isoformat(stat.get('created_at')),
@@ -2511,6 +2524,42 @@ def get_online_tests_overview():
                 'course_ids': [str(cid) for cid in stat.get('course_ids', [])],
                 'batch_ids': [str(bid) for bid in stat.get('batch_ids', [])]
             })
+
+        # Compute accurate total_assigned_students and pending_students
+        # by reusing the same assignment logic as the detailed test attempts endpoint.
+        for test in tests_overview:
+            total_assigned = 0
+
+            try:
+                test_object_id = ObjectId(test['test_id'])
+                test_doc = mongo_db.tests.find_one({'_id': test_object_id})
+            except Exception:
+                test_doc = None
+
+            if test_doc:
+                campus_ids = test_doc.get('campus_ids', [])
+                course_ids = test_doc.get('course_ids', [])
+                batch_ids = test_doc.get('batch_ids', [])
+
+                student_query = {}
+                if campus_ids:
+                    student_query['campus_id'] = {'$in': campus_ids}
+                if course_ids:
+                    student_query['course_id'] = {'$in': course_ids}
+                if batch_ids:
+                    student_query['batch_id'] = {'$in': batch_ids}
+
+                if student_query:
+                    try:
+                        total_assigned = mongo_db.students.count_documents(student_query)
+                    except Exception:
+                        total_assigned = 0
+
+            attempted = test.get('attempted_students', 0) or 0
+            pending = max(total_assigned - attempted, 0)
+
+            test['total_assigned_students'] = total_assigned
+            test['pending_students'] = pending
         
         return jsonify({
             'success': True,

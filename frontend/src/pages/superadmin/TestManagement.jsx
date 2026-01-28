@@ -450,24 +450,72 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
     module: '',
     level: '',
     campus: '',
+    batch: '',
     status: '',
   });
 
   const filteredTests = useMemo(() => {
     return tests.filter(test => {
-      return (
-        (filters.module ? test.module_id === filters.module : true) &&
-        (filters.level ? test.level === filters.level : true) &&
-        (filters.campus ? test.campus === filters.campus : true) &&
-        (filters.status ? test.status === filters.status : true)
-      );
+      const matchesModule = filters.module ? test.module_id === filters.module : true;
+      const matchesLevel = filters.level ? test.level === filters.level : true;
+      const matchesCampus = filters.campus ? test.campus === filters.campus : true;
+
+      // Normalize batches field into an array of strings (handles string, array, or missing)
+      let batchesArray = [];
+      if (Array.isArray(test.batches)) {
+        batchesArray = test.batches.map(b => String(b).trim()).filter(Boolean);
+      } else if (typeof test.batches === 'string') {
+        batchesArray = test.batches
+          .split(',')
+          .map(b => b.trim())
+          .filter(Boolean);
+      }
+
+      const matchesBatch = filters.batch ? batchesArray.includes(filters.batch) : true;
+      const matchesStatus = filters.status ? test.status === filters.status : true;
+
+      return matchesModule && matchesLevel && matchesCampus && matchesBatch && matchesStatus;
     });
   }, [tests, filters]);
 
-  const moduleOptions = useMemo(() => [...new Set(tests.map(t => t.module_id).filter(Boolean))], [tests]);
-  const levelOptions = useMemo(() => [...new Set(tests.map(t => t.level).filter(Boolean))], [tests]);
-  const campusOptions = useMemo(() => [...new Set(tests.map(t => t.campus).filter(Boolean))], [tests]);
-  const statusOptions = useMemo(() => [...new Set(tests.map(t => t.status).filter(Boolean))], [tests]);
+  const moduleOptions = useMemo(
+    () => [...new Set(tests.map(t => t.module_id).filter(Boolean))],
+    [tests]
+  );
+  const levelOptions = useMemo(
+    () => [...new Set(tests.map(t => t.level).filter(Boolean))],
+    [tests]
+  );
+  const campusOptions = useMemo(
+    () => [...new Set(tests.map(t => t.campus).filter(Boolean))],
+    [tests]
+  );
+  const batchOptions = useMemo(() => {
+    const values = [];
+
+    tests.forEach(t => {
+      if (!t.batches) return;
+
+      if (Array.isArray(t.batches)) {
+        t.batches
+          .map(b => String(b).trim())
+          .filter(Boolean)
+          .forEach(b => values.push(b));
+      } else if (typeof t.batches === 'string') {
+        t.batches
+          .split(',')
+          .map(b => b.trim())
+          .filter(Boolean)
+          .forEach(b => values.push(b));
+      }
+    });
+
+    return [...new Set(values)];
+  }, [tests]);
+  const statusOptions = useMemo(
+    () => [...new Set(tests.map(t => t.status).filter(Boolean))],
+    [tests]
+  );
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -475,7 +523,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
   };
 
   const clearFilters = () => {
-    setFilters({ module: '', level: '', campus: '', status: '' });
+    setFilters({ module: '', level: '', campus: '', batch: '', status: '' });
   };
 
   return (
@@ -522,60 +570,86 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
           <h3 className="text-xl font-semibold text-gray-800">All Created Tests</h3>
           <button onClick={clearFilters} className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline">Clear Filters</button>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-hidden">
           {loading ? <LoadingSpinner /> : (
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="w-full table-fixed divide-y divide-gray-200">
               <thead className="bg-gray-100">
                 <tr>
-                  <th scope="col" className="w-1/6 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Test Name</th>
-                  <th scope="col" className="w-1/12 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Type</th>
-                  <th scope="col" className="w-1/12 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-14">S. No</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Test Name</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Type</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     <span className="block mb-1">Module</span>
-                    <select name="module" value={filters.module} onChange={handleFilterChange} className="w-full border-gray-300 rounded-md shadow-sm text-xs font-normal normal-case focus:ring-indigo-500 focus:border-indigo-500 bg-gray-700 text-white">
+                    <select
+                      name="module"
+                      value={filters.module}
+                      onChange={handleFilterChange}
+                      className="w-full border-gray-300 rounded-md shadow-sm text-xs font-normal normal-case focus:ring-indigo-500 focus:border-indigo-500 bg-gray-700 text-white"
+                    >
                       <option value="">All</option>
-                      {moduleOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      {moduleOptions.map(opt => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
                     </select>
                   </th>
-                  <th scope="col" className="w-1/12 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     <span className="block mb-1">Level</span>
                     <select name="level" value={filters.level} onChange={handleFilterChange} className="w-full border-gray-300 rounded-md shadow-sm text-xs font-normal normal-case focus:ring-indigo-500 focus:border-indigo-500 bg-gray-700 text-white">
                       <option value="">All</option>
                       {levelOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   </th>
-                  <th scope="col" className="w-1/6 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     <span className="block mb-1">Campus</span>
                     <select name="campus" value={filters.campus} onChange={handleFilterChange} className="w-full border-gray-300 rounded-md shadow-sm text-xs font-normal normal-case focus:ring-indigo-500 focus:border-indigo-500 bg-gray-700 text-white">
                       <option value="">All</option>
                       {campusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   </th>
-                  <th scope="col" className="w-1/6 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Batch</th>
-                  <th scope="col" className="w-1/6 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Courses</th>
-                  <th scope="col" className="w-1/12 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Questions</th>
-                  <th scope="col" className="w-1/12 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <span className="block mb-1">Batch</span>
+                    <select
+                      name="batch"
+                      value={filters.batch}
+                      onChange={handleFilterChange}
+                      className="w-full border-gray-300 rounded-md shadow-sm text-xs font-normal normal-case focus:ring-indigo-500 focus:border-indigo-500 bg-gray-700 text-white"
+                    >
+                      <option value="">All</option>
+                      {batchOptions.map(opt => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Courses</th>
+                  <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Questions</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     <span className="block mb-1">Status</span>
                     <select name="status" value={filters.status} onChange={handleFilterChange} className="w-full border-gray-300 rounded-md shadow-sm text-xs font-normal normal-case focus:ring-indigo-500 focus:border-indigo-500 bg-gray-700 text-white">
                       <option value="">All</option>
                       {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   </th>
-                  <th scope="col" className="w-1/12 px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created At</th>
-                  <th scope="col" className="w-1/12 relative px-6 py-4"><span className="sr-only">Actions</span></th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created At</th>
+                  <th scope="col" className="px-4 py-3 relative"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredTests.map((test, index) => (
                   <tr key={test._id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50 hover:bg-indigo-50'}>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm font-medium text-gray-900">{test.name}</td>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm text-gray-500 capitalize">{test.test_type}</td>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm text-gray-500 capitalize">{test.module_id || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm text-gray-500 capitalize">{test.level || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm text-gray-500">{test.campus || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm text-gray-500">{test.batches}</td>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm text-gray-500">{test.courses}</td>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm text-gray-500 text-center">{test.question_count}</td>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm">
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700">{index + 1}</td>
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm font-medium text-gray-900">{test.name}</td>
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500 capitalize">{test.test_type}</td>
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500 capitalize">{test.module_id || 'N/A'}</td>
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500 capitalize">{test.level || 'N/A'}</td>
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">{test.campus || 'N/A'}</td>
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">{test.batches}</td>
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">{test.courses}</td>
+                    <td className="px-3 py-3 whitespace-normal break-words text-sm text-gray-500 text-center">{test.question_count}</td>
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm">
                       <span className={clsx('px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full', {
                         'bg-green-100 text-green-800': test.status === 'active',
                         'bg-yellow-100 text-yellow-800': test.status === 'processing',
@@ -584,7 +658,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                         {test.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-normal break-words text-sm text-gray-500">
+                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">
                       {test.created_at ? new Date(test.created_at).toLocaleString('en-IN', {
                         timeZone: 'Asia/Kolkata',
                         year: 'numeric',
@@ -595,7 +669,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                         hour12: false
                       }) : 'N/A'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button onClick={() => onViewTest(test._id)} className="text-indigo-600 hover:text-indigo-900 p-1 rounded-full hover:bg-gray-200" title="View Test"><Eye className="h-5 w-5" /></button>
                         <button className="text-gray-400 cursor-not-allowed p-1 rounded-full" title="Edit Test (soon)"><Edit className="h-5 w-5" /></button>

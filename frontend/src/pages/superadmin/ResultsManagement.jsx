@@ -748,6 +748,10 @@ const ResultsManagement = () => {
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
     const [tests, setTests] = useState([]);
+    const [campuses, setCampuses] = useState([]);
+    const [batches, setBatches] = useState([]);
+    const [selectedCampusFilter, setSelectedCampusFilter] = useState('all');
+    const [selectedBatchFilter, setSelectedBatchFilter] = useState('all');
     const [expandedTest, setExpandedTest] = useState(null);
     const [testAttempts, setTestAttempts] = useState({});
     const [selectedStudent, setSelectedStudent] = useState(null);
@@ -769,6 +773,7 @@ const ResultsManagement = () => {
         window.scrollTo(0, 0);
         fetchTests();
         fetchAutoReleaseSettings();
+        fetchFilterData();
     }, []);
 
     const fetchTests = async () => {
@@ -792,6 +797,31 @@ const ResultsManagement = () => {
         }
     };
 
+    const fetchFilterData = async () => {
+        try {
+            const [campusRes, batchRes] = await Promise.all([
+                api.get('/campus-management/'),
+                api.get('/batch-management/')
+            ]);
+
+            // Super admin campus list
+            if (campusRes?.data?.data) {
+                setCampuses(campusRes.data.data);
+            } else if (Array.isArray(campusRes?.data)) {
+                setCampuses(campusRes.data);
+            }
+
+            // Batch list
+            if (batchRes?.data?.data) {
+                setBatches(batchRes.data.data);
+            } else if (Array.isArray(batchRes?.data)) {
+                setBatches(batchRes.data);
+            }
+        } catch (err) {
+            console.error('Error fetching campuses/batches for filters:', err);
+        }
+    };
+
     const fetchTestAttempts = async (testId) => {
         try {
             const response = await api.get(`/superadmin/test-attempts/${testId}`);
@@ -808,6 +838,73 @@ const ResultsManagement = () => {
             error('Failed to fetch test attempts.');
         }
     };
+
+    // Maps for quick lookups
+    const campusMap = React.useMemo(() => {
+        const map = {};
+        campuses.forEach(campus => {
+            if (!campus) return;
+            const id = campus.id || campus._id || campus.campus_id;
+            if (!id) return;
+            map[String(id)] = campus.name || campus.campus_name || campus.label || 'Unnamed Campus';
+        });
+        return map;
+    }, [campuses]);
+
+    const batchMap = React.useMemo(() => {
+        const map = {};
+        batches.forEach(batch => {
+            if (!batch) return;
+            const id = batch.id || batch._id || batch.batch_id;
+            if (!id) return;
+            map[String(id)] = batch.name || batch.batch_name || batch.label || 'Unnamed Batch';
+        });
+        return map;
+    }, [batches]);
+
+    // Apply campus / batch filters and ensure latest tests appear first
+    const filteredAndSortedTests = React.useMemo(() => {
+        const filtered = tests.filter(test => {
+            const campusIds = test.campus_ids || [];
+            const batchIds = test.batch_ids || [];
+
+            const matchesCampus =
+                selectedCampusFilter === 'all' ||
+                (Array.isArray(campusIds) && campusIds.includes(selectedCampusFilter));
+
+            const matchesBatch =
+                selectedBatchFilter === 'all' ||
+                (Array.isArray(batchIds) && batchIds.includes(selectedBatchFilter));
+
+            return matchesCampus && matchesBatch;
+        });
+
+        return [...filtered].sort((a, b) => {
+            const aDate = a.created_at ? new Date(a.created_at) : new Date(0);
+            const bDate = b.created_at ? new Date(b.created_at) : new Date(0);
+            return bDate - aDate; // latest first
+        });
+    }, [tests, selectedCampusFilter, selectedBatchFilter]);
+
+    // Batch options should depend on selected campus
+    const filteredBatchOptions = React.useMemo(() => {
+        const ids = new Set();
+
+        tests.forEach(test => {
+            const campusIds = test.campus_ids || [];
+            const batchIds = test.batch_ids || [];
+
+            const matchesCampus =
+                selectedCampusFilter === 'all' ||
+                (Array.isArray(campusIds) && campusIds.includes(selectedCampusFilter));
+
+            if (!matchesCampus || !Array.isArray(batchIds)) return;
+
+            batchIds.forEach(id => ids.add(String(id)));
+        });
+
+        return Array.from(ids);
+    }, [tests, selectedCampusFilter]);
 
     const handleTestClick = async (testId) => {
         const test = tests.find(t => t.test_id === testId);
@@ -1494,6 +1591,48 @@ const ResultsManagement = () => {
         }
     };
 
+    // Export overview table (respecting current filters) to Excel
+    const handleExportOverviewToExcel = () => {
+        try {
+            setExportLoading(true);
+
+            const rows = filteredAndSortedTests.map((test, index) => ({
+                'S. No': index + 1,
+                'Test Name': test.test_name,
+                'Category': test.category,
+                'Campus': Array.isArray(test.campus_ids) && test.campus_ids.length > 0
+                    ? test.campus_ids.map(id => campusMap[String(id)] || 'Unknown').join(', ')
+                    : '-',
+                'Batch': Array.isArray(test.batch_ids) && test.batch_ids.length > 0
+                    ? test.batch_ids.map(id => batchMap[String(id)] || 'Unknown').join(', ')
+                    : '-',
+                'Total Students': typeof test.total_assigned_students === 'number'
+                    ? test.total_assigned_students
+                    : 0,
+                'Pending Students': typeof test.pending_students === 'number'
+                    ? test.pending_students
+                    : 0,
+                'Attempts': test.total_attempts || 0,
+                'Highest Score (%)': test.highest_score ?? 0,
+                'Average Score (%)': test.average_score ?? 0,
+                'Results Released': releaseStatus[test.test_id] ? 'Yes' : 'No',
+                'Created At': test.created_at ? new Date(test.created_at).toLocaleString() : 'N/A',
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Results Overview');
+
+            XLSX.writeFile(workbook, 'results_overview.xlsx');
+            success('Results overview exported successfully!');
+        } catch (err) {
+            console.error('Error exporting results overview:', err);
+            error('Failed to export results overview. Please try again.');
+        } finally {
+            setExportLoading(false);
+        }
+    };
+
     if (loading) {
         return (
             <main className="px-6 lg:px-10 py-12">
@@ -1545,6 +1684,18 @@ const ResultsManagement = () => {
                                         <Settings className="w-4 h-4" />
                                         Auto Release Settings
                                     </button>
+                                    <button
+                                        onClick={handleExportOverviewToExcel}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                        disabled={exportLoading}
+                                    >
+                                        {exportLoading ? (
+                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <ExcelIcon className="w-4 h-4" />
+                                        )}
+                                        Export Results Abstract
+                                    </button>
                                     {/* <button
                                         onClick={handleMigrateExistingTests}
                                         disabled={migrationLoading}
@@ -1562,41 +1713,84 @@ const ResultsManagement = () => {
 
                     {/* Error Message */}
                     {errorMsg && (
-                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                            <p className="text-red-700">{errorMsg}</p>
+                        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                            <p className="text-red-700 text-sm">{errorMsg}</p>
                         </div>
                     )}
 
                     {/* Tests Table */}
                     <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
+                        <div className="overflow-x-visible">
+                            <table className="w-full table-fixed">
                                 <thead className="bg-gray-50 border-b border-gray-200">
                                     <tr>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-14">
+                                            S. No
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Test Name
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Category
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
+                                            <span className="block mb-1">Campus</span>
+                                            <select
+                                                value={selectedCampusFilter}
+                                                onChange={(e) => setSelectedCampusFilter(e.target.value)}
+                                                className="w-full border border-gray-300 rounded-md text-[11px] font-normal focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                            >
+                                                <option value="all">All</option>
+                                                {campuses.map((campus) => {
+                                                    const id = campus.id || campus._id || campus.campus_id;
+                                                    const name = campus.name || campus.campus_name || 'Unnamed Campus';
+                                                    return (
+                                                        <option key={id} value={String(id)}>
+                                                            {name}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
+                                        </th>
+                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
+                                            <span className="block mb-1">Batch</span>
+                                            <select
+                                                value={selectedBatchFilter}
+                                                onChange={(e) => setSelectedBatchFilter(e.target.value)}
+                                                className="w-full border border-gray-300 rounded-md text-[11px] font-normal focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                            >
+                                                <option value="all">All</option>
+                                                {filteredBatchOptions.map((batchId) => (
+                                                    <option key={batchId} value={batchId}>
+                                                        {batchMap[String(batchId)] || 'Unnamed Batch'}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </th>
+                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            Total Students
+                                        </th>
+                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            Pending Students
+                                        </th>
+                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Attempts
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Highest Score
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Average Score
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Results Status
                                         </th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                    {tests.length === 0 ? (
+                                    {filteredAndSortedTests.length === 0 ? (
                                         <tr>
-                                            <td colSpan="6" className="px-6 py-12 text-center">
+                                            <td colSpan="11" className="px-6 py-12 text-center">
                                                 <div className="flex flex-col items-center">
                                                     <BarChart3 className="w-12 h-12 text-gray-400 mb-4" />
                                                     <h3 className="text-lg font-medium text-gray-900 mb-2">No online tests found</h3>
@@ -1605,7 +1799,7 @@ const ResultsManagement = () => {
                                             </td>
                                         </tr>
                                     ) : (
-                                        tests.map((test, index) => (
+                                        filteredAndSortedTests.map((test, index) => (
                                             <motion.tr
                                                 key={test.test_id}
                                                 initial={{ opacity: 0, y: 20 }}
@@ -1614,34 +1808,47 @@ const ResultsManagement = () => {
                                                 className="hover:bg-gray-50 cursor-pointer"
                                                 onClick={() => handleTestClick(test.test_id)}
                                             >
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center">
-                                                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
-                                                            {test.test_name?.charAt(0)?.toUpperCase() || 'T'}
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-medium text-gray-900">
-                                                                {test.test_name}
-                                                            </div>
-                                                            <div className="text-sm text-gray-500">
-                                                                {test.unique_students} students
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                    {index + 1}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-4 py-3 whitespace-normal break-words text-sm font-medium text-gray-900">
+                                                    {test.test_name}
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                                                     {test.category}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                    {Array.isArray(test.campus_ids) && test.campus_ids.length > 0
+                                                        ? test.campus_ids
+                                                            .map((id) => campusMap[String(id)] || 'Unknown')
+                                                            .join(', ')
+                                                        : '-'}
+                                                </td>
+                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                    {Array.isArray(test.batch_ids) && test.batch_ids.length > 0
+                                                        ? test.batch_ids
+                                                            .map((id) => batchMap[String(id)] || 'Unknown')
+                                                            .join(', ')
+                                                        : '-'}
+                                                </td>
+                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                    {typeof test.total_assigned_students === 'number'
+                                                        ? test.total_assigned_students
+                                                        : 0}
+                                                </td>
+                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                    {test.pending_students ?? 0}
+                                                </td>
+                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
                                                     {test.total_attempts}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                                                <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-green-600">
                                                     {test.highest_score}%
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                                                <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-blue-600">
                                                     {test.average_score}%
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                <td className="px-3 py-3 whitespace-nowrap">
                                                     {releaseStatus[test.test_id] ? (
                                                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                                             <Unlock className="w-3 h-3" />
