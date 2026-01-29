@@ -109,54 +109,58 @@ export default function TestQuestionUpload({ questions, setQuestions, moduleName
           }
           
           if (isTechnicalModule) {
-            // Check if this is compiler-integrated format or MCQ format
-            const hasCompilerFormat = row.QuestionTitle && row.ProblemStatement && row.TestCaseID && row.Input && row.ExpectedOutput;
-            const hasMCQFormat = row.Question && (row.A || row.optionA) && (row.B || row.optionB) && (row.C || row.optionC) && (row.D || row.optionD) && row.Answer;
-            
-            if (hasCompilerFormat) {
-              // Compiler-integrated format
-              parsedQuestions.push({
-                question: `${row.QuestionTitle}: ${row.ProblemStatement}`,
-                testCases: row.Input,
-                expectedOutput: row.ExpectedOutput,
-                language: row.Language || 'python',
-                questionType: 'compiler_integrated',
-                testCaseId: row.TestCaseID,
-                // For compatibility with existing system
-                optionA: 'A',
-                optionB: 'B', 
-                optionC: 'C',
-                optionD: 'D',
-                answer: 'A'
-              });
-            } else if (hasMCQFormat) {
-              // MCQ format for technical questions
-              parsedQuestions.push({
-                question: row.Question || row.question || '',
-                optionA: row.A || row.optionA || '',
-                optionB: row.B || row.optionB || '',
-                optionC: row.C || row.optionC || '',
-                optionD: row.D || row.optionD || '',
-                answer: row.Answer || row.answer || '',
-                questionType: 'mcq',
-                instructions: row.instructions || row.Instructions || ''
-              });
-            } else {
-              // Legacy format - try to parse as old technical format
-              parsedQuestions.push({
-              question: row.Question || row.question || '',
-              testCases: row.TestCases || row.testCases || '',
-              expectedOutput: row.ExpectedOutput || row.expectedOutput || row.ExpectedOu || '',
-              language: row.Language || row.language || 'python',
-                questionType: 'compiler_integrated',
-                // For compatibility with existing system
-              optionA: 'A',
-              optionB: 'B', 
-              optionC: 'C',
-              optionD: 'D',
-                answer: 'A'
-              });
-            }
+            // Detect and process each row for technical modules
+            result.data.forEach(row => {
+              if (!row) return;
+
+              const hasCompilerFormat = row.QuestionTitle && row.ProblemStatement && row.TestCaseID && row.Input && row.ExpectedOutput;
+              const hasMCQFormat = (row.Question || row.question) && (row.A || row.optionA) && (row.B || row.optionB) && (row.C || row.optionC) && (row.D || row.optionD) && (row.Answer || row.answer);
+              
+              if (hasCompilerFormat) {
+                // Compiler-integrated format
+                parsedQuestions.push({
+                  question: `${row.QuestionTitle}: ${row.ProblemStatement}`,
+                  testCases: row.Input,
+                  expectedOutput: row.ExpectedOutput,
+                  language: row.Language || 'python',
+                  questionType: 'compiler_integrated',
+                  testCaseId: row.TestCaseID,
+                  // For compatibility with existing system
+                  optionA: 'A',
+                  optionB: 'B', 
+                  optionC: 'C',
+                  optionD: 'D',
+                  answer: 'A'
+                });
+              } else if (hasMCQFormat) {
+                // MCQ format for technical questions
+                parsedQuestions.push({
+                  question: row.Question || row.question || '',
+                  optionA: row.A || row.optionA || '',
+                  optionB: row.B || row.optionB || '',
+                  optionC: row.C || row.optionC || '',
+                  optionD: row.D || row.optionD || '',
+                  answer: row.Answer || row.answer || '',
+                  questionType: 'mcq',
+                  instructions: row.instructions || row.Instructions || ''
+                });
+              } else {
+                // Legacy format - try to parse as old technical format
+                parsedQuestions.push({
+                  question: row.Question || row.question || '',
+                  testCases: row.TestCases || row.testCases || '',
+                  expectedOutput: row.ExpectedOutput || row.expectedOutput || row.ExpectedOu || '',
+                  language: row.Language || row.language || 'python',
+                  questionType: 'compiler_integrated',
+                  // For compatibility with existing system
+                  optionA: 'A',
+                  optionB: 'B', 
+                  optionC: 'C',
+                  optionD: 'D',
+                  answer: 'A'
+                });
+              }
+            });
           } else if (isSentenceModule) {
             // Handle sentence format for listening and speaking
             parsedQuestions = result.data.map(row => ({
@@ -195,54 +199,58 @@ export default function TestQuestionUpload({ questions, setQuestions, moduleName
           const jsonData = XLSX.utils.sheet_to_json(worksheet);
           
           if (isTechnicalModule) {
-            // Check if this is compiler-integrated format or MCQ format
-            const hasCompilerFormat = row.QuestionTitle && row.ProblemStatement && row.TestCaseID && row.Input && row.ExpectedOutput;
-            const hasMCQFormat = row.Question && (row.A || row.optionA) && (row.B || row.optionB) && (row.C || row.optionC) && (row.D || row.optionD) && row.Answer;
-            
-            if (hasCompilerFormat) {
-              // Compiler-integrated format
-              parsedQuestions.push({
-                question: `${row.QuestionTitle}: ${row.ProblemStatement}`,
-                testCases: row.Input,
-                expectedOutput: row.ExpectedOutput,
-                language: row.Language || 'python',
-                questionType: 'compiler_integrated',
-                testCaseId: row.TestCaseID,
-                // For compatibility with existing system
-                optionA: 'A',
-                optionB: 'B',
-                optionC: 'C', 
-                optionD: 'D',
-                answer: 'A'
-              });
-            } else if (hasMCQFormat) {
-              // MCQ format for technical questions
-              parsedQuestions.push({
-                question: row.Question || row.question || '',
-                optionA: row.A || row.optionA || '',
-                optionB: row.B || row.optionB || '',
-                optionC: row.C || row.optionC || '',
-                optionD: row.D || row.optionD || '',
-                answer: row.Answer || row.answer || '',
-                questionType: 'mcq',
-                instructions: row.instructions || row.Instructions || ''
-              });
-            } else {
-              // Legacy format - try to parse as old technical format
-              parsedQuestions.push({
-              question: row.Question || row.question || '',
-              testCases: row.TestCases || row.testCases || '',
-              expectedOutput: row.ExpectedOutput || row.expectedOutput || row.ExpectedOu || '',
-              language: row.Language || row.language || 'python',
-                questionType: 'compiler_integrated',
-                // For compatibility with existing system
-              optionA: 'A',
-              optionB: 'B',
-              optionC: 'C', 
-              optionD: 'D',
-              answer: 'A'
-              });
-            }
+            // Detect and process each row for technical modules
+            jsonData.forEach(row => {
+              if (!row) return;
+
+              const hasCompilerFormat = row.QuestionTitle && row.ProblemStatement && row.TestCaseID && row.Input && row.ExpectedOutput;
+              const hasMCQFormat = (row.Question || row.question) && (row.A || row.optionA) && (row.B || row.optionB) && (row.C || row.optionC) && (row.D || row.optionD) && (row.Answer || row.answer);
+              
+              if (hasCompilerFormat) {
+                // Compiler-integrated format
+                parsedQuestions.push({
+                  question: `${row.QuestionTitle}: ${row.ProblemStatement}`,
+                  testCases: row.Input,
+                  expectedOutput: row.ExpectedOutput,
+                  language: row.Language || 'python',
+                  questionType: 'compiler_integrated',
+                  testCaseId: row.TestCaseID,
+                  // For compatibility with existing system
+                  optionA: 'A',
+                  optionB: 'B',
+                  optionC: 'C', 
+                  optionD: 'D',
+                  answer: 'A'
+                });
+              } else if (hasMCQFormat) {
+                // MCQ format for technical questions
+                parsedQuestions.push({
+                  question: row.Question || row.question || '',
+                  optionA: row.A || row.optionA || '',
+                  optionB: row.B || row.optionB || '',
+                  optionC: row.C || row.optionC || '',
+                  optionD: row.D || row.optionD || '',
+                  answer: row.Answer || row.answer || '',
+                  questionType: 'mcq',
+                  instructions: row.instructions || row.Instructions || ''
+                });
+              } else {
+                // Legacy format - try to parse as old technical format
+                parsedQuestions.push({
+                  question: row.Question || row.question || '',
+                  testCases: row.TestCases || row.testCases || '',
+                  expectedOutput: row.ExpectedOutput || row.expectedOutput || row.ExpectedOu || '',
+                  language: row.Language || row.language || 'python',
+                  questionType: 'compiler_integrated',
+                  // For compatibility with existing system
+                  optionA: 'A',
+                  optionB: 'B',
+                  optionC: 'C', 
+                  optionD: 'D',
+                  answer: 'A'
+                });
+              }
+            });
           } else if (isSentenceModule) {
             // Handle sentence format for listening and speaking
             parsedQuestions = jsonData.map(row => ({

@@ -337,6 +337,14 @@ export const uploadModuleQuestions = async (moduleId, levelId, questions) => {
   });
 };
 
+export const getQuestionUsageDetails = async (questionId) => {
+  return api.get(`/test-management/question-usage/${questionId}`);
+};
+
+export const getTopicUsageDetails = async (topicId) => {
+  return api.get(`/test-management/topic-usage/${topicId}`);
+};
+
 export const getRandomQuestionsFromBank = async (moduleId, levelId, count) => {
   return api.post('/test-management/module-question-bank/random', {
     module_id: moduleId,

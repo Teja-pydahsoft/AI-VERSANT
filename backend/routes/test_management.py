@@ -1547,25 +1547,31 @@ def get_bulk_questions_from_bank():
             if level_id:
                 query['level_id'] = level_id
             
-            if topic_id and topic_id.strip():
+            # Only filter by topic_id if it's provided and not empty
+            if topic_id and str(topic_id).strip() and str(topic_id).strip() != '':
                 # Check if topic_id is a valid ObjectId
                 try:
+                    topic_id_str = str(topic_id).strip()
                     # If it's a valid ObjectId, use it directly
-                    if len(topic_id) == 24 and all(c in '0123456789abcdef' for c in topic_id.lower()):
-                        query['topic_id'] = ObjectId(topic_id)
+                    if len(topic_id_str) == 24 and all(c in '0123456789abcdef' for c in topic_id_str.lower()):
+                        query['topic_id'] = ObjectId(topic_id_str)
+                        current_app.logger.info(f"Filtering questions by topic_id: {topic_id_str}")
                     else:
                         # If it's not a valid ObjectId, try to find the topic by name
                         # Remove any percentage or completion info
-                        topic_name = topic_id.split('(')[0].strip()
+                        topic_name = topic_id_str.split('(')[0].strip()
                         topic = mongo_db.crt_topics.find_one({'topic_name': topic_name})
                         if topic:
                             query['topic_id'] = topic['_id']
+                            current_app.logger.info(f"Found topic by name '{topic_name}': {topic['_id']}")
                         else:
-                            current_app.logger.warning(f"Topic not found: {topic_id}")
+                            current_app.logger.warning(f"Topic not found: {topic_id_str}")
                             # Don't add topic_id to query if not found
                 except Exception as e:
                     current_app.logger.error(f"Error processing topic_id {topic_id}: {e}")
                     # Don't add topic_id to query if there's an error
+            else:
+                current_app.logger.info("No topic_id provided, fetching questions from all topics in module")
         else:
             # For non-CRT modules, level_id is required
             if not level_id:
@@ -1619,12 +1625,14 @@ def get_bulk_questions_from_bank():
         if module_id == 'CRT_TECHNICAL' and len(questions) == 0 and level_id:
             current_app.logger.info(f"No questions found with level_id {level_id}, trying without level_id")
             fallback_query = {'module_id': module_id}
-            if topic_id and topic_id.strip():
+            # Only filter by topic_id if it's provided and not empty
+            if topic_id and str(topic_id).strip() and str(topic_id).strip() != '':
                 try:
-                    if len(topic_id) == 24 and all(c in '0123456789abcdef' for c in topic_id.lower()):
-                        fallback_query['topic_id'] = ObjectId(topic_id)
+                    topic_id_str = str(topic_id).strip()
+                    if len(topic_id_str) == 24 and all(c in '0123456789abcdef' for c in topic_id_str.lower()):
+                        fallback_query['topic_id'] = ObjectId(topic_id_str)
                     else:
-                        topic_name = topic_id.split('(')[0].strip()
+                        topic_name = topic_id_str.split('(')[0].strip()
                         topic = mongo_db.crt_topics.find_one({'topic_name': topic_name})
                         if topic:
                             fallback_query['topic_id'] = topic['_id']
@@ -1885,19 +1893,27 @@ def get_question_count():
             if level_id:
                 query['level_id'] = level_id
             
-            if topic_id and topic_id.strip():
+            # Only filter by topic_id if it's provided and not empty
+            if topic_id and str(topic_id).strip() and str(topic_id).strip() != '':
                 try:
+                    topic_id_str = str(topic_id).strip()
                     # Check if topic_id is a valid ObjectId
-                    if len(topic_id) == 24 and all(c in '0123456789abcdef' for c in topic_id.lower()):
-                        query['topic_id'] = ObjectId(topic_id)
+                    if len(topic_id_str) == 24 and all(c in '0123456789abcdef' for c in topic_id_str.lower()):
+                        query['topic_id'] = ObjectId(topic_id_str)
+                        current_app.logger.info(f"Filtering question count by topic_id: {topic_id_str}")
                     else:
                         # If it's not a valid ObjectId, try to find the topic by name
-                        topic_name = topic_id.split('(')[0].strip()
+                        topic_name = topic_id_str.split('(')[0].strip()
                         topic = mongo_db.crt_topics.find_one({'topic_name': topic_name})
                         if topic:
                             query['topic_id'] = topic['_id']
+                            current_app.logger.info(f"Found topic by name '{topic_name}': {topic['_id']}")
+                        else:
+                            current_app.logger.warning(f"Topic not found for count: {topic_id_str}")
                 except Exception as e:
                     current_app.logger.error(f"Error processing topic_id {topic_id}: {e}")
+            else:
+                current_app.logger.info("No topic_id provided for count, counting all questions in module")
         else:
             # For non-CRT modules, level_id is required
             if level_id:
@@ -3361,7 +3377,7 @@ def update_crt_topic(topic_id):
 @jwt_required()
 @require_superadmin
 def delete_crt_topic(topic_id):
-    """Delete a CRT topic"""
+    """Delete a CRT topic and cascade delete all associated questions"""
     try:
         # Check if topic exists
         existing_topic = mongo_db.crt_topics.find_one({'_id': ObjectId(topic_id)})
@@ -3371,16 +3387,17 @@ def delete_crt_topic(topic_id):
                 'message': 'Topic not found'
             }), 404
         
-        # Check if topic has questions
+        # Count questions before deletion for response message
         question_count = mongo_db.question_bank.count_documents({
             'topic_id': ObjectId(topic_id)
         })
         
+        # Cascade delete: Delete all questions associated with this topic first
         if question_count > 0:
-            return jsonify({
-                'success': False,
-                'message': f'Cannot delete topic. It has {question_count} questions associated with it. Please remove or reassign the questions first.'
-            }), 400
+            delete_result = mongo_db.question_bank.delete_many({
+                'topic_id': ObjectId(topic_id)
+            })
+            current_app.logger.info(f"Deleted {delete_result.deleted_count} questions for topic {topic_id}")
         
         # Delete the topic
         result = mongo_db.crt_topics.delete_one({'_id': ObjectId(topic_id)})
@@ -3391,9 +3408,15 @@ def delete_crt_topic(topic_id):
                 'message': 'Failed to delete topic'
             }), 500
         
+        # Return success message with details about deleted questions
+        message = 'Topic deleted successfully'
+        if question_count > 0:
+            message = f'Topic and {question_count} associated question(s) deleted successfully'
+        
         return jsonify({
             'success': True,
-            'message': 'Topic deleted successfully'
+            'message': message,
+            'deleted_questions_count': question_count
         }), 200
         
     except Exception as e:
@@ -3645,9 +3668,9 @@ def add_questions_to_topic(topic_id):
             if 'module_id' not in question or question['module_id'] != topic['module_id']:
                 question['module_id'] = topic['module_id']
             
-            # Handle question type for technical questions
+            # Handle question type based on module
             if topic['module_id'] == 'CRT_TECHNICAL':
-                question_type = question.get('questionType', 'compiler_integrated')
+                question_type = question.get('questionType', question.get('question_type', 'compiler_integrated'))
                 question['question_type'] = question_type
                 
                 if question_type == 'compiler_integrated':
@@ -3670,6 +3693,12 @@ def add_questions_to_topic(topic_id):
                         question['optionD'] = ''
                     if 'answer' not in question:
                         question['answer'] = ''
+            else:
+                # For CRT_APTITUDE and CRT_REASONING, always set question_type to 'mcq'
+                question['question_type'] = question.get('question_type', 'mcq')
+                # Ensure answer is uppercase
+                if 'answer' in question and question['answer']:
+                    question['answer'] = str(question['answer']).strip().upper()
             
             processed_questions.append(question)
         
@@ -3717,6 +3746,328 @@ def add_questions_to_topic(topic_id):
         return jsonify({
             'success': False,
             'message': f'Failed to add questions to topic: {str(e)}'
+        }), 500
+
+
+@test_management_bp.route('/question-usage/<question_id>', methods=['GET'])
+@jwt_required()
+@require_superadmin
+def get_question_usage_details(question_id):
+    """
+    Get usage details for a specific question:
+    - which tests used it
+    - which courses and batches those tests were assigned to
+    """
+    try:
+        try:
+            question_obj_id = ObjectId(question_id)
+        except Exception:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid question ID'
+            }), 400
+
+        question = mongo_db.question_bank.find_one({'_id': question_obj_id})
+        if not question:
+            return jsonify({
+                'success': False,
+                'message': 'Question not found'
+            }), 404
+
+        used_in_tests = question.get('used_in_tests', [])
+        if not used_in_tests:
+            # No usage yet, return basic info
+            return jsonify({
+                'success': True,
+                'question_id': str(question['_id']),
+                'question_text': question.get('question', ''),
+                'total_uses': 0,
+                'tests': [],
+                'courses': [],
+                'batches': []
+            }), 200
+
+        # Normalize test IDs (they may be stored as custom IDs or ObjectIds)
+        test_ids = []
+        for t_id in used_in_tests:
+            if isinstance(t_id, ObjectId):
+                test_ids.append(t_id)
+            else:
+                # Try to parse as ObjectId, otherwise keep as string for matching by custom id
+                try:
+                    test_ids.append(ObjectId(t_id))
+                except Exception:
+                    # Some flows use custom_test_id string; handle via separate query
+                    pass
+
+        # Fetch tests by ObjectId
+        tests_by_object_id = []
+        if test_ids:
+            tests_by_object_id = list(mongo_db.tests.find({'_id': {'$in': test_ids}}))
+
+        # Fetch tests by custom test_id string if needed
+        string_test_ids = [t for t in used_in_tests if not isinstance(t, ObjectId)]
+        tests_by_custom_id = []
+        if string_test_ids:
+            tests_by_custom_id = list(mongo_db.tests.find({'custom_test_id': {'$in': string_test_ids}}))
+
+        all_tests = tests_by_object_id + tests_by_custom_id
+
+        usage_tests = []
+        course_ids = set()
+        batch_ids = set()
+
+        for test in all_tests:
+            # Normalize IDs to string
+            test_id_str = str(test.get('_id'))
+            module_id = test.get('module_id')
+            level_id = test.get('level_id')
+            name = test.get('name') or test.get('test_name', '')
+
+            campuses = test.get('campus_ids') or []
+            batches = test.get('batch_ids') or []
+            courses = test.get('course_ids') or []
+
+            # Accumulate unique course and batch IDs
+            for c in courses:
+                course_ids.add(str(c))
+            for b in batches:
+                batch_ids.add(str(b))
+
+            usage_tests.append({
+                'test_id': test_id_str,
+                'name': name,
+                'module_id': module_id,
+                'level_id': level_id,
+                'campus_ids': [str(c) for c in campuses],
+                'batch_ids': [str(b) for b in batches],
+                'course_ids': [str(c) for c in courses],
+                'created_at': safe_isoformat(test.get('created_at')) if test.get('created_at') else None,
+                'endDateTime': safe_isoformat(test.get('endDateTime')) if test.get('endDateTime') else None,
+            })
+
+        return jsonify({
+            'success': True,
+            'question_id': str(question['_id']),
+            'question_text': question.get('question', ''),
+            'total_uses': len(usage_tests),
+            'tests': usage_tests,
+            'courses': list(course_ids),
+            'batches': list(batch_ids),
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting question usage details: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to get question usage details: {str(e)}'
+        }), 500
+
+@test_management_bp.route('/topic-usage/<topic_id>', methods=['GET'])
+@jwt_required()
+@require_superadmin
+def get_topic_usage_details(topic_id):
+    """
+    Get usage details for a specific topic:
+    - which tests used questions from this topic
+    - which courses and batches those tests were assigned to
+    - percentage of topic questions used by each batch/course combination
+    """
+    try:
+        try:
+            topic_obj_id = ObjectId(topic_id)
+        except Exception:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid topic ID'
+            }), 400
+
+        topic = mongo_db.crt_topics.find_one({'_id': topic_obj_id})
+        if not topic:
+            return jsonify({
+                'success': False,
+                'message': 'Topic not found'
+            }), 404
+
+        # Get all questions in this topic
+        topic_questions = list(mongo_db.question_bank.find({
+            'topic_id': topic_obj_id,
+            'module_id': {'$in': ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']}
+        }))
+        
+        total_questions_in_topic = len(topic_questions)
+        
+        if total_questions_in_topic == 0:
+            return jsonify({
+                'success': True,
+                'topic_id': str(topic['_id']),
+                'topic_name': topic.get('topic_name', ''),
+                'total_questions': 0,
+                'total_uses': 0,
+                'batch_course_usage': [],
+                'tests': [],
+                'courses': [],
+                'batches': []
+            }), 200
+
+        # Get all question IDs from this topic
+        question_ids = [q['_id'] for q in topic_questions]
+        question_ids_set = set(question_ids)
+        
+        # Find all tests that used questions from this topic
+        # First, get all test IDs that use these questions from the question_bank's used_in_tests field
+        # This is more efficient than checking all tests
+        test_ids_from_questions = set()
+        for question in topic_questions:
+            used_in_tests = question.get('used_in_tests', [])
+            for test_ref in used_in_tests:
+                if isinstance(test_ref, ObjectId):
+                    test_ids_from_questions.add(test_ref)
+                elif isinstance(test_ref, str):
+                    try:
+                        test_ids_from_questions.add(ObjectId(test_ref))
+                    except Exception:
+                        # Try to find by custom_test_id if ObjectId conversion fails
+                        pass
+        
+        # Fetch tests by ObjectId
+        tests_by_object_id = []
+        if test_ids_from_questions:
+            tests_by_object_id = list(mongo_db.tests.find({'_id': {'$in': list(test_ids_from_questions)}}))
+        
+        # Also check tests by custom_test_id if any string IDs remain
+        # For now, we'll use the tests we found and verify questions match
+        all_tests = tests_by_object_id
+        
+        # If no tests found via used_in_tests, fall back to checking all tests (less efficient but comprehensive)
+        if not all_tests:
+            all_tests = list(mongo_db.tests.find({}))
+        
+        usage_tests = []
+        batch_course_usage = {}  # {batch_id: {course_id: {used: count, total: total_questions_in_topic}}}
+        course_ids = set()
+        batch_ids = set()
+        
+        for test in all_tests:
+            test_questions = test.get('questions', [])
+            if not test_questions:
+                continue
+            
+            # Check if any question in this test belongs to our topic
+            topic_questions_in_test = []
+            for tq in test_questions:
+                tq_id = tq.get('_id') if isinstance(tq, dict) else tq
+                if isinstance(tq_id, str):
+                    try:
+                        tq_id = ObjectId(tq_id)
+                    except Exception:
+                        continue
+                
+                if tq_id in question_ids_set:
+                    topic_questions_in_test.append(tq_id)
+            
+            if not topic_questions_in_test:
+                continue
+            
+            # This test uses questions from our topic
+            test_id_str = str(test.get('_id'))
+            module_id = test.get('module_id')
+            level_id = test.get('level_id')
+            name = test.get('name') or test.get('test_name', '')
+            
+            campuses = test.get('campus_ids') or []
+            batches = test.get('batch_ids') or []
+            courses = test.get('course_ids') or []
+            
+            # Track usage per batch-course combination
+            for batch_id in batches:
+                batch_id_str = str(batch_id)
+                batch_ids.add(batch_id_str)
+                
+                for course_id in courses:
+                    course_id_str = str(course_id)
+                    course_ids.add(course_id_str)
+                    
+                    # Initialize batch-course entry if not exists
+                    if batch_id_str not in batch_course_usage:
+                        batch_course_usage[batch_id_str] = {}
+                    if course_id_str not in batch_course_usage[batch_id_str]:
+                        batch_course_usage[batch_id_str][course_id_str] = {
+                            'used_questions': set(),
+                            'total_questions': total_questions_in_topic
+                        }
+                    
+                    # Add used question IDs to the set (to avoid duplicates)
+                    batch_course_usage[batch_id_str][course_id_str]['used_questions'].update(
+                        [str(qid) for qid in topic_questions_in_test]
+                    )
+            
+            usage_tests.append({
+                'test_id': test_id_str,
+                'name': name,
+                'module_id': module_id,
+                'level_id': level_id,
+                'campus_ids': [str(c) for c in campuses],
+                'batch_ids': [str(b) for b in batches],
+                'course_ids': [str(c) for c in courses],
+                'topic_questions_used': len(topic_questions_in_test),
+                'created_at': safe_isoformat(test.get('created_at')) if test.get('created_at') else None,
+                'endDateTime': safe_isoformat(test.get('endDateTime')) if test.get('endDateTime') else None,
+            })
+        
+        # Convert batch_course_usage to list format with percentages
+        batch_course_usage_list = []
+        for batch_id, courses_dict in batch_course_usage.items():
+            # Get batch details
+            try:
+                batch = mongo_db.batches.find_one({'_id': ObjectId(batch_id)})
+                batch_name = batch.get('name', 'Unknown Batch') if batch else 'Unknown Batch'
+            except Exception:
+                batch_name = 'Unknown Batch'
+            
+            for course_id, usage_data in courses_dict.items():
+                # Get course details
+                try:
+                    course = mongo_db.courses.find_one({'_id': ObjectId(course_id)})
+                    course_name = course.get('name', 'Unknown Course') if course else 'Unknown Course'
+                except Exception:
+                    course_name = 'Unknown Course'
+                
+                used_count = len(usage_data['used_questions'])
+                total_count = usage_data['total_questions']
+                percentage = (used_count / total_count * 100) if total_count > 0 else 0
+                
+                batch_course_usage_list.append({
+                    'batch_id': batch_id,
+                    'batch_name': batch_name,
+                    'course_id': course_id,
+                    'course_name': course_name,
+                    'used_questions': used_count,
+                    'total_questions': total_count,
+                    'percentage': round(percentage, 2),
+                    'is_fully_used': percentage >= 100
+                })
+        
+        # Sort by percentage descending
+        batch_course_usage_list.sort(key=lambda x: x['percentage'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'topic_id': str(topic['_id']),
+            'topic_name': topic.get('topic_name', ''),
+            'total_questions': total_questions_in_topic,
+            'total_uses': len(usage_tests),
+            'batch_course_usage': batch_course_usage_list,
+            'tests': usage_tests,
+            'courses': list(course_ids),
+            'batches': list(batch_ids),
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting topic usage details: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to get topic usage details: {str(e)}'
         }), 500
 
 # ==================== UPLOADED FILES ENDPOINTS ====================

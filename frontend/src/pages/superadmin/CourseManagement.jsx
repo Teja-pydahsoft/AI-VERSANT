@@ -143,7 +143,7 @@ const CourseManagement = () => {
 
     return (
         <>
-        <main className="px-6 lg:px-10 py-8">
+        <main className="px-6 lg:px-10 py-8 h-full overflow-y-auto">
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                         <div className="flex justify-between items-center mb-8">
                             <div>
@@ -170,7 +170,7 @@ const CourseManagement = () => {
                                 </div>
                             </div>
                             
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-300px)]">
                                 {loading ? <LoadingSpinner /> : (
                                     <table className="min-w-full divide-y divide-gray-200">
                                         <thead className="bg-white">

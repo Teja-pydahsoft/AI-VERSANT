@@ -665,18 +665,18 @@ const StudentManagement = () => {
 
     return (
         <>
-        <main className="px-4 mt-6">
+        <main className="px-3 sm:px-4 md:px-6 mt-4 sm:mt-6">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                        <div className="flex justify-between items-center mb-8">
-                            <div>
-                                <h1 className="text-2xl font-semibold text-gray-800 mb-2">Student Management</h1>
-                                <p className="text-gray-600">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-0 mb-4 sm:mb-6 md:mb-8">
+                            <div className="flex-1 min-w-0">
+                                <h1 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-1 sm:mb-2">Student Management</h1>
+                                <p className="text-sm sm:text-base text-gray-600">
                                     View and manage student information across the system.
                                     {!loading && (
-                                        <span className="ml-2 text-blue-600 font-medium">
+                                        <span className="ml-1 sm:ml-2 text-blue-600 font-medium">
                                             ({totalStudents} students)
                                             {(selectedCampus || selectedCourse || selectedBatch) && (
-                                                <span className="text-sm text-gray-500">
+                                                <span className="text-xs sm:text-sm text-gray-500">
                                                     {' '}(filtered)
                                                 </span>
                                             )}
@@ -686,22 +686,24 @@ const StudentManagement = () => {
                             </div>
                             
                             {/* Migration Button */}
-                            <div className="flex gap-3">
+                            <div className="flex gap-2 sm:gap-3">
                                 <button
                                     onClick={handleBulkMigration}
                                     disabled={migrationLoading}
-                                    className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:bg-orange-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:bg-orange-400 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 sm:gap-2"
                                     title="Migrate all students to new progress system"
                                 >
                                     {migrationLoading ? (
                                         <>
-                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                            Migrating...
+                                            <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white"></div>
+                                            <span className="hidden sm:inline">Migrating...</span>
+                                            <span className="sm:hidden">Migrating</span>
                                         </>
                                     ) : (
                                         <>
-                                            <ListChecks className="h-4 w-4" />
-                                            Migrate Progress System
+                                            <ListChecks className="h-3 w-3 sm:h-4 sm:w-4" />
+                                            <span className="hidden sm:inline">Migrate Progress System</span>
+                                            <span className="sm:hidden">Migrate</span>
                                         </>
                                     )}
                                 </button>
@@ -709,9 +711,9 @@ const StudentManagement = () => {
                         </div>
 
                         {/* Filter Section */}
-                        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                                <Filter className="mr-2 h-5 w-5 text-gray-500" />
+                        <div className="mb-4 sm:mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center">
+                                <Filter className="mr-2 h-4 w-4 sm:h-5 sm:w-5 text-gray-500" />
                                 Filter Students
                             </h3>
                             
@@ -902,7 +904,7 @@ const StudentManagement = () => {
 
                         {/* Enhanced Student Display Table */}
                         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-auto overflow-y-auto max-h-[60vh] sm:max-h-none">
                                 {loading ? (
                                     <div className="flex items-center justify-center py-16">
                                         <LoadingSpinner />
@@ -983,10 +985,10 @@ const StudentManagement = () => {
                                         )}
 
                                         {/* Enhanced Table */}
-                                        <table className="min-w-full">
+                                        <table className="min-w-full" style={{ minWidth: '800px' }}>
                                             <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                                                 <tr>
-                                                    <th className="px-6 py-5 text-left border-b border-gray-200 w-12">
+                                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200 w-12">
                                                         <div className="flex items-center gap-2">
                                                             <input
                                                                 type="checkbox"
@@ -996,12 +998,12 @@ const StudentManagement = () => {
                                                             />
                                                         </div>
                                                     </th>
-                                                    <th className="px-8 py-5 text-left border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Student</span>
                                                         </div>
                                                     </th>
-                                                    <th className="px-8 py-5 text-left border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200">
                                                         <div className="flex items-center gap-2">
                                                             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -1009,7 +1011,7 @@ const StudentManagement = () => {
                                                             <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Campus</span>
                                                         </div>
                                                     </th>
-                                                    <th className="px-8 py-5 text-left border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200">
                                                         <div className="flex items-center gap-2">
                                                             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -1017,7 +1019,7 @@ const StudentManagement = () => {
                                                             <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Course & Batch</span>
                                                         </div>
                                                     </th>
-                                                    <th className="px-8 py-5 text-left border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200">
                                                         <div className="flex items-center gap-2">
                                                             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -1025,7 +1027,7 @@ const StudentManagement = () => {
                                                             <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Username</span>
                                                         </div>
                                                     </th>
-                                                    <th className="px-8 py-5 text-right border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-right border-b border-gray-200">
                                                         <div className="flex items-center justify-end gap-2">
                                                             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -1049,7 +1051,7 @@ const StudentManagement = () => {
                                                         }`}
                                                         onClick={() => handleStudentClick(student)}
                                                     >
-                                                        <td className="px-6 py-6 whitespace-nowrap w-12">
+                                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-6 whitespace-nowrap w-12">
                                                             <input
                                                                 type="checkbox"
                                                                 checked={selectedStudents.has(student._id)}
@@ -1060,7 +1062,7 @@ const StudentManagement = () => {
                                                                 className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                                                             />
                                                         </td>
-                                                        <td className="px-8 py-6 whitespace-nowrap">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-xs sm:text-sm">
                                                             <div className="flex items-center gap-4">
                                                                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
                                                                     {student.name?.charAt(0)?.toUpperCase() || 'S'}
@@ -1075,12 +1077,12 @@ const StudentManagement = () => {
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="px-8 py-6 whitespace-nowrap">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-xs sm:text-sm">
                                                             <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                                                 {student.campus_name || 'N/A'}
                                                             </div>
                                                         </td>
-                                                        <td className="px-8 py-6 whitespace-nowrap">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-xs sm:text-sm">
                                                             <div className="space-y-1">
                                                                 <div className="text-sm font-medium text-gray-900">
                                                                     {student.course_name || 'N/A'}
@@ -1090,7 +1092,7 @@ const StudentManagement = () => {
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="px-8 py-6 whitespace-nowrap">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-xs sm:text-sm">
                                                             <div className="flex items-center gap-3">
                                                                 <span className="text-sm text-gray-600 font-mono bg-gray-50 px-3 py-1 rounded">
                                                                     {student.username || student.roll_number || 'N/A'}
@@ -1100,7 +1102,7 @@ const StudentManagement = () => {
                                                                 </span>
                                                             </div>
                                                         </td>
-                                                        <td className="px-8 py-6 whitespace-nowrap text-right">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-right text-xs sm:text-sm">
                                                             <div className="flex items-center justify-end gap-3">
                                                                 <button 
                                                                     onClick={(e) => {

@@ -583,9 +583,9 @@ const SuperAdminSidebar = () => {
       </motion.div>
       
       {/* Main Content */}
-      <div className="flex-1 bg-gray-50 w-full lg:ml-64 flex flex-col min-h-screen">
+      <div className="flex-1 bg-gray-50 w-full lg:ml-64 flex flex-col h-screen overflow-hidden">
         <Header />
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-hidden min-h-0">
         <Outlet />
         </div>
       </div>

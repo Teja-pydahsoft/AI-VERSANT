@@ -3,28 +3,31 @@ import { motion } from 'framer-motion';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { toast } from 'react-hot-toast';
-import api from '../../services/api';
+import Swal from 'sweetalert2';
+import { Trash2, Edit, FileText, CheckCircle, AlertTriangle, HelpCircle, Calculator, Puzzle, Settings, Code, FileQuestion, Info } from 'lucide-react';
+import api, { getQuestionUsageDetails, getTopicUsageDetails } from '../../services/api';
+import Modal from '../../components/common/Modal';
 
 const CRT_MODULES = [
   { 
     id: 'CRT_APTITUDE', 
     name: 'Aptitude', 
     color: 'from-blue-500 to-blue-600',
-    icon: '🧮',
+    icon: Calculator,
     description: 'Upload aptitude questions covering numericalMonday verbal, and logical reasoning'
   },
   { 
     id: 'CRT_REASONING', 
     name: 'Reasoning', 
     color: 'from-green-500 to-green-600',
-    icon: '🧩',
+    icon: Puzzle,
     description: 'Upload reasoning questions including analytical and critical thinking'
   },
   { 
     id: 'CRT_TECHNICAL', 
     name: 'Technical', 
     color: 'from-purple-500 to-purple-600',
-    icon: '⚙️',
+    icon: Code,
     description: 'Upload technical questions covering programming, algorithms, and system design'
   },
 ];
@@ -53,6 +56,10 @@ const CRTUpload = () => {
   const [showEditTopicModal, setShowEditTopicModal] = useState(false);
   const [selectedTopicForView, setSelectedTopicForView] = useState(null);
   const [topicQuestions, setTopicQuestions] = useState([]);
+  const [selectedQuestionUsage, setSelectedQuestionUsage] = useState(null);
+  const [showQuestionUsageModal, setShowQuestionUsageModal] = useState(false);
+  const [selectedTopicUsage, setSelectedTopicUsage] = useState(null);
+  const [showTopicUsageModal, setShowTopicUsageModal] = useState(false);
   const [viewMode, setViewMode] = useState('upload'); // 'upload', 'topics', 'topic-questions'
 
   // Question type selection for CRT modules
@@ -153,7 +160,36 @@ const CRTUpload = () => {
   };
 
   const handleDeleteTopic = async (topicId) => {
-    if (!window.confirm('Are you sure you want to delete this topic? This action cannot be undone.')) {
+    // Find the topic to get its name and question count
+    const topic = topics.find(t => t._id === topicId);
+    const topicName = topic?.topic_name || 'this topic';
+    const questionCount = topic?.total_questions || 0;
+
+    const result = await Swal.fire({
+      title: 'Delete Topic?',
+      html: `
+        <div class="text-left">
+          <p class="mb-3">Are you sure you want to delete <strong>"${topicName}"</strong>?</p>
+          <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+            <p class="text-red-800 font-semibold mb-1">⚠️ Warning: This action cannot be undone!</p>
+            <p class="text-red-700 text-sm">
+              All <strong>${questionCount} question(s)</strong> in this topic will also be permanently deleted.
+            </p>
+          </div>
+          <p class="text-gray-600 text-sm">This will affect any tests that are using questions from this topic.</p>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, Delete Topic & Questions',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      focusCancel: true
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -161,7 +197,14 @@ const CRTUpload = () => {
       const response = await api.delete(`/test-management/crt-topics/${topicId}`);
 
       if (response.data.success) {
-        toast.success('Topic deleted successfully!');
+        // Show success message with details about deleted questions if available
+        const message = response.data.message || 'Topic deleted successfully!';
+        const deletedCount = response.data.deleted_questions_count || 0;
+        if (deletedCount > 0) {
+          toast.success(`${message} (${deletedCount} question(s) were also deleted)`);
+        } else {
+          toast.success(message);
+        }
         fetchTopicsForModule();
         if (selectedTopic === topicId) {
           setSelectedTopic('');
@@ -171,7 +214,13 @@ const CRTUpload = () => {
       }
     } catch (error) {
       console.error('Error deleting topic:', error);
-      toast.error('Failed to delete topic. Please try again.');
+      const backendMessage = error?.response?.data?.message;
+      if (backendMessage) {
+        // Show the detailed backend reason
+        toast.error(backendMessage);
+      } else {
+        toast.error('Failed to delete topic. Please try again.');
+      }
     }
   };
 
@@ -197,6 +246,8 @@ const CRTUpload = () => {
     setViewMode('topics');
     setSelectedTopicForView(null);
     setTopicQuestions([]);
+    setSelectedQuestionUsage(null);
+    setShowQuestionUsageModal(false);
   };
 
   const handleBackToUpload = () => {
@@ -210,6 +261,81 @@ const CRTUpload = () => {
     }
     setSelectedTopicForView(null);
     setTopicQuestions([]);
+  };
+
+  const handleQuestionUsageClick = async (question) => {
+    try {
+      // Ensure we have a valid question ID
+      const questionId = question._id || question.id;
+      if (!questionId) {
+        console.error('Question ID not found:', question);
+        toast.error('Question ID not found');
+        return;
+      }
+
+      setSelectedQuestionUsage({
+        loading: true,
+        data: null,
+        error: null,
+      });
+      setShowQuestionUsageModal(true);
+
+      console.log('Fetching question usage for ID:', questionId);
+      const response = await getQuestionUsageDetails(questionId);
+      if (response.data.success) {
+        setSelectedQuestionUsage({
+          loading: false,
+          data: response.data,
+          error: null,
+        });
+      } else {
+        setSelectedQuestionUsage({
+          loading: false,
+          data: null,
+          error: response.data.message || 'Failed to fetch usage details',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching question usage details:', error);
+      setSelectedQuestionUsage({
+        loading: false,
+        data: null,
+        error: 'Failed to fetch usage details',
+      });
+    }
+  };
+
+  const handleTopicUsageClick = async (topic) => {
+    try {
+      setSelectedTopicUsage({
+        loading: true,
+        data: null,
+        error: null,
+      });
+      setShowTopicUsageModal(true);
+
+      const response = await getTopicUsageDetails(topic._id);
+      if (response.data.success) {
+        setSelectedTopicUsage({
+          loading: false,
+          data: response.data,
+          error: null,
+        });
+      } else {
+        setSelectedTopicUsage({
+          loading: false,
+          data: null,
+          error: response.data.message || 'Failed to fetch topic usage details',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching topic usage details:', error);
+      setSelectedTopicUsage({
+        loading: false,
+        data: null,
+        error: 'Failed to fetch topic usage details',
+      });
+    }
   };
 
   // Group topics by module for section-wise display
@@ -698,33 +824,48 @@ const CRTUpload = () => {
               trimValues: true 
             });
             
-            parsedQuestions = result.data.map(row => ({
-              question: row.Question || row.question || '',
-              optionA: row.A || row.optionA || '',
-              optionB: row.B || row.optionB || '',
-              optionC: row.C || row.optionC || '',
-              optionD: row.D || row.optionD || '',
-              answer: row.Answer || row.answer || ''
-            }));
+            parsedQuestions = result.data.map(row => {
+              const answer = (row.Answer || row.answer || '').toString().trim().toUpperCase();
+              return {
+                question: (row.Question || row.question || '').trim(),
+                optionA: (row.A || row.optionA || row.OptionA || '').trim(),
+                optionB: (row.B || row.optionB || row.OptionB || '').trim(),
+                optionC: (row.C || row.optionC || row.OptionC || '').trim(),
+                optionD: (row.D || row.optionD || row.OptionD || '').trim(),
+                answer: answer,
+                question_type: 'mcq' // Explicitly set question type for MCQ
+              };
+            });
           } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
             const workbook = XLSX.read(e.target.result, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             const jsonData = XLSX.utils.sheet_to_json(worksheet);
             
-            parsedQuestions = jsonData.map(row => ({
-              question: row.Question || row.question || '',
-              optionA: row.A || row.optionA || '',
-              optionB: row.B || row.optionB || '',
-              optionC: row.C || row.optionC || '',
-              optionD: row.D || row.optionD || '',
-              answer: row.Answer || row.answer || ''
-            }));
+            parsedQuestions = jsonData.map(row => {
+              const answer = (row.Answer || row.answer || '').toString().trim().toUpperCase();
+              return {
+                question: (row.Question || row.question || '').toString().trim(),
+                optionA: (row.A || row.optionA || row.OptionA || '').toString().trim(),
+                optionB: (row.B || row.optionB || row.OptionB || '').toString().trim(),
+                optionC: (row.C || row.optionC || row.OptionC || '').toString().trim(),
+                optionD: (row.D || row.optionD || row.OptionD || '').toString().trim(),
+                answer: answer,
+                question_type: 'mcq' // Explicitly set question type for MCQ
+              };
+            });
           }
 
-          const validQuestions = parsedQuestions.filter(q => 
-            q.question && q.optionA && q.optionB && q.optionC && q.optionD && q.answer
-          );
+          // Filter valid questions - ensure all required fields are present and non-empty
+          const validQuestions = parsedQuestions.filter(q => {
+            const hasQuestion = q.question && q.question.trim().length > 0;
+            const hasOptionA = q.optionA && q.optionA.trim().length > 0;
+            const hasOptionB = q.optionB && q.optionB.trim().length > 0;
+            const hasOptionC = q.optionC && q.optionC.trim().length > 0;
+            const hasOptionD = q.optionD && q.optionD.trim().length > 0;
+            const hasAnswer = q.answer && q.answer.trim().length > 0 && ['A', 'B', 'C', 'D'].includes(q.answer.toUpperCase());
+            return hasQuestion && hasOptionA && hasOptionB && hasOptionC && hasOptionD && hasAnswer;
+          });
 
           resolve(validQuestions);
         } catch (error) {
@@ -840,8 +981,8 @@ const CRTUpload = () => {
             className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 cursor-pointer transition-all duration-300 hover:shadow-xl"
             onClick={() => handleModuleSelect(module)}
           >
-            <div className={`w-16 h-16 rounded-full bg-gradient-to-r ${module.color} flex items-center justify-center text-white text-2xl mb-4 mx-auto`}>
-              {module.icon}
+            <div className={`w-16 h-16 rounded-full bg-gradient-to-r ${module.color} flex items-center justify-center text-white mb-4 mx-auto`}>
+              {React.createElement(module.icon, { className: 'w-8 h-8' })}
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2 text-center">{module.name}</h3>
             <p className="text-gray-600 text-sm text-center">{module.description}</p>
@@ -942,7 +1083,7 @@ const CRTUpload = () => {
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                ⚙️ Compiler-Integrated Questions
+                <Settings className="w-4 h-4 inline mr-2" /> Compiler-Integrated Questions
               </button>
               <button
                 onClick={() => setSelectedQuestionType('mcq')}
@@ -952,7 +1093,7 @@ const CRTUpload = () => {
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                📝 MCQ Questions
+                <FileText className="w-4 h-4 inline mr-2" /> MCQ Questions
               </button>
             </div>
             <p className="text-sm text-gray-600 mt-2">
@@ -1091,12 +1232,18 @@ const CRTUpload = () => {
           />
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[600px] overflow-y-auto">
           {filteredQuestions.map((question, index) => (
             <div key={question._id || index} className="border border-gray-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-gray-900">Question {index + 1}</span>
                 <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleQuestionUsageClick(question)}
+                    className="text-purple-600 hover:text-purple-800 text-sm"
+                  >
+                    Usage
+                  </button>
                   <button
                     onClick={() => handleEditQuestion(question)}
                     className="text-blue-500 hover:text-blue-700 text-sm"
@@ -1213,7 +1360,7 @@ const CRTUpload = () => {
 
         {fileQuestions.length === 0 ? (
           <div className="text-center py-8">
-            <div className="text-6xl mb-4">📝</div>
+            <FileQuestion className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No Questions Found</h3>
             <p className="text-gray-600 mb-4">This file doesn't contain any questions or there was an error loading them.</p>
             <div className="text-sm text-gray-500">
@@ -1225,12 +1372,18 @@ const CRTUpload = () => {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[600px] overflow-y-auto">
             {fileQuestions.map((question, index) => (
               <div key={question._id || index} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-900">Question {index + 1}</span>
                   <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleQuestionUsageClick(question)}
+                      className="text-purple-600 hover:text-purple-800 text-sm"
+                    >
+                      Usage
+                    </button>
                     <button
                       onClick={() => handleEditQuestion(question)}
                       className="text-blue-500 hover:text-blue-700 text-sm"
@@ -1260,6 +1413,92 @@ const CRTUpload = () => {
           </div>
         )}
       </div>
+
+      {/* Question Usage Modal */}
+      {showQuestionUsageModal && (
+        <Modal
+          isOpen={showQuestionUsageModal}
+          onClose={() => {
+            setShowQuestionUsageModal(false);
+            setSelectedQuestionUsage(null);
+          }}
+          title="Question Usage Details"
+          size="xl"
+        >
+          <div className="space-y-4">
+            {selectedQuestionUsage?.loading && (
+              <p className="text-sm text-gray-600">Loading usage details...</p>
+            )}
+            {selectedQuestionUsage?.error && (
+              <p className="text-sm text-red-600">{selectedQuestionUsage.error}</p>
+            )}
+            {selectedQuestionUsage?.data && (
+              <>
+                <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-gray-800 mb-2">Question</h3>
+                  <div className="max-h-32 overflow-y-auto">
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">{selectedQuestionUsage.data.question_text}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 rounded">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Total Uses:</span>{' '}
+                    <span className="text-blue-600 font-bold">{selectedQuestionUsage.data.total_uses}</span>
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Unique Courses:</span>{' '}
+                    <span className="text-green-600 font-bold">{selectedQuestionUsage.data.courses.length}</span>
+                    {'  |  '}
+                    <span className="font-semibold">Unique Batches:</span>{' '}
+                    <span className="text-purple-600 font-bold">{selectedQuestionUsage.data.batches.length}</span>
+                  </p>
+                </div>
+                {selectedQuestionUsage.data.tests.length === 0 ? (
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                    <p className="text-sm text-gray-500">This question has not been used in any tests yet.</p>
+                  </div>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto border rounded-lg">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Test Name</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Module</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Courses</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Batches</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Start</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">End</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {selectedQuestionUsage.data.tests.map((t) => (
+                          <tr key={t.test_id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2">{t.name || t.test_id}</td>
+                            <td className="px-3 py-2">{t.module_id || 'N/A'}</td>
+                            <td className="px-3 py-2 text-xs">
+                              {t.course_ids && t.course_ids.length > 0 ? t.course_ids.join(', ') : 'N/A'}
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              {t.batch_ids && t.batch_ids.length > 0 ? t.batch_ids.join(', ') : 'N/A'}
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              {t.created_at ? new Date(t.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              {t.endDateTime ? new Date(t.endDateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
+
     </motion.div>
   );
 
@@ -1334,8 +1573,9 @@ const CRTUpload = () => {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {moduleTopics.map((topic) => (
+                  <div className="max-h-[70vh] overflow-y-auto pr-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {moduleTopics.map((topic) => (
                       <motion.div
                         key={topic._id}
                         whileHover={{ scale: 1.02 }}
@@ -1351,6 +1591,16 @@ const CRTUpload = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                handleTopicUsageClick(topic);
+                              }}
+                              className="text-purple-500 hover:text-purple-700 text-xs p-1"
+                              title="View topic usage tracking"
+                            >
+                              <Info className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setEditingTopic(topic);
                                 setNewTopicName(topic.topic_name);
                                 setShowEditTopicModal(true);
@@ -1358,7 +1608,7 @@ const CRTUpload = () => {
                               className="text-blue-500 hover:text-blue-700 text-xs p-1"
                               title="Edit topic"
                             >
-                              ✏️
+                              <Edit className="w-4 h-4" />
                             </button>
                             <button
                               onClick={(e) => {
@@ -1368,7 +1618,7 @@ const CRTUpload = () => {
                               className="text-red-500 hover:text-red-700 text-xs p-1"
                               title="Delete topic"
                             >
-                              🗑️
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -1380,10 +1630,10 @@ const CRTUpload = () => {
                         
                         <div className="flex items-center justify-between text-sm mb-3">
                           <span className="text-gray-700 font-medium">
-                            📝 {topic.total_questions || 0} questions
+                            <FileText className="w-4 h-4 inline mr-1" /> {topic.total_questions || 0} questions
                           </span>
                           <span className="text-green-600 font-medium">
-                            ✅ {topic.used_questions || 0} used
+                            <CheckCircle className="w-4 h-4 inline mr-1" /> {topic.used_questions || 0} used
                           </span>
                         </div>
                         
@@ -1399,7 +1649,8 @@ const CRTUpload = () => {
                           </button>
                         </div>
                       </motion.div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
@@ -1456,7 +1707,7 @@ const CRTUpload = () => {
 
         {topicQuestions.length === 0 ? (
           <div className="text-center py-8">
-            <div className="text-4xl mb-4">❓</div>
+            <HelpCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Questions Yet</h3>
             <p className="text-gray-600 mb-4">This topic doesn't have any questions yet.</p>
             <button
@@ -1467,12 +1718,18 @@ const CRTUpload = () => {
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[600px] overflow-y-auto">
             {topicQuestions.map((question, index) => (
               <div key={question._id || index} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-900">Question {index + 1}</span>
                   <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleQuestionUsageClick(question)}
+                      className="text-purple-600 hover:text-purple-800 text-sm"
+                    >
+                      Usage
+                    </button>
                     <button
                       onClick={() => handleEditQuestion(question)}
                       className="text-blue-500 hover:text-blue-700 text-sm"
@@ -1622,6 +1879,194 @@ const CRTUpload = () => {
         }}
         response={uploadResponse}
       />
+      {/* Topic Usage Modal */}
+      {showTopicUsageModal && (
+        <Modal
+          isOpen={showTopicUsageModal}
+          onClose={() => {
+            setShowTopicUsageModal(false);
+            setSelectedTopicUsage(null);
+          }}
+          title="Topic Usage Tracking"
+          size="2xl"
+        >
+          <div className="space-y-4">
+            {selectedTopicUsage?.loading && (
+              <p className="text-sm text-gray-600">Loading topic usage details...</p>
+            )}
+            {selectedTopicUsage?.error && (
+              <p className="text-sm text-red-600">{selectedTopicUsage.error}</p>
+            )}
+            {selectedTopicUsage?.data && (
+              <>
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-gray-800 mb-1">Topic: {selectedTopicUsage.data.topic_name}</h3>
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-sm text-gray-700">
+                      <span className="font-semibold">Total Questions:</span>{' '}
+                      {selectedTopicUsage.data.total_questions}
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      <span className="font-semibold">Total Tests Using Topic:</span>{' '}
+                      {selectedTopicUsage.data.total_uses}
+                    </p>
+                  </div>
+                </div>
+
+                {(selectedTopicUsage.data.batch_course_usage && selectedTopicUsage.data.batch_course_usage.length > 0) || 
+                 (selectedTopicUsage.data.tests && selectedTopicUsage.data.tests.length > 0) ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Usage by Batch & Course - Left Side */}
+                    {selectedTopicUsage.data.batch_course_usage && selectedTopicUsage.data.batch_course_usage.length > 0 ? (
+                      <div>
+                        <h4 className="font-semibold text-gray-800 mb-2">Usage by Batch & Course</h4>
+                        <div className="max-h-[500px] overflow-y-auto border rounded-lg">
+                          <table className="min-w-full text-sm">
+                            <thead className="bg-gray-50 border-b sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Batch</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Course</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Used</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Total</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Percentage</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {selectedTopicUsage.data.batch_course_usage.map((usage, idx) => (
+                                <tr 
+                                  key={`${usage.batch_id}-${usage.course_id}-${idx}`} 
+                                  className={`hover:bg-gray-50 ${usage.is_fully_used ? 'bg-red-50' : ''}`}
+                                >
+                                  <td className="px-3 py-2 font-medium text-xs">{usage.batch_name}</td>
+                                  <td className="px-3 py-2 text-xs">{usage.course_name}</td>
+                                  <td className="px-3 py-2 text-xs">{usage.used_questions}</td>
+                                  <td className="px-3 py-2 text-xs">{usage.total_questions}</td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex items-center space-x-1">
+                                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                        <div 
+                                          className={`h-2 rounded-full ${
+                                            usage.percentage >= 100 
+                                              ? 'bg-red-500' 
+                                              : usage.percentage >= 75 
+                                              ? 'bg-yellow-500' 
+                                              : 'bg-green-500'
+                                          }`}
+                                          style={{ width: `${Math.min(usage.percentage, 100)}%` }}
+                                        ></div>
+                                      </div>
+                                      <span className={`font-semibold text-xs ${
+                                        usage.percentage >= 100 
+                                          ? 'text-red-600' 
+                                          : usage.percentage >= 75 
+                                          ? 'text-yellow-600' 
+                                          : 'text-green-600'
+                                      }`}>
+                                        {usage.percentage.toFixed(1)}%
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {usage.is_fully_used ? (
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                        <AlertTriangle className="w-3 h-3 mr-1" />
+                                        100%
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        Available
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                        <p className="text-sm text-gray-600">
+                          No batch/course usage data available.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Tests Using This Topic - Right Side */}
+                    {selectedTopicUsage.data.tests && selectedTopicUsage.data.tests.length > 0 ? (
+                      <div>
+                        <h4 className="font-semibold text-gray-800 mb-2">Tests Using This Topic</h4>
+                        <div className="max-h-[500px] overflow-y-auto border rounded-lg">
+                          <table className="min-w-full text-sm">
+                            <thead className="bg-gray-50 border-b sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Test Name</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Questions Used</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Batches</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Courses</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {selectedTopicUsage.data.tests.map((t) => (
+                                <tr key={t.test_id} className="hover:bg-gray-50">
+                                  <td className="px-3 py-2 text-xs">{t.name || t.test_id}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                      {t.topic_questions_used || 0}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-center">
+                                    {t.batch_ids && t.batch_ids.length > 0 ? t.batch_ids.length : 'N/A'}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-center">
+                                    {t.course_ids && t.course_ids.length > 0 ? t.course_ids.length : 'N/A'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                        <p className="text-sm text-gray-600">
+                          No tests using this topic yet.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                    <p className="text-sm text-gray-600">
+                      This topic has not been used in any tests yet.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Questions from this topic will appear here once they are used in tests.
+                    </p>
+                  </div>
+                )}
+
+                {selectedTopicUsage.data.batch_course_usage && selectedTopicUsage.data.batch_course_usage.some(u => u.is_fully_used) && (
+                  <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <div className="flex items-start">
+                      <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-yellow-800 mb-1">
+                          Topic Fully Used by Some Batches/Courses
+                        </p>
+                        <p className="text-xs text-yellow-700">
+                          Consider creating a new topic to ensure question availability for future tests.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
         </>
   );
 };

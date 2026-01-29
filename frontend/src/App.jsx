@@ -91,7 +91,7 @@ function App() {
           <NotificationProvider>
             <FeatureProvider>
             <FormPortalProvider>
-            <div className="min-h-screen bg-gray-50">
+            <div className="h-screen bg-gray-50 overflow-hidden">
               <Toaster 
                 position="top-right"
                 toastOptions={{

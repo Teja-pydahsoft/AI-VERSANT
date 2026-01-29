@@ -22,7 +22,7 @@ const Header = () => {
   }
 
   return (
-    <header className="sticky top-0 z-40 bg-white shadow-md flex items-center h-16 sm:h-20 px-2 sm:px-4 border-b-2 border-emerald-400">
+    <header className="z-40 bg-white shadow-md flex items-center h-16 sm:h-20 px-2 sm:px-4 border-b-2 border-emerald-400 flex-shrink-0">
       {/* Left: Hamburger menu */}
       <div className="flex items-center flex-shrink-0 mr-2">
         <button
@@ -38,7 +38,7 @@ const Header = () => {
         <div className="h-7 w-12 sm:h-10 sm:w-20 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mr-1 sm:mr-2 shadow-md">
           <img src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_203,h_111,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png" alt="Logo" className="h-5 w-auto sm:h-7 object-contain rounded-xl" />
         </div>
-        <span className="text-base sm:text-2xl font-bold text-black ml-1 sm:ml-2 truncate" style={{maxWidth: 'calc(100vw - 120px)'}}>VERSANT SYSTEM</span>
+        <span className="text-base sm:text-2xl font-bold text-black ml-1 sm:ml-2 truncate" style={{maxWidth: 'calc(100vw - 120px)'}}>Study Edge</span>
       </div>
       {/* Right: Profile icon and menu */}
       {(user?.role === 'superadmin' || user?.role === 'campus_admin' || user?.role === 'course_admin' || user?.role === 'student') && (

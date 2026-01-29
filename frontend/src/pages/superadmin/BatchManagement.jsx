@@ -885,7 +885,7 @@ const BatchManagement = () => {
   }
 
   return (
-    <main className="p-6">
+    <main className="p-6 h-full overflow-y-auto">
         {/* Simple Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">

@@ -9,7 +9,7 @@ import { toast } from 'react-hot-toast'
 
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import api from '../../services/api'
-import { Upload, Plus, Trash2, ChevronLeft, ChevronRight, FileText, CheckCircle, Briefcase, Users, FileQuestion, Sparkles, Eye, Edit, MoreVertical, Play, Pause, AlertTriangle, ChevronDown, Code, Mic, AlertCircle, X, Shuffle, Download } from 'lucide-react'
+import { Upload, Plus, Trash2, ChevronLeft, ChevronRight, FileText, CheckCircle, Briefcase, Users, FileQuestion, Sparkles, Eye, Edit, MoreVertical, Play, Pause, AlertTriangle, ChevronDown, Code, Mic, AlertCircle, X, Shuffle, Download, Copy, Search } from 'lucide-react'
 import { MultiSelect } from 'react-multi-select-component'
 import clsx from 'clsx'
 import Papa from 'papaparse'
@@ -332,7 +332,7 @@ const TestManagement = () => {
   }
 
   return (
-    <main className="px-6 lg:px-10 py-12">
+    <main className="px-3 sm:px-4 md:px-6 lg:px-10 py-3 sm:py-4 md:py-6 flex flex-col h-full overflow-y-auto">
       {renderContent()}
 
       {/* Notify Students Modal */}
@@ -417,13 +417,13 @@ const TestManagement = () => {
               <div className="flex items-center space-x-2">
                 <input
                   type="text"
-                  value={`https://crt.pydahsoft.in/student/exam/${createdTestId}`}
+                  value={`https://crt.pydahsoft.in/student/exam?testid=${createdTestId}`}
                   readOnly
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-mono"
                 />
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`https://crt.pydahsoft.in/student/exam/${createdTestId}`);
+                    navigator.clipboard.writeText(`https://crt.pydahsoft.in/student/exam?testid=${createdTestId}`);
                     success('URL copied to clipboard!');
                   }}
                   className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
@@ -458,6 +458,8 @@ const TestManagement = () => {
 }
 
 const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTestEmail, onFixAudioUrls, user, refreshTests }) => {
+  const { success } = useNotification();
+  const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     module: '',
     level: '',
@@ -471,6 +473,10 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
 
   const filteredTests = useMemo(() => {
     return tests.filter(test => {
+      // Search filter for test name
+      const matchesSearch = !searchTerm || 
+        (test.name && test.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
       const matchesModule = filters.module ? test.module_id === filters.module : true;
       const matchesLevel = filters.level ? test.level === filters.level : true;
       const matchesCampus = filters.campus ? test.campus === filters.campus : true;
@@ -489,9 +495,9 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
       const matchesBatch = filters.batch ? batchesArray.includes(filters.batch) : true;
       const matchesStatus = filters.status ? test.status === filters.status : true;
 
-      return matchesModule && matchesLevel && matchesCampus && matchesBatch && matchesStatus;
+      return matchesSearch && matchesModule && matchesLevel && matchesCampus && matchesBatch && matchesStatus;
     });
-  }, [tests, filters]);
+  }, [tests, filters, searchTerm]);
 
   const moduleOptions = useMemo(
     () => [...new Set(tests.map(t => t.module_id).filter(Boolean))],
@@ -539,6 +545,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
 
   const clearFilters = () => {
     setFilters({ module: '', level: '', campus: '', batch: '', status: '' });
+    setSearchTerm('');
   };
 
   const handleOpenEditEndTime = async (test) => {
@@ -592,27 +599,31 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Test Management</h1>
-          <p className="mt-2 text-gray-500">Browse, manage, and create new tests.</p>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6 flex-shrink-0">
+        <div className="flex-shrink-0">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800">Test Management</h1>
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-500">Browse, manage, and create new tests.</p>
         </div>
-        <div className="flex space-x-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           {user?.role !== 'campus_admin' && (
             <button
               onClick={onFixAudioUrls}
-              className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform transform hover:scale-105"
+              className="inline-flex items-center justify-center px-3 sm:px-4 py-2 sm:py-2.5 border border-transparent text-xs sm:text-sm font-medium rounded-md shadow-sm text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform transform hover:scale-105"
             >
-              🔧 Fix Audio URLs
+              <span className="hidden sm:inline">🔧 </span>
+              <span className="sm:hidden">🔧</span>
+              <span className="hidden md:inline"> Fix Audio URLs</span>
             </button>
           )}
           {user?.role !== 'campus_admin' && (
             <button
               onClick={onTestEmail}
-              className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-500 hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-transform transform hover:scale-105"
+              className="inline-flex items-center justify-center px-3 sm:px-4 py-2 sm:py-2.5 border border-transparent text-xs sm:text-sm font-medium rounded-md shadow-sm text-white bg-purple-500 hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-transform transform hover:scale-105"
             >
-              📧 Test Email
+              <span className="hidden sm:inline">📧 </span>
+              <span className="sm:hidden">📧</span>
+              <span className="hidden md:inline"> Test Email</span>
             </button>
           )}
           {user?.role !== 'campus_admin' && (
@@ -621,29 +632,54 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                 setView('create');
                 setUploadedQuestions([]);
               }}
-              className="inline-flex items-center justify-center px-5 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105"
+              className="inline-flex items-center justify-center px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 border border-transparent text-xs sm:text-sm font-medium rounded-md shadow-sm text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105"
             >
-              <Plus className="h-5 w-5 mr-2" />
-              Create Test
+              <Plus className="h-4 w-4 sm:h-5 sm:w-5 sm:mr-2" />
+              <span className="hidden sm:inline">Create Test</span>
             </button>
           )}
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-lg">
-        <div className="p-6 flex justify-between items-center border-b border-gray-200">
-          <h3 className="text-xl font-semibold text-gray-800">All Created Tests</h3>
-          <button onClick={clearFilters} className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline">Clear Filters</button>
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="p-3 sm:p-4 md:p-6 border-b border-gray-200 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4">
+            <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800">All Created Tests</h3>
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:gap-4">
+              {/* Search Bar */}
+              <div className="relative flex-1 sm:flex-initial sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by test name..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <button onClick={clearFilters} className="text-xs sm:text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline self-start sm:self-auto whitespace-nowrap">Clear Filters</button>
+            </div>
+          </div>
         </div>
-        <div className="overflow-x-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {loading ? <LoadingSpinner /> : (
-            <table className="w-full table-fixed divide-y divide-gray-200">
+            <div className="p-2 sm:p-3 md:p-4">
+              <div className="overflow-x-auto">
+                <table className="w-full divide-y divide-gray-200 table-auto min-w-[800px]">
               <thead className="bg-gray-100">
                 <tr>
-                  <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-14">S. No</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Test Name</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Type</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-12">S. No</th>
+                  <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[150px]">Test Name</th>
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-20 hidden lg:table-cell">Type</th>
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px] hidden xl:table-cell">
                     <span className="block mb-1">Module</span>
                     <select
                       name="module"
@@ -659,21 +695,21 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                       ))}
                     </select>
                   </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px] hidden 2xl:table-cell">
                     <span className="block mb-1">Level</span>
                     <select name="level" value={filters.level} onChange={handleFilterChange} className="w-full border-gray-300 rounded-md shadow-sm text-xs font-normal normal-case focus:ring-indigo-500 focus:border-indigo-500 bg-gray-700 text-white">
                       <option value="">All</option>
                       {levelOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px] hidden xl:table-cell">
                     <span className="block mb-1">Campus</span>
                     <select name="campus" value={filters.campus} onChange={handleFilterChange} className="w-full border-gray-300 rounded-md shadow-sm text-xs font-normal normal-case focus:ring-indigo-500 focus:border-indigo-500 bg-gray-700 text-white">
                       <option value="">All</option>
                       {campusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px] hidden lg:table-cell">
                     <span className="block mb-1">Batch</span>
                     <select
                       name="batch"
@@ -689,36 +725,38 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                       ))}
                     </select>
                   </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Courses</th>
-                  <th scope="col" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Questions</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px] hidden md:table-cell">Courses</th>
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-16">Q</th>
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[80px] hidden xl:table-cell">
                     <span className="block mb-1">Status</span>
                     <select name="status" value={filters.status} onChange={handleFilterChange} className="w-full border-gray-300 rounded-md shadow-sm text-xs font-normal normal-case focus:ring-indigo-500 focus:border-indigo-500 bg-gray-700 text-white">
                       <option value="">All</option>
                       {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created (IST)</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Ends (IST)</th>
-                  <th scope="col" className="px-4 py-3 relative"><span className="sr-only">Actions</span></th>
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px] hidden 2xl:table-cell">Created</th>
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px] hidden 2xl:table-cell">Ends</th>
+                  <th scope="col" className="px-2 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider w-32"><span>Actions</span></th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTests.map((test, index) => (
-                  <tr key={test._id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50 hover:bg-indigo-50'}>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700">{index + 1}</td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm font-medium text-gray-900">{test.name}</td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500 capitalize">{test.test_type}</td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500 capitalize">{test.module_id || 'N/A'}</td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500 capitalize">{test.level || 'N/A'}</td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">{test.campus || 'N/A'}</td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">{test.batches}</td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">{test.courses}</td>
-                    <td className="px-3 py-3 whitespace-normal break-words text-sm text-gray-500 text-center">
+              {filteredTests.map((test, index) => {
+                const rowBgClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                return (
+                  <tr key={test._id} className={`${rowBgClass} hover:bg-indigo-50`}>
+                    <td className="px-2 py-3 text-sm text-gray-700">{index + 1}</td>
+                    <td className="px-3 py-3 text-sm font-medium text-gray-900 break-words">{test.name}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 capitalize hidden lg:table-cell">{test.test_type}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 capitalize break-words hidden xl:table-cell">{test.module_id || 'N/A'}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 capitalize break-words hidden 2xl:table-cell">{test.level || 'N/A'}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden xl:table-cell">{test.campus || 'N/A'}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden lg:table-cell">{test.batches}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden md:table-cell">{test.courses}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 text-center">
                       {test.question_count}
                     </td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm">
-                      <span className={clsx('px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full', {
+                    <td className="px-2 py-3 text-sm hidden xl:table-cell">
+                      <span className={clsx('px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full', {
                         'bg-green-100 text-green-800': test.status === 'active',
                         'bg-yellow-100 text-yellow-800': test.status === 'processing',
                         'bg-red-100 text-red-800': test.status === 'failed',
@@ -726,7 +764,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                         {test.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">
+                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden 2xl:table-cell">
                       {test.created_at ? new Date(test.created_at).toLocaleString('en-IN', {
                         timeZone: 'Asia/Kolkata',
                         year: 'numeric',
@@ -737,7 +775,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                         hour12: false
                       }) : 'N/A'}
                     </td>
-                    <td className="px-4 py-3 whitespace-normal break-words text-sm text-gray-500">
+                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden 2xl:table-cell">
                       {test.endDateTime ? new Date(test.endDateTime).toLocaleString('en-IN', {
                         timeZone: 'Asia/Kolkata',
                         year: 'numeric',
@@ -748,35 +786,61 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                         hour12: false
                       }) : 'N/A'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center space-x-2">
+                    <td className={`px-2 py-3 text-right text-sm font-medium ${rowBgClass}`}>
+                      <div className="flex items-center justify-end space-x-1">
                         <button
                           onClick={() => onViewTest(test._id)}
                           className="text-indigo-600 hover:text-indigo-900 p-1 rounded-full hover:bg-gray-200"
                           title="View Test"
                         >
-                          <Eye className="h-5 w-5" />
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            const url = `https://crt.pydahsoft.in/student/exam?testid=${test._id}`;
+                            const detailsLines = [
+                              `Test Name: ${test.name}`,
+                              `Module: ${test.module_id || 'N/A'}`,
+                              `Type: ${test.test_type || 'N/A'}`,
+                              `Campuses: ${test.campus || 'N/A'}`,
+                              `Batches: ${test.batches || 'N/A'}`,
+                              `Courses: ${test.courses || 'N/A'}`,
+                              `Questions: ${test.question_count || 0}`,
+                              `Start: ${test.created_at || 'N/A'}`,
+                              `End: ${test.endDateTime || 'N/A'}`,
+                              `Student Link: ${url}`,
+                            ];
+                            navigator.clipboard.writeText(detailsLines.join('\n'));
+                            success('Test details and link copied to clipboard!');
+                          }}
+                          className="text-green-600 hover:text-green-800 p-1 rounded-full hover:bg-gray-200"
+                          title="Copy Test Details & Link"
+                        >
+                          <Copy className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleOpenEditEndTime(test)}
                           className="text-blue-600 hover:text-blue-800 p-1 rounded-full hover:bg-gray-200"
                           title="Edit Test End Date"
                         >
-                          <Edit className="h-5 w-5" />
+                          <Edit className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => onDeleteTest(test._id)}
                           className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-gray-200"
                           title="Delete Test"
                         >
-                          <Trash2 className="h-5 w-5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
-            </table>
+                </table>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -895,63 +959,63 @@ const TestPreviewView = ({ test, onBack, onTestEmail, onFixAudioUrls, onNotifySt
 
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">{test.name}</h1>
-          <div className="flex flex-wrap items-center gap-4 text-gray-500 text-base">
-            <span className="flex items-center"><Briefcase className="w-4 h-4 mr-1.5" /> <span className="font-semibold">Type:</span> {test.test_type}</span>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 sm:mb-6 md:mb-8 gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mb-2 break-words">{test.name}</h1>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4 text-gray-500 text-xs sm:text-sm md:text-base">
+            <span className="flex items-center"><Briefcase className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> <span className="font-semibold">Type:</span> <span className="ml-1">{test.test_type}</span></span>
             <span className={clsx("flex items-center", {
               'text-green-600': test.status === 'active',
               'text-yellow-600': test.status === 'processing',
               'text-red-600': test.status === 'failed'
             })}>
-              <CheckCircle className="w-4 h-4 mr-1.5" /> <span className="font-semibold">Status:</span> <span className="font-semibold">{test.status}</span>
+              <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> <span className="font-semibold">Status:</span> <span className="font-semibold ml-1">{test.status}</span>
             </span>
-            <span className="flex items-center"><FileQuestion className="w-4 h-4 mr-1.5" /> <span className="font-semibold">Questions:</span> {test.questions?.length || 0}</span>
+            <span className="flex items-center"><FileQuestion className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" /> <span className="font-semibold">Questions:</span> <span className="ml-1">{test.questions?.length || 0}</span></span>
             {test.test_type === 'online' && (
               <>
                 {test.startDateTime && (
-                  <span className="flex items-center"><span className="font-semibold text-gray-700 ml-2">Start:</span> {formatDateTime(test.startDateTime)}</span>
+                  <span className="flex items-center"><span className="font-semibold text-gray-700 ml-1 sm:ml-2">Start:</span> <span className="ml-1">{formatDateTime(test.startDateTime)}</span></span>
                 )}
                 {test.endDateTime && (
-                  <span className="flex items-center"><span className="font-semibold text-gray-700 ml-2">End:</span> {formatDateTime(test.endDateTime)}</span>
+                  <span className="flex items-center"><span className="font-semibold text-gray-700 ml-1 sm:ml-2">End:</span> <span className="ml-1">{formatDateTime(test.endDateTime)}</span></span>
                 )}
               </>
             )}
           </div>
         </div>
-        <div className="flex flex-col md:flex-row gap-2 md:gap-4 mt-4 md:mt-0">
-          <button onClick={onBack} className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-800 bg-gray-100 hover:bg-gray-200 transition-colors">
-            <ChevronLeft className="h-5 w-5 mr-1" /> Back to List
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 md:gap-4 mt-2 sm:mt-4 md:mt-0 w-full sm:w-auto">
+          <button onClick={onBack} className="inline-flex items-center justify-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md text-gray-800 bg-gray-100 hover:bg-gray-200 transition-colors">
+            <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5 mr-1" /> <span>Back to List</span>
           </button>
           <button
             onClick={onFixAudioUrls}
-            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 transition-colors"
+            className="inline-flex items-center justify-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 transition-colors"
           >
-            🔧 Fix Audio URLs
+            <span className="hidden sm:inline">🔧 </span>Fix Audio URLs
           </button>
           <button
             onClick={onTestEmail}
-            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 transition-colors"
+            className="inline-flex items-center justify-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 transition-colors"
           >
-            📧 Test Email
+            <span className="hidden sm:inline">📧 </span>Test Email
           </button>
           <button
             onClick={onNotifyStudents}
-            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center justify-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"
           >
             Notify Students
           </button>
           <button
             onClick={onRemindStudents}
-            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 transition-colors"
+            className="inline-flex items-center justify-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 transition-colors"
           >
-            🔔 Remind Students
+            <span className="hidden sm:inline">🔔 </span>Remind Students
           </button>
           <button
             onClick={() => navigate(`/superadmin/results?test_id=${test._id}`)}
-            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors"
+            className="inline-flex items-center justify-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors"
           >
             Results
           </button>
@@ -1753,7 +1817,10 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
   };
 
   const handleTopicChange = (e) => {
-    setSelectedTopic(e.target.value);
+    const topicId = e.target.value;
+    setSelectedTopic(topicId);
+    // Update testData with the selected topic_id
+    updateTestData({ topic_id: topicId, selectedTopic: topicId });
   };
 
   // Get topics for the selected CRT module
@@ -2626,19 +2693,20 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
   const [audioGenerationProgress, setAudioGenerationProgress] = useState(0);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
 
-  // Fetch questions from bank when source changes
+  // Fetch questions from bank when source changes or topic is selected
   useEffect(() => {
     if (questionSource === 'bank') {
       fetchQuestionsFromBank();
     }
-  }, [questionSource, testData.module, testData.level, testData.subcategory]);
+  }, [questionSource, testData.module, testData.level, testData.subcategory, testData.topic_id, selectedTopic]);
 
   // Update selectedTopic when testData changes
   useEffect(() => {
-    if (testData.topic_id || testData.selectedTopic) {
-      setSelectedTopic(testData.topic_id || testData.selectedTopic || '');
+    const topicId = testData.topic_id || testData.selectedTopic || '';
+    if (topicId !== selectedTopic) {
+      setSelectedTopic(topicId);
     }
-  }, [testData.topic_id, testData.selectedTopic]);
+  }, [testData.topic_id, testData.selectedTopic, selectedTopic]);
 
   const fetchQuestionsFromBank = async (count = 50, page = 1, append = false) => {
     if (page === 1) {
@@ -2651,7 +2719,9 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
       // Determine the correct level_id based on module type
       let levelId = testData.level;
       let subcategory = testData.subcategory;
-      let topicId = testData.topic_id || selectedTopic;
+      // Use topic_id from testData first, then fallback to selectedTopic
+      // This ensures we use the most up-to-date topic selection
+      let topicId = testData.topic_id || selectedTopic || '';
 
       if (testData.module.startsWith('CRT_')) {
         // For CRT modules, don't set level_id unless it's specifically needed
@@ -2806,9 +2876,11 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
       }
 
       if (fetchedQuestions.length > 0) {
-        // Sample WITHOUT replacement to avoid repeats within the same test
-        const shuffledQuestions = shuffleArray([...fetchedQuestions]);
-        const selectedQuestions = shuffledQuestions.slice(0, Math.min(questionCount, fetchedQuestions.length));
+        // Use the order returned by the backend:
+        // it already prefers unused questions first, then least-used questions.
+        // By taking the first N questions, we ensure that questions are only
+        // repeated after all questions in the topic have been used at least once.
+        const selectedQuestions = fetchedQuestions.slice(0, Math.min(questionCount, fetchedQuestions.length));
 
         if (selectedQuestions.length < questionCount) {
           const moduleName = testData.module?.startsWith('CRT_') ? testData.module.replace('CRT_', '') : testData.module;
@@ -3103,8 +3175,11 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
       formData.append('module_id', testData.module);
       formData.append('level_id', testData.level);
 
-      // Add question type for technical tests
-      if (testData.technical_question_type) {
+      // Add question type only when actually needed:
+      // - For CRT_TECHNICAL we respect the selected technical_question_type
+      // - For all other modules (CRT_APTITUDE, CRT_REASONING, etc.) we rely on
+      //   backend default 'mcq' so they are never treated as technical/compiler.
+      if (testData.module === 'CRT_TECHNICAL' && testData.technical_question_type) {
         formData.append('question_type', testData.technical_question_type);
       }
 
@@ -3211,9 +3286,15 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
 
         const response = await api.post('/test-management/question-bank/count', payload);
         if (response.data.success) {
-          setLocalQuestionCount(response.data.available_count);
+          // If a topic is selected, use total_count (all questions in topic) instead of available_count
+          // available_count filters by used_count < 3, which may not reflect the actual topic size
+          const countToUse = (testData.topic_id || selectedTopic) 
+            ? response.data.total_count 
+            : response.data.available_count;
+          
+          setLocalQuestionCount(countToUse);
           console.log('Question count response:', response.data);
-          console.log('Available count for CRT module:', response.data.available_count);
+          console.log('Using count for CRT module:', countToUse, '(topic selected:', !!(testData.topic_id || selectedTopic), ')');
         } else {
           console.error('Question count failed:', response.data.message);
         }

@@ -156,29 +156,29 @@ const TestDetailsView = ({
     ].filter(Boolean).length;
     
     return (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
             {/* Header with Back Button */}
-            <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                 <button
                     onClick={onBack}
-                    className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors self-start"
                 >
-                    <ChevronDown className="w-4 h-4 rotate-90" />
-                    Back to Tests
+                    <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 rotate-90" />
+                    <span>Back to Tests</span>
                 </button>
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{test.test_name}</h1>
-                    <p className="text-gray-600">Detailed analysis and student performance</p>
+                <div className="flex-1 min-w-0">
+                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 break-words">{test.test_name}</h1>
+                    <p className="text-xs sm:text-sm md:text-base text-gray-600 mt-1">Detailed analysis and student performance</p>
                     
                     {/* Auto Release Schedule Info */}
                     {autoReleaseSchedule && (
-                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-blue-50 border border-blue-200 rounded-lg">
                             <div className="flex items-center space-x-2">
-                                <Clock className="w-4 h-4 text-blue-600" />
-                                <span className="text-sm font-medium text-blue-900">Auto Release Scheduled</span>
+                                <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 flex-shrink-0" />
+                                <span className="text-xs sm:text-sm font-medium text-blue-900">Auto Release Scheduled</span>
                             </div>
-                            <p className="text-sm text-blue-700 mt-1">
+                            <p className="text-xs sm:text-sm text-blue-700 mt-1 break-words">
                                 Results will be automatically released on{' '}
                                 {new Date(autoReleaseSchedule.scheduled_release_time).toLocaleString()}
                             </p>
@@ -193,57 +193,57 @@ const TestDetailsView = ({
                 </div>
                 
                 {/* Release Controls */}
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                     {releaseStatus[test.test_id] ? (
-                        <div className="flex items-center gap-3">
-                            <span className="inline-flex items-center gap-1 px-3 py-2 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                                <Unlock className="w-4 h-4" />
-                                Results Released
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+                            <span className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-full text-xs sm:text-sm font-medium bg-green-100 text-green-800">
+                                <Unlock className="w-3 h-3 sm:w-4 sm:h-4" />
+                                <span>Results Released</span>
                             </span>
                             <button
                                 onClick={() => onUnreleaseResults(test.test_id, test.test_name)}
                                 disabled={releaseLoading[test.test_id]}
-                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {releaseLoading[test.test_id] ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                 ) : (
-                                    <Lock className="w-4 h-4" />
+                                    <Lock className="w-3 h-3 sm:w-4 sm:h-4" />
                                 )}
-                                Revoke Release
+                                <span>Revoke Release</span>
                             </button>
                         </div>
                     ) : (
                         <button
                             onClick={() => onReleaseResults(test.test_id, test.test_name)}
                             disabled={releaseLoading[test.test_id]}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {releaseLoading[test.test_id] ? (
-                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                             ) : (
-                                <Unlock className="w-4 h-4" />
+                                <Unlock className="w-3 h-3 sm:w-4 sm:h-4" />
                             )}
-                            Release Results
+                            <span>Release Results</span>
                         </button>
                     )}
                 </div>
             </div>
 
             {/* Analytics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Total Assigned</p>
-                            <p className="text-3xl font-bold text-gray-900">{totalStudents}</p>
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Total Assigned</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{totalStudents}</p>
                         </div>
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Users className="w-6 h-6 text-blue-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -252,15 +252,15 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Attempted</p>
-                            <p className="text-3xl font-bold text-green-600">{attemptedStudents}</p>
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Attempted</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-green-600">{attemptedStudents}</p>
                         </div>
-                        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                            <CheckCircle className="w-6 h-6 text-green-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -269,15 +269,15 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Unattempted</p>
-                            <p className="text-3xl font-bold text-red-600">{unattemptedStudents}</p>
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Unattempted</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-red-600">{unattemptedStudents}</p>
                         </div>
-                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                            <XCircle className="w-6 h-6 text-red-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <XCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -286,17 +286,17 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Pass Rate</p>
-                            <p className="text-3xl font-bold text-blue-600">
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Pass Rate</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-blue-600">
                                 {attemptedStudents > 0 ? ((passedStudents / attemptedStudents) * 100).toFixed(1) : 0}%
                             </p>
                         </div>
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                            <TrendingUp className="w-6 h-6 text-blue-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -305,17 +305,17 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Highest Score</p>
-                            <p className="text-3xl font-bold text-purple-600">
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Highest Score</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-purple-600">
                                 {attemptedStudents > 0 ? Math.max(...filteredAttempts.filter(s => s.has_attempted).map(s => s.highest_score)).toFixed(1) : 0}%
                             </p>
                         </div>
-                        <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                            <BarChart3 className="w-6 h-6 text-purple-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -324,35 +324,35 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Average Score</p>
-                            <p className="text-3xl font-bold text-orange-600">
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Average Score</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-orange-600">
                                 {attemptedStudents > 0 ? (filteredAttempts.filter(s => s.has_attempted).reduce((sum, s) => sum + s.average_score, 0) / attemptedStudents).toFixed(1) : 0}%
                             </p>
                         </div>
-                        <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                            <TrendingUp className="w-6 h-6 text-orange-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
                         </div>
                     </div>
                 </motion.div>
             </div>
 
             {/* Filters and Search Section */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-                <div className="flex flex-col lg:flex-row gap-4 mb-4">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-3 sm:p-4 md:p-6">
+                <div className="flex flex-col lg:flex-row gap-3 sm:gap-4 mb-3 sm:mb-4">
                     {/* Search Bar */}
                     <div className="flex-1">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <Search className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
                             <input
                                 type="text"
-                                placeholder="Search students by name, email, roll number, campus, course, or batch..."
+                                placeholder="Search students..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                             {searchTerm && (
                                 <button
@@ -366,15 +366,15 @@ const TestDetailsView = ({
                     </div>
 
                     {/* Filter Controls */}
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2 sm:gap-3">
                         {/* Campus Filter */}
-                        <div className="flex flex-col">
-                            <label className="text-sm font-medium text-gray-700 mb-1">Campus</label>
+                        <div className="flex flex-col min-w-[120px] sm:min-w-[150px]">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Campus</label>
                             <select
                                 value={selectedCampus}
                                 onChange={(e) => setSelectedCampus(e.target.value)}
                                 disabled={uniqueCampuses.length <= 1}
-                                className={`px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                     uniqueCampuses.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
                                 }`}
                             >
@@ -386,13 +386,13 @@ const TestDetailsView = ({
                         </div>
 
                         {/* Course Filter */}
-                        <div className="flex flex-col">
-                            <label className="text-sm font-medium text-gray-700 mb-1">Course</label>
+                        <div className="flex flex-col min-w-[120px] sm:min-w-[150px]">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Course</label>
                             <select
                                 value={selectedCourse}
                                 onChange={(e) => setSelectedCourse(e.target.value)}
                                 disabled={uniqueCourses.length <= 1}
-                                className={`px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                     uniqueCourses.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
                                 }`}
                             >
@@ -404,13 +404,13 @@ const TestDetailsView = ({
                         </div>
 
                         {/* Batch Filter */}
-                        <div className="flex flex-col">
-                            <label className="text-sm font-medium text-gray-700 mb-1">Batch</label>
+                        <div className="flex flex-col min-w-[120px] sm:min-w-[150px]">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Batch</label>
                             <select
                                 value={selectedBatch}
                                 onChange={(e) => setSelectedBatch(e.target.value)}
                                 disabled={uniqueBatches.length <= 1}
-                                className={`px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                     uniqueBatches.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
                                 }`}
                             >
@@ -422,12 +422,12 @@ const TestDetailsView = ({
                         </div>
 
                         {/* Status Filter */}
-                        <div className="flex flex-col">
-                            <label className="text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <div className="flex flex-col min-w-[120px] sm:min-w-[150px]">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Status</label>
                             <select
                                 value={selectedStatus}
                                 onChange={(e) => setSelectedStatus(e.target.value)}
-                                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                             >
                                 <option value="all">All Students</option>
                                 <option value="attempted">Attempted</option>
@@ -440,10 +440,10 @@ const TestDetailsView = ({
                             <div className="flex flex-col justify-end">
                                 <button
                                     onClick={resetFilters}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                    className="flex items-center justify-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                                 >
-                                    <RefreshCw className="w-4 h-4" />
-                                    Reset Filters
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4" />
+                                    <span>Reset</span>
                                 </button>
                             </div>
                         )}
@@ -451,21 +451,21 @@ const TestDetailsView = ({
                 </div>
 
                 {/* Filter Status */}
-                <div className="flex items-center justify-between text-sm text-gray-600">
-                    <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 text-xs sm:text-sm text-gray-600">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                         <span>
                             Showing <span className="font-semibold text-gray-900">{totalStudents}</span> of{' '}
                             <span className="font-semibold text-gray-900">{attempts.length}</span> students
                         </span>
                         {activeFiltersCount > 0 && (
-                            <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                            <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                                 <Filter className="w-3 h-3" />
                                 {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''} active
                             </span>
                         )}
                     </div>
                     {searchTerm && (
-                        <div className="text-gray-500">
+                        <div className="text-gray-500 text-xs sm:text-sm break-words">
                             Search results for: <span className="font-medium">"{searchTerm}"</span>
                         </div>
                     )}
@@ -474,53 +474,56 @@ const TestDetailsView = ({
 
             {/* Student Attempts Section */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div className="p-6 border-b border-gray-200">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-semibold text-gray-900">
+                <div className="p-3 sm:p-4 md:p-6 border-b border-gray-200">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4">
+                        <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900">
                             Student Attempts ({totalStudents} students)
                         </h2>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                             <button
                                 onClick={() => onExportTestResults(test.test_id, test.test_name, 'complete', filteredAttempts, attempts)}
                                 disabled={exportLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                                className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
                             >
                                 {exportLoading ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                 ) : (
-                                    <FileSpreadsheet className="w-4 h-4" />
+                                    <FileSpreadsheet className="w-3 h-3 sm:w-4 sm:h-4" />
                                 )}
-                                Export Complete
+                                <span className="hidden sm:inline">Export Complete</span>
+                                <span className="sm:hidden">Complete</span>
                             </button>
                             <button
                                 onClick={() => onExportTestResults(test.test_id, test.test_name, 'excel', filteredAttempts, attempts)}
                                 disabled={exportLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                                className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                             >
                                 {exportLoading ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                 ) : (
-                                    <FileSpreadsheet className="w-4 h-4" />
+                                    <FileSpreadsheet className="w-3 h-3 sm:w-4 sm:h-4" />
                                 )}
-                                Export Attempted
+                                <span className="hidden sm:inline">Export Attempted</span>
+                                <span className="sm:hidden">Attempted</span>
                             </button>
                             <button
                                 onClick={() => onExportTestResults(test.test_id, test.test_name, 'csv', filteredAttempts, attempts)}
                                 disabled={exportLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                             >
                                 {exportLoading ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                 ) : (
-                                    <Download className="w-4 h-4" />
+                                    <Download className="w-3 h-3 sm:w-4 sm:h-4" />
                                 )}
-                                Export CSV
+                                <span className="hidden sm:inline">Export CSV</span>
+                                <span className="sm:hidden">CSV</span>
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto overflow-y-auto max-h-[50vh] sm:max-h-[60vh] md:max-h-none">
                     {filteredAttempts.length === 0 ? (
                         <div className="text-center py-12">
                             <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -543,37 +546,37 @@ const TestDetailsView = ({
                             )}
                         </div>
                     ) : (
-                        <table className="w-full">
+                        <table className="w-full min-w-[800px]">
                             <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Student Name
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Email
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Campus
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Course
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Batch
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Total Questions
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Correct Answers
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Score
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Attempts
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Latest Attempt
                                     </th>
                                 </tr>
@@ -588,7 +591,7 @@ const TestDetailsView = ({
                                         className={`hover:bg-gray-50 ${student.has_attempted ? 'cursor-pointer' : 'cursor-default'}`}
                                         onClick={() => student.has_attempted && onStudentClick(student.student_id, test.test_id)}
                                     >
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap">
                                             <div className="flex items-center">
                                                 {student.has_attempted ? (
                                                     <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
@@ -613,25 +616,25 @@ const TestDetailsView = ({
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.student_email || '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.campus_name || '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.course_name || '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.batch_name || '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.has_attempted ? student.total_questions : '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.has_attempted ? student.correct_answers : '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm font-medium">
                                             {student.has_attempted ? (
                                                 <span className={`${
                                                     (() => {
@@ -655,10 +658,10 @@ const TestDetailsView = ({
                                                 <span className="text-gray-400">-</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.attempts_count}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">
                                             {student.has_attempted ? (
                                                 <button
                                                     onClick={(e) => {
@@ -685,7 +688,7 @@ const TestDetailsView = ({
                 
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
-                    <div className="bg-white px-6 py-4 border-t border-gray-200">
+                    <div className="bg-white px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-t border-gray-200">
                         <div className="flex items-center justify-between">
                             <div className="text-sm text-gray-700">
                                 Showing {startIndex + 1} to {Math.min(endIndex, filteredAttempts.length)} of {filteredAttempts.length} students
@@ -752,6 +755,7 @@ const ResultsManagement = () => {
     const [batches, setBatches] = useState([]);
     const [selectedCampusFilter, setSelectedCampusFilter] = useState('all');
     const [selectedBatchFilter, setSelectedBatchFilter] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
     const [expandedTest, setExpandedTest] = useState(null);
     const [testAttempts, setTestAttempts] = useState({});
     const [selectedStudent, setSelectedStudent] = useState(null);
@@ -865,6 +869,10 @@ const ResultsManagement = () => {
     // Apply campus / batch filters and ensure latest tests appear first
     const filteredAndSortedTests = React.useMemo(() => {
         const filtered = tests.filter(test => {
+            // Search filter for test name
+            const matchesSearch = !searchTerm || 
+                (test.test_name && test.test_name.toLowerCase().includes(searchTerm.toLowerCase()));
+
             const campusIds = test.campus_ids || [];
             const batchIds = test.batch_ids || [];
 
@@ -876,7 +884,7 @@ const ResultsManagement = () => {
                 selectedBatchFilter === 'all' ||
                 (Array.isArray(batchIds) && batchIds.includes(selectedBatchFilter));
 
-            return matchesCampus && matchesBatch;
+            return matchesSearch && matchesCampus && matchesBatch;
         });
 
         return [...filtered].sort((a, b) => {
@@ -884,7 +892,7 @@ const ResultsManagement = () => {
             const bDate = b.created_at ? new Date(b.created_at) : new Date(0);
             return bDate - aDate; // latest first
         });
-    }, [tests, selectedCampusFilter, selectedBatchFilter]);
+    }, [tests, selectedCampusFilter, selectedBatchFilter, searchTerm]);
 
     // Batch options should depend on selected campus
     const filteredBatchOptions = React.useMemo(() => {
@@ -1648,7 +1656,7 @@ const ResultsManagement = () => {
 
     return (
         <>
-            <main className="px-6 lg:px-10 py-12">
+            <main className="px-3 sm:px-4 md:px-6 lg:px-10 py-3 sm:py-4 md:py-6 lg:py-8">
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     {currentView === 'test-details' && selectedTest ? (
                         <TestDetailsView
@@ -1679,22 +1687,24 @@ const ResultsManagement = () => {
                                 <div className="flex gap-3">
                                     <button
                                         onClick={() => setShowAutoReleaseModal(true)}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                        className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                                     >
-                                        <Settings className="w-4 h-4" />
-                                        Auto Release Settings
+                                        <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
+                                        <span className="hidden sm:inline">Auto Release Settings</span>
+                                        <span className="sm:hidden">Auto Release</span>
                                     </button>
                                     <button
                                         onClick={handleExportOverviewToExcel}
-                                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                        className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                                         disabled={exportLoading}
                                     >
                                         {exportLoading ? (
-                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                            <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                         ) : (
-                                            <ExcelIcon className="w-4 h-4" />
+                                            <ExcelIcon className="w-3 h-3 sm:w-4 sm:h-4" />
                                         )}
-                                        Export Results Abstract
+                                        <span className="hidden sm:inline">Export Results Abstract</span>
+                                        <span className="sm:hidden">Export</span>
                                     </button>
                                     {/* <button
                                         onClick={handleMigrateExistingTests}
@@ -1713,27 +1723,49 @@ const ResultsManagement = () => {
 
                     {/* Error Message */}
                     {errorMsg && (
-                        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                            <p className="text-red-700 text-sm">{errorMsg}</p>
+                        <div className="mb-3 sm:mb-4 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
+                            <p className="text-red-700 text-xs sm:text-sm">{errorMsg}</p>
                         </div>
                     )}
 
+                    {/* Search Bar */}
+                    <div className="mb-4">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search by test name..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
                     {/* Tests Table */}
                     <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                        <div className="overflow-x-visible">
-                            <table className="w-full table-fixed">
+                        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)', WebkitOverflowScrolling: 'touch' }}>
+                            <table className="w-full min-w-[1000px]">
                                 <thead className="bg-gray-50 border-b border-gray-200">
                                     <tr>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-14">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-14">
                                             S. No
                                         </th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
                                             Test Name
                                         </th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
                                             Category
                                         </th>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40 min-w-[120px]">
                                             <span className="block mb-1">Campus</span>
                                             <select
                                                 value={selectedCampusFilter}
@@ -1752,12 +1784,12 @@ const ResultsManagement = () => {
                                                 })}
                                             </select>
                                         </th>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40 min-w-[120px]">
                                             <span className="block mb-1">Batch</span>
                                             <select
                                                 value={selectedBatchFilter}
                                                 onChange={(e) => setSelectedBatchFilter(e.target.value)}
-                                                className="w-full border border-gray-300 rounded-md text-[11px] font-normal focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                className="w-full border border-gray-300 rounded-md text-[10px] sm:text-[11px] font-normal focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
                                             >
                                                 <option value="all">All</option>
                                                 {filteredBatchOptions.map((batchId) => (
@@ -1767,22 +1799,22 @@ const ResultsManagement = () => {
                                                 ))}
                                             </select>
                                         </th>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                                             Total Students
                                         </th>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                                             Pending Students
                                         </th>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">
                                             Attempts
                                         </th>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                                             Highest Score
                                         </th>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                                             Average Score
                                         </th>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
                                             Results Status
                                         </th>
                                     </tr>
@@ -1808,47 +1840,47 @@ const ResultsManagement = () => {
                                                 className="hover:bg-gray-50 cursor-pointer"
                                                 onClick={() => handleTestClick(test.test_id)}
                                             >
-                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                                     {index + 1}
                                                 </td>
-                                                <td className="px-4 py-3 whitespace-normal break-words text-sm font-medium text-gray-900">
+                                                <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-normal break-words text-xs sm:text-sm font-medium text-gray-900">
                                                     {test.test_name}
                                                 </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                                     {test.category}
                                                 </td>
-                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                                     {Array.isArray(test.campus_ids) && test.campus_ids.length > 0
                                                         ? test.campus_ids
                                                             .map((id) => campusMap[String(id)] || 'Unknown')
                                                             .join(', ')
                                                         : '-'}
                                                 </td>
-                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                                     {Array.isArray(test.batch_ids) && test.batch_ids.length > 0
                                                         ? test.batch_ids
                                                             .map((id) => batchMap[String(id)] || 'Unknown')
                                                             .join(', ')
                                                         : '-'}
                                                 </td>
-                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                                     {typeof test.total_assigned_students === 'number'
                                                         ? test.total_assigned_students
                                                         : 0}
                                                 </td>
-                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                                     {test.pending_students ?? 0}
                                                 </td>
-                                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                                     {test.total_attempts}
                                                 </td>
-                                                <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-green-600">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-green-600">
                                                     {test.highest_score}%
                                                 </td>
-                                                <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-blue-600">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-blue-600">
                                                     {test.average_score}%
                                                 </td>
-                                                <td className="px-3 py-3 whitespace-nowrap">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
                                                     {releaseStatus[test.test_id] ? (
                                                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                                             <Unlock className="w-3 h-3" />
