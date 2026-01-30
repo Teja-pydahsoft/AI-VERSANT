@@ -1336,7 +1336,7 @@ const BatchManagement = () => {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-white rounded-3xl shadow-2xl max-w-6xl w-full max-h-[95vh] overflow-hidden border border-gray-100 flex flex-col"
+              className="bg-white rounded-3xl shadow-2xl max-w-[95vw] w-full max-h-[95vh] overflow-hidden border border-gray-100 flex flex-col"
             >
               {/* Enhanced Header */}
               <div className="px-8 py-6 border-b border-gray-100 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">

@@ -665,9 +665,9 @@ const StudentManagement = () => {
 
     return (
         <>
-        <main className="px-3 sm:px-4 md:px-6 mt-4 sm:mt-6">
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-0 mb-4 sm:mb-6 md:mb-8">
+        <main className="px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 mt-4 sm:mt-6 w-full h-[calc(100vh-120px)] flex flex-col overflow-hidden">
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col h-full overflow-hidden">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-0 mb-2 sm:mb-3 flex-shrink-0">
                             <div className="flex-1 min-w-0">
                                 <h1 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-1 sm:mb-2">Student Management</h1>
                                 <p className="text-sm sm:text-base text-gray-600">
@@ -711,20 +711,20 @@ const StudentManagement = () => {
                         </div>
 
                         {/* Filter Section */}
-                        <div className="mb-4 sm:mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
-                            <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center">
-                                <Filter className="mr-2 h-4 w-4 sm:h-5 sm:w-5 text-gray-500" />
+                        <div className="mb-2 sm:mb-3 bg-white rounded-lg shadow-sm border border-gray-200 p-2 sm:p-3 flex-shrink-0">
+                            <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-2 flex items-center">
+                                <Filter className="mr-2 h-3 w-3 sm:h-4 sm:w-4 text-gray-500" />
                                 Filter Students
                             </h3>
                             
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-2 sm:gap-3 mb-2">
                                 {/* Campus Filter */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Campus</label>
+                                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Campus</label>
                                     <select
                                         value={selectedCampus}
                                         onChange={(e) => setSelectedCampus(e.target.value)}
-                                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                        className="w-full py-1.5 px-2 text-sm border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                     >
                                         <option value="">All Campuses</option>
                                         {campuses.map(campus => (
@@ -737,12 +737,12 @@ const StudentManagement = () => {
 
                                 {/* Course Filter */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Course</label>
+                                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Course</label>
                                     <select
                                         value={selectedCourse || ''}
                                         onChange={(e) => setSelectedCourse(e.target.value || null)}
                                         disabled={!selectedCampus || loadingFilters}
-                                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                        className="w-full py-1.5 px-2 text-sm border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                     >
                                         <option value="">
                                             {loadingFilters && selectedCampus ? 'Loading...' : 'All Courses'}
@@ -757,12 +757,12 @@ const StudentManagement = () => {
 
                                 {/* Batch Filter */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Batch</label>
+                                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Batch</label>
                                     <select
                                         value={selectedBatch || ''}
                                         onChange={(e) => setSelectedBatch(e.target.value || null)}
                                         disabled={!selectedCourse || loadingFilters}
-                                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                        className="w-full py-1.5 px-2 text-sm border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                     >
                                         <option value="">
                                             {loadingFilters && selectedCourse ? 'Loading...' : 'All Batches'}
@@ -775,13 +775,29 @@ const StudentManagement = () => {
                                     </select>
                                 </div>
 
+                                {/* Search Input - Inline with filters */}
+                                <div>
+                                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Search</label>
+                                    <div className="relative">
+                                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            placeholder="Name, email, roll..."
+                                            value={searchInput}
+                                            onChange={(e) => setSearchInput(e.target.value)}
+                                            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                                            className="w-full pl-7 pr-2 py-1.5 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                        />
+                                    </div>
+                                </div>
+
                                 {/* Download All Credentials Button */}
                                 <div className="flex items-end">
                                     {students.length > 0 && (
                                         <button
                                             onClick={handleDownloadAllCredentials}
                                             disabled={downloadingAll}
-                                            className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                            className="w-full px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
                                         >
                                             {downloadingAll ? (
                                                 <>
@@ -801,8 +817,39 @@ const StudentManagement = () => {
                                 </div>
                             </div>
 
+                            {/* Search Status and Action Buttons */}
+                            {(searchTerm || searchInput) && (
+                                <div className="flex items-center justify-between mb-2">
+                                    {searchTerm && (
+                                        <div className="flex items-center gap-1.5 p-1.5 bg-yellow-50 border border-yellow-200 rounded-md">
+                                            <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></div>
+                                            <span className="text-xs font-medium text-yellow-800">
+                                                Searching for: "{searchTerm}"
+                                            </span>
+                                            <button
+                                                onClick={handleClearSearch}
+                                                className="text-yellow-600 hover:text-yellow-800 text-xs font-medium ml-1.5"
+                                            >
+                                                Clear
+                                            </button>
+                                        </div>
+                                    )}
+                                    {!searchTerm && searchInput && (
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={handleSearch}
+                                                className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1.5 text-xs"
+                                            >
+                                                <Search className="w-3 h-3" />
+                                                Search
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Clear Filters Button and Download info */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between border-t border-gray-200 pt-2">
                                 {(selectedCampus || selectedCourse || selectedBatch) && (
                                     <button
                                         onClick={() => {
@@ -810,7 +857,7 @@ const StudentManagement = () => {
                                             setSelectedCourse(null);
                                             setSelectedBatch(null);
                                         }}
-                                        className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+                                        className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
                                     >
                                         Clear Filters
                                     </button>
@@ -818,93 +865,99 @@ const StudentManagement = () => {
                                 
                                 {/* Download info text */}
                                 {students.length > 0 && (
-                                    <p className="text-sm text-gray-500">
+                                    <p className="text-xs text-gray-500">
                                         Downloads credentials for all {totalStudents} filtered students
                                     </p>
                                 )}
                             </div>
                         </div>
 
-                        {/* Search Section */}
-                        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                            <div className="flex flex-col md:flex-row gap-4">
-                                <div className="flex-1 relative">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search by name, email, or roll number..."
-                                        value={searchInput}
-                                        onChange={(e) => setSearchInput(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                                        className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    />
-                                </div>
-                                <div className="flex gap-2">
+                        {/* Student Modal Status */}
+                        {selectedStudent && isProgressModalOpen && (
+                            <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                        <span className="text-sm font-medium text-blue-800">
+                                            Viewing: {selectedStudent.name}
+                                        </span>
+                                    </div>
                                     <button
-                                        onClick={handleSearch}
-                                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                                        onClick={() => {
+                                            setIsProgressModalOpen(false);
+                                            setSelectedStudent(null);
+                                        }}
+                                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                                     >
-                                        <Search className="w-4 h-4" />
-                                        Search
+                                        Close Details
                                     </button>
-                                    {searchTerm && (
-                                        <button
-                                            onClick={handleClearSearch}
-                                            className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
-                                        >
-                                            Clear
-                                        </button>
-                                    )}
                                 </div>
                             </div>
-                            
-                            {/* Search Status */}
-                            {searchTerm && (
-                                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                                            <span className="text-sm font-medium text-yellow-800">
-                                                Searching for: "{searchTerm}"
-                                            </span>
-                                        </div>
-                                        <button
-                                            onClick={handleClearSearch}
-                                            className="text-yellow-600 hover:text-yellow-800 text-sm font-medium"
-                                        >
-                                            Clear Search
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Student Modal Status */}
-                            {selectedStudent && isProgressModalOpen && (
-                                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                                            <span className="text-sm font-medium text-blue-800">
-                                                Viewing: {selectedStudent.name}
-                                            </span>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                setIsProgressModalOpen(false);
-                                                setSelectedStudent(null);
-                                            }}
-                                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                        >
-                                            Close Details
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        )}
 
                         {/* Enhanced Student Display Table */}
-                        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
-                            <div className="overflow-x-auto overflow-y-auto max-h-[60vh] sm:max-h-none">
+                        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100 w-full flex flex-col flex-1 min-h-0">
+                            {/* Enhanced Table Header - Outside scrollable area */}
+                            {!loading && students.length > 0 && (
+                                <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 flex-shrink-0">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Bulk Actions Bar - Outside scrollable area */}
+                            {!loading && students.length > 0 && showBulkActions && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: -20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="bg-red-50 border border-red-200 rounded-lg p-4 mx-4 sm:mx-6 lg:mx-8 my-4 flex-shrink-0"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-red-100 rounded-lg">
+                                                <Trash2 className="w-5 h-5 text-red-600" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-red-900">
+                                                    {selectedStudents.size} Student{selectedStudents.size !== 1 ? 's' : ''} Selected
+                                                </h3>
+                                                <p className="text-sm text-red-700">
+                                                    Choose an action to perform on selected students
+                                                </p>
+                                                {selectedStudents.size > 0 && (
+                                                    <div className="mt-2 text-xs text-red-600">
+                                                        Selected: {Array.from(selectedStudents).slice(0, 3).map(id => {
+                                                            const student = students.find(s => s._id === id);
+                                                            return student?.name || 'Unknown';
+                                                        }).join(', ')}
+                                                        {selectedStudents.size > 3 && ` and ${selectedStudents.size - 3} more...`}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                onClick={clearSelection}
+                                                className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                            >
+                                                Clear Selection
+                                            </button>
+                                            <button
+                                                onClick={() => setShowBulkDeleteModal(true)}
+                                                className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                                Delete Selected
+                                            </button>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {/* Scrollable Table Container */}
+                            <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
                                 {loading ? (
                                     <div className="flex items-center justify-center py-16">
                                         <LoadingSpinner />
@@ -924,71 +977,11 @@ const StudentManagement = () => {
                                         </p>
                                     </motion.div>
                                 ) : (
-                                    <div className="relative">
-                                        {/* Enhanced Table Header */}
-                                        <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-b border-gray-200">
-                                            <div className="px-8 py-6">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Bulk Actions Bar */}
-                                        {showBulkActions && (
-                                            <motion.div 
-                                                initial={{ opacity: 0, y: -20 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-red-100 rounded-lg">
-                                                            <Trash2 className="w-5 h-5 text-red-600" />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-lg font-semibold text-red-900">
-                                                                {selectedStudents.size} Student{selectedStudents.size !== 1 ? 's' : ''} Selected
-                                                            </h3>
-                                                            <p className="text-sm text-red-700">
-                                                                Choose an action to perform on selected students
-                                                            </p>
-                                                            {selectedStudents.size > 0 && (
-                                                                <div className="mt-2 text-xs text-red-600">
-                                                                    Selected: {Array.from(selectedStudents).slice(0, 3).map(id => {
-                                                                        const student = students.find(s => s._id === id);
-                                                                        return student?.name || 'Unknown';
-                                                                    }).join(', ')}
-                                                                    {selectedStudents.size > 3 && ` and ${selectedStudents.size - 3} more...`}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-3">
-                                                        <button
-                                                            onClick={clearSelection}
-                                                            className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                                                        >
-                                                            Clear Selection
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setShowBulkDeleteModal(true)}
-                                                            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                            Delete Selected
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </motion.div>
-                                        )}
-
-                                        {/* Enhanced Table */}
-                                        <table className="min-w-full" style={{ minWidth: '800px' }}>
-                                            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                                    <>
+                                        <table className="w-full">
+                                            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-10">
                                                 <tr>
-                                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200 w-12">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 text-left border-b border-gray-200 w-12">
                                                         <div className="flex items-center gap-2">
                                                             <input
                                                                 type="checkbox"
@@ -998,12 +991,12 @@ const StudentManagement = () => {
                                                             />
                                                         </div>
                                                     </th>
-                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 text-left border-b border-gray-200">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Student</span>
                                                         </div>
                                                     </th>
-                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 text-left border-b border-gray-200">
                                                         <div className="flex items-center gap-2">
                                                             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -1011,7 +1004,7 @@ const StudentManagement = () => {
                                                             <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Campus</span>
                                                         </div>
                                                     </th>
-                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 text-left border-b border-gray-200">
                                                         <div className="flex items-center gap-2">
                                                             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -1019,7 +1012,7 @@ const StudentManagement = () => {
                                                             <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Course & Batch</span>
                                                         </div>
                                                     </th>
-                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-left border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 text-left border-b border-gray-200">
                                                         <div className="flex items-center gap-2">
                                                             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -1027,7 +1020,7 @@ const StudentManagement = () => {
                                                             <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Username</span>
                                                         </div>
                                                     </th>
-                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-5 text-right border-b border-gray-200">
+                                                    <th className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 text-right border-b border-gray-200">
                                                         <div className="flex items-center justify-end gap-2">
                                                             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -1051,7 +1044,7 @@ const StudentManagement = () => {
                                                         }`}
                                                         onClick={() => handleStudentClick(student)}
                                                     >
-                                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-6 whitespace-nowrap w-12">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 whitespace-nowrap w-12">
                                                             <input
                                                                 type="checkbox"
                                                                 checked={selectedStudents.has(student._id)}
@@ -1062,7 +1055,7 @@ const StudentManagement = () => {
                                                                 className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                                                             />
                                                         </td>
-                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-xs sm:text-sm">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm">
                                                             <div className="flex items-center gap-4">
                                                                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
                                                                     {student.name?.charAt(0)?.toUpperCase() || 'S'}
@@ -1077,12 +1070,12 @@ const StudentManagement = () => {
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-xs sm:text-sm">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm">
                                                             <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                                                 {student.campus_name || 'N/A'}
                                                             </div>
                                                         </td>
-                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-xs sm:text-sm">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm">
                                                             <div className="space-y-1">
                                                                 <div className="text-sm font-medium text-gray-900">
                                                                     {student.course_name || 'N/A'}
@@ -1092,7 +1085,7 @@ const StudentManagement = () => {
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-xs sm:text-sm">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm">
                                                             <div className="flex items-center gap-3">
                                                                 <span className="text-sm text-gray-600 font-mono bg-gray-50 px-3 py-1 rounded">
                                                                     {student.username || student.roll_number || 'N/A'}
@@ -1102,7 +1095,7 @@ const StudentManagement = () => {
                                                                 </span>
                                                             </div>
                                                         </td>
-                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-2 sm:py-3 md:py-6 whitespace-nowrap text-right text-xs sm:text-sm">
+                                                        <td className="px-2 sm:px-3 md:px-6 lg:px-8 py-3 md:py-4 whitespace-nowrap text-right text-xs sm:text-sm">
                                                             <div className="flex items-center justify-end gap-3">
                                                                 <button 
                                                                     onClick={(e) => {
@@ -1154,137 +1147,137 @@ const StudentManagement = () => {
                                                 ))}
                                             </tbody>
                                         </table>
-                                    </div>
+                                        
+                                        {/* Load More Button - Inside scrollable area */}
+                                        {students.length > 0 && (
+                                            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 sm:px-6 lg:px-8 py-4 z-10 shadow-lg">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="text-sm text-gray-700 font-medium">
+                                                        Showing {students.length} of {totalStudents} students
+                                                    </div>
+                                                    
+                                                    {hasMore && (
+                                                        <button
+                                                            onClick={loadMore}
+                                                            disabled={loadingMore}
+                                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                                                        >
+                                                            {loadingMore ? (
+                                                                <>
+                                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                                                    Loading...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    Load More Students
+                                                                    <ChevronRight size={16} />
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                    
+                                                    {!hasMore && students.length > 0 && (
+                                                        <div className="text-sm text-gray-500 font-medium">
+                                                            All students loaded
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
+                        </div>
 
-                            {/* Edit Student Modal */}
-                            {isEditModalOpen && (
-                                <Modal 
-                                    isOpen={isEditModalOpen} 
-                                    onClose={() => setIsEditModalOpen(false)} 
-                                    title="Edit Student"
-                                >
-                                    <div className="space-y-6">
-                                        <div className="border border-gray-200 rounded-xl divide-y">
-                                            <div className="flex items-center px-6 py-3">
-                                                <div className="w-1/4 text-sm font-medium text-gray-700">
-                                                    Name
-                                                </div>
-                                                <div className="w-3/4">
-                                                    <input
-                                                        type="text"
-                                                        value={editForm.name}
-                                                        onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                                                        className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                                    />
-                                                </div>
+                        {/* Edit Student Modal */}
+                        {isEditModalOpen && (
+                            <Modal 
+                                isOpen={isEditModalOpen} 
+                                onClose={() => setIsEditModalOpen(false)} 
+                                title="Edit Student"
+                            >
+                                <div className="space-y-6">
+                                    <div className="border border-gray-200 rounded-xl divide-y">
+                                        <div className="flex items-center px-6 py-3">
+                                            <div className="w-1/4 text-sm font-medium text-gray-700">
+                                                Name
                                             </div>
-                                            <div className="flex items-center px-6 py-3">
-                                                <div className="w-1/4 text-sm font-medium text-gray-700">
-                                                    Email
-                                                </div>
-                                                <div className="w-3/4">
-                                                    <input
-                                                        type="email"
-                                                        value={editForm.email}
-                                                        onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-                                                        className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center px-6 py-3">
-                                                <div className="w-1/4 text-sm font-medium text-gray-700">
-                                                    Roll Number
-                                                </div>
-                                                <div className="w-3/4">
-                                                    <input
-                                                        type="text"
-                                                        value={editForm.roll_number}
-                                                        onChange={(e) => setEditForm(prev => ({ ...prev, roll_number: e.target.value }))}
-                                                        className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center px-6 py-3">
-                                                <div className="w-1/4 text-sm font-medium text-gray-700">
-                                                    Mobile Number
-                                                </div>
-                                                <div className="w-3/4">
-                                                    <input
-                                                        type="tel"
-                                                        inputMode="numeric"
-                                                        maxLength={10}
-                                                        value={editForm.mobile_number}
-                                                        onChange={(e) => {
-                                                            // Allow only digits and limit to 10 characters
-                                                            const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
-                                                            setEditForm(prev => ({ ...prev, mobile_number: digitsOnly }));
-                                                        }}
-                                                        className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                                        placeholder="10-digit mobile number"
-                                                    />
-                                                </div>
+                                            <div className="w-3/4">
+                                                <input
+                                                    type="text"
+                                                    value={editForm.name}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                                                    className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                />
                                             </div>
                                         </div>
-                                        <div className="flex justify-end gap-3">
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsEditModalOpen(false)}
-                                                className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100"
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                type="button"
-                                                disabled={savingEdit}
-                                                onClick={handleSaveStudent}
-                                                className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400"
-                                            >
-                                                {savingEdit ? 'Saving...' : 'Save'}
-                                            </button>
+                                        <div className="flex items-center px-6 py-3">
+                                            <div className="w-1/4 text-sm font-medium text-gray-700">
+                                                Email
+                                            </div>
+                                            <div className="w-3/4">
+                                                <input
+                                                    type="email"
+                                                    value={editForm.email}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                                                    className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center px-6 py-3">
+                                            <div className="w-1/4 text-sm font-medium text-gray-700">
+                                                Roll Number
+                                            </div>
+                                            <div className="w-3/4">
+                                                <input
+                                                    type="text"
+                                                    value={editForm.roll_number}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, roll_number: e.target.value }))}
+                                                    className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center px-6 py-3">
+                                            <div className="w-1/4 text-sm font-medium text-gray-700">
+                                                Mobile Number
+                                            </div>
+                                            <div className="w-3/4">
+                                                <input
+                                                    type="tel"
+                                                    inputMode="numeric"
+                                                    maxLength={10}
+                                                    value={editForm.mobile_number}
+                                                    onChange={(e) => {
+                                                        // Allow only digits and limit to 10 characters
+                                                        const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                                        setEditForm(prev => ({ ...prev, mobile_number: digitsOnly }));
+                                                    }}
+                                                    className="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                    placeholder="10-digit mobile number"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
-                                </Modal>
-                            )}
-                            
-                            {/* Load More Section */}
-                            {students.length > 0 && (
-                                <div className="bg-white px-6 py-4 border-t border-gray-200">
-                                    <div className="flex items-center justify-between">
-                                        <div className="text-sm text-gray-700">
-                                            Showing {students.length} of {totalStudents} students
-                                        </div>
-                                        
-                                        {hasMore && (
-                                            <button
-                                                onClick={loadMore}
-                                                disabled={loadingMore}
-                                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                                            >
-                                                {loadingMore ? (
-                                                    <>
-                                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                                        Loading...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        Load More Students
-                                                        <ChevronRight size={16} />
-                                                    </>
-                                                )}
-                                            </button>
-                                        )}
-                                        
-                                        {!hasMore && students.length > 0 && (
-                                            <div className="text-sm text-gray-500">
-                                                All students loaded
-                                            </div>
-                                        )}
+                                    <div className="flex justify-end gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsEditModalOpen(false)}
+                                            className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={savingEdit}
+                                            onClick={handleSaveStudent}
+                                            className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400"
+                                        >
+                                            {savingEdit ? 'Saving...' : 'Save'}
+                                        </button>
                                     </div>
                                 </div>
-                            )}
-                        </div>
+                            </Modal>
+                        )}
                     </motion.div>
                 </main>
             {/* Student Info & Access Control Modal */}
