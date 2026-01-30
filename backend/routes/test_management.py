@@ -1602,24 +1602,31 @@ def get_bulk_questions_from_bank():
             
             # Select questions: prefer unused, then least used
             selected_questions = []
+            import random
             
             # First, add unused questions (randomized)
             if unused_questions:
-                import random
                 random.shuffle(unused_questions)
                 selected_questions.extend(unused_questions)
             
-            # If we need more questions, add from used questions (randomized from least used)
-            if len(selected_questions) < len(all_questions) and used_questions:
-                # Take a larger pool of least used questions and randomize
-                pool_size = min(len(used_questions), len(used_questions))  # Use all used questions for better randomization
-                pool_questions = used_questions[:pool_size]
+            # Always add used questions if they exist (even if all questions are used)
+            # This ensures that even when topic is 100% used, questions are still returned (they can be reused)
+            if used_questions:
+                # Use all used questions for better randomization
+                pool_questions = used_questions.copy()
                 random.shuffle(pool_questions)
-                selected_questions.extend(pool_questions)
+                # Only add if we don't already have all questions, or if all are used (unused_questions is empty)
+                if len(selected_questions) < len(all_questions) or len(unused_questions) == 0:
+                    selected_questions.extend(pool_questions)
             
             # Apply pagination to the randomized selection
             skip = (page - 1) * limit
             questions = selected_questions[skip:skip + limit]
+            
+            # If no questions on this page but we have questions in total, 
+            # it means we're past the last page - return empty array but still success
+            if len(questions) == 0 and len(selected_questions) > 0:
+                current_app.logger.info(f"No questions on page {page}, but {len(selected_questions)} total questions exist")
         
         # If no questions found for CRT_TECHNICAL and level_id is set, try without level_id
         if module_id == 'CRT_TECHNICAL' and len(questions) == 0 and level_id:
@@ -1657,20 +1664,22 @@ def get_bulk_questions_from_bank():
                 
                 # Select questions: prefer unused, then least used
                 selected_questions = []
+                import random
                 
                 # First, add unused questions (randomized)
                 if unused_questions:
-                    import random
                     random.shuffle(unused_questions)
                     selected_questions.extend(unused_questions)
                 
-                # If we need more questions, add from used questions (randomized from least used)
-                if len(selected_questions) < len(all_questions) and used_questions:
-                    # Take a larger pool of least used questions and randomize
-                    pool_size = min(len(used_questions), len(used_questions))  # Use all used questions for better randomization
-                    pool_questions = used_questions[:pool_size]
+                # Always add used questions if they exist (even if all questions are used)
+                # This ensures that even when topic is 100% used, questions are still returned (they can be reused)
+                if used_questions:
+                    # Use all used questions for better randomization
+                    pool_questions = used_questions.copy()
                     random.shuffle(pool_questions)
-                    selected_questions.extend(pool_questions)
+                    # Only add if we don't already have all questions, or if all are used (unused_questions is empty)
+                    if len(selected_questions) < len(all_questions) or len(unused_questions) == 0:
+                        selected_questions.extend(pool_questions)
                 
                 # Apply pagination to the randomized selection
                 skip = (page - 1) * limit
@@ -1742,14 +1751,30 @@ def get_bulk_questions_from_bank():
         
         current_app.logger.info(f"Found {len(questions)} questions out of {total_count} total")
         
-        return jsonify({
+        # Even if no questions returned on this page, still return success if total_count > 0
+        # This allows the frontend to know questions exist (even if all are used)
+        response_data = {
             'success': True,
             'questions': questions,
             'total_count': total_count,
             'current_page': page,
-            'total_pages': (total_count + limit - 1) // limit,
+            'total_pages': (total_count + limit - 1) // limit if total_count > 0 else 0,
             'has_more': (page * limit) < total_count
-        }), 200
+        }
+        
+        # Add a note if all questions are used
+        if total_count > 0 and len(questions) == 0:
+            # Check if all questions in the topic are used
+            used_questions_count = mongo_db.question_bank.count_documents({
+                **query,
+                'used_count': {'$gt': 0}
+            })
+            if used_questions_count == total_count:
+                response_data['all_used'] = True
+                response_data['message'] = 'All questions in this topic have been used. Questions can still be reused for new tests.'
+                current_app.logger.info(f"All {total_count} questions in topic are used, but can be reused")
+        
+        return jsonify(response_data), 200
         
     except Exception as e:
         current_app.logger.error(f"Error getting bulk questions: {e}")
@@ -3165,8 +3190,40 @@ def transcribe_audio_endpoint():
 @jwt_required()
 @require_superadmin
 def get_crt_topics():
-    """Get all CRT topics with completion statistics"""
+    """
+    Get all CRT topics with completion statistics
+    
+    Query parameters:
+    - batch_ids: comma-separated list of batch IDs to filter usage by
+    - course_ids: comma-separated list of course IDs to filter usage by
+    """
     try:
+        # Get filter parameters from query string
+        batch_ids_filter = request.args.get('batch_ids', '').strip()
+        course_ids_filter = request.args.get('course_ids', '').strip()
+        
+        filter_batch_ids = []
+        if batch_ids_filter:
+            try:
+                filter_batch_ids = [ObjectId(bid.strip()) for bid in batch_ids_filter.split(',') if bid.strip()]
+                current_app.logger.info(f"CRT Topics API - Filtering by {len(filter_batch_ids)} batch_ids")
+            except Exception as e:
+                current_app.logger.warning(f"Invalid batch_ids filter: {e}")
+        
+        filter_course_ids = []
+        if course_ids_filter:
+            try:
+                filter_course_ids = [ObjectId(cid.strip()) for cid in course_ids_filter.split(',') if cid.strip()]
+                current_app.logger.info(f"CRT Topics API - Filtering by {len(filter_course_ids)} course_ids")
+            except Exception as e:
+                current_app.logger.warning(f"Invalid course_ids filter: {e}")
+        
+        # Log filter status
+        if filter_batch_ids or filter_course_ids:
+            current_app.logger.info(f"CRT Topics API - Applying filters: batch_ids={len(filter_batch_ids)}, course_ids={len(filter_course_ids)}")
+        else:
+            current_app.logger.info("CRT Topics API - No filters provided, using global usage")
+        
         topics = list(mongo_db.crt_topics.find({}).sort('created_at', -1))
         
         for topic in topics:
@@ -3178,12 +3235,127 @@ def get_crt_topics():
                 'module_id': {'$in': ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']}
             })
             
-            # Count questions used in tests
-            used_questions = mongo_db.question_bank.count_documents({
-                'topic_id': topic_id,
-                'module_id': {'$in': ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']},
-                'used_count': {'$gt': 0}
-            })
+            # Calculate used_questions based on filters
+            if filter_batch_ids or filter_course_ids:
+                # If filters are provided, calculate usage only for tests that match the filters
+                # Get all questions in this topic
+                topic_questions = list(mongo_db.question_bank.find({
+                    'topic_id': topic_id,
+                    'module_id': {'$in': ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']}
+                }))
+                
+                if not topic_questions:
+                    used_questions = 0
+                else:
+                    question_ids = [q['_id'] for q in topic_questions]
+                    question_ids_set = set(question_ids)
+                    
+                    # Get all test IDs that use these questions
+                    test_ids_from_questions = set()
+                    for question in topic_questions:
+                        used_in_tests = question.get('used_in_tests', [])
+                        for test_ref in used_in_tests:
+                            if isinstance(test_ref, ObjectId):
+                                test_ids_from_questions.add(test_ref)
+                            elif isinstance(test_ref, str):
+                                try:
+                                    test_ids_from_questions.add(ObjectId(test_ref))
+                                except Exception:
+                                    pass
+                    
+                    # Fetch tests that use these questions
+                    tests_using_topic = []
+                    if test_ids_from_questions:
+                        tests_using_topic = list(mongo_db.tests.find({'_id': {'$in': list(test_ids_from_questions)}}))
+                    
+                    # If no tests found via used_in_tests, fall back to checking all tests (less efficient but comprehensive)
+                    if not tests_using_topic:
+                        all_tests = list(mongo_db.tests.find({}))
+                        tests_using_topic = all_tests
+                    
+                    # Filter tests by batch_ids and course_ids and collect used question IDs
+                    # Track usage per batch+course combination (like topic-usage endpoint does)
+                    filtered_used_question_ids = set()
+                    
+                    for test in tests_using_topic:
+                        test_batches = test.get('batch_ids', [])
+                        test_courses = test.get('course_ids', [])
+                        
+                        if not test_batches or not test_courses:
+                            continue
+                        
+                        # Normalize test batch_ids and course_ids to ObjectIds for comparison
+                        test_batch_obj_ids = []
+                        for bid in test_batches:
+                            if isinstance(bid, ObjectId):
+                                test_batch_obj_ids.append(bid)
+                            elif isinstance(bid, str):
+                                try:
+                                    test_batch_obj_ids.append(ObjectId(bid))
+                                except Exception:
+                                    pass
+                        
+                        test_course_obj_ids = []
+                        for cid in test_courses:
+                            if isinstance(cid, ObjectId):
+                                test_course_obj_ids.append(cid)
+                            elif isinstance(cid, str):
+                                try:
+                                    test_course_obj_ids.append(ObjectId(cid))
+                                except Exception:
+                                    pass
+                        
+                        # Get questions from this test that belong to our topic
+                        test_questions = test.get('questions', [])
+                        if not test_questions:
+                            continue
+                        
+                        topic_questions_in_test = []
+                        for tq in test_questions:
+                            tq_id = tq.get('_id') if isinstance(tq, dict) else tq
+                            if isinstance(tq_id, str):
+                                try:
+                                    tq_id = ObjectId(tq_id)
+                                except Exception:
+                                    continue
+                            
+                            if tq_id in question_ids_set:
+                                topic_questions_in_test.append(tq_id)
+                        
+                        if not topic_questions_in_test:
+                            continue
+                        
+                        # Track usage per batch+course combination
+                        # Only count questions for batch+course combinations that match our filters
+                        # This matches the logic from topic-usage endpoint
+                        for batch_id in test_batch_obj_ids:
+                            # Check if this batch matches our filter
+                            # If filter_batch_ids is provided, batch must be in the filter
+                            # If filter_batch_ids is empty, match all batches
+                            if filter_batch_ids and batch_id not in filter_batch_ids:
+                                continue  # Skip this batch if it doesn't match
+                            
+                            for course_id in test_course_obj_ids:
+                                # Check if this course matches our filter
+                                # If filter_course_ids is provided, course must be in the filter
+                                # If filter_course_ids is empty, match all courses
+                                if filter_course_ids and course_id not in filter_course_ids:
+                                    continue  # Skip this course if it doesn't match
+                                
+                                # Both batch and course match (or filters are empty)
+                                # Add all topic questions from this test for this specific batch+course combination
+                                for tq_id in topic_questions_in_test:
+                                    filtered_used_question_ids.add(tq_id)
+                    
+                    used_questions = len(filtered_used_question_ids)
+                    current_app.logger.info(f"Topic {topic.get('topic_name', 'unknown')} - Filtered usage: {used_questions}/{total_questions} questions")
+            else:
+                # No filters - use global count
+                used_questions = mongo_db.question_bank.count_documents({
+                    'topic_id': topic_id,
+                    'module_id': {'$in': ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']},
+                    'used_count': {'$gt': 0}
+                })
             
             # Calculate completion percentage
             completion_percentage = (used_questions / total_questions * 100) if total_questions > 0 else 0
@@ -3872,8 +4044,29 @@ def get_topic_usage_details(topic_id):
     - which tests used questions from this topic
     - which courses and batches those tests were assigned to
     - percentage of topic questions used by each batch/course combination
+    
+    Query parameters:
+    - batch_ids: comma-separated list of batch IDs to filter by
+    - course_ids: comma-separated list of course IDs to filter by
     """
     try:
+        # Get filter parameters from query string
+        batch_ids_filter = request.args.get('batch_ids', '').strip()
+        course_ids_filter = request.args.get('course_ids', '').strip()
+        
+        filter_batch_ids = []
+        if batch_ids_filter:
+            try:
+                filter_batch_ids = [ObjectId(bid.strip()) for bid in batch_ids_filter.split(',') if bid.strip()]
+            except Exception as e:
+                current_app.logger.warning(f"Invalid batch_ids filter: {e}")
+        
+        filter_course_ids = []
+        if course_ids_filter:
+            try:
+                filter_course_ids = [ObjectId(cid.strip()) for cid in course_ids_filter.split(',') if cid.strip()]
+            except Exception as e:
+                current_app.logger.warning(f"Invalid course_ids filter: {e}")
         try:
             topic_obj_id = ObjectId(topic_id)
         except Exception:
@@ -4016,8 +4209,18 @@ def get_topic_usage_details(topic_id):
             })
         
         # Convert batch_course_usage to list format with percentages
+        # Filter by batch_ids and course_ids if provided
         batch_course_usage_list = []
         for batch_id, courses_dict in batch_course_usage.items():
+            # Filter by batch_ids if provided
+            if filter_batch_ids:
+                try:
+                    batch_obj_id = ObjectId(batch_id)
+                    if batch_obj_id not in filter_batch_ids:
+                        continue
+                except Exception:
+                    continue
+            
             # Get batch details
             try:
                 batch = mongo_db.batches.find_one({'_id': ObjectId(batch_id)})
@@ -4026,6 +4229,15 @@ def get_topic_usage_details(topic_id):
                 batch_name = 'Unknown Batch'
             
             for course_id, usage_data in courses_dict.items():
+                # Filter by course_ids if provided
+                if filter_course_ids:
+                    try:
+                        course_obj_id = ObjectId(course_id)
+                        if course_obj_id not in filter_course_ids:
+                            continue
+                    except Exception:
+                        continue
+                
                 # Get course details
                 try:
                     course = mongo_db.courses.find_one({'_id': ObjectId(course_id)})
@@ -4048,6 +4260,21 @@ def get_topic_usage_details(topic_id):
                     'is_fully_used': percentage >= 100
                 })
         
+        # Also filter usage_tests by batch_ids and course_ids if provided
+        filtered_usage_tests = usage_tests
+        if filter_batch_ids or filter_course_ids:
+            filtered_usage_tests = []
+            for test in usage_tests:
+                test_batch_ids = [ObjectId(bid) for bid in test.get('batch_ids', []) if bid]
+                test_course_ids = [ObjectId(cid) for cid in test.get('course_ids', []) if cid]
+                
+                # Check if test matches filters
+                matches_batch = not filter_batch_ids or any(bid in filter_batch_ids for bid in test_batch_ids)
+                matches_course = not filter_course_ids or any(cid in filter_course_ids for cid in test_course_ids)
+                
+                if matches_batch and matches_course:
+                    filtered_usage_tests.append(test)
+        
         # Sort by percentage descending
         batch_course_usage_list.sort(key=lambda x: x['percentage'], reverse=True)
         
@@ -4056,9 +4283,9 @@ def get_topic_usage_details(topic_id):
             'topic_id': str(topic['_id']),
             'topic_name': topic.get('topic_name', ''),
             'total_questions': total_questions_in_topic,
-            'total_uses': len(usage_tests),
+            'total_uses': len(filtered_usage_tests),
             'batch_course_usage': batch_course_usage_list,
-            'tests': usage_tests,
+            'tests': filtered_usage_tests,
             'courses': list(course_ids),
             'batches': list(batch_ids),
         }), 200

@@ -58,6 +58,7 @@ const CRTUpload = () => {
   const [topicQuestions, setTopicQuestions] = useState([]);
   const [selectedQuestionUsage, setSelectedQuestionUsage] = useState(null);
   const [showQuestionUsageModal, setShowQuestionUsageModal] = useState(false);
+  const [currentQuestionForUsage, setCurrentQuestionForUsage] = useState(null);
   const [selectedTopicUsage, setSelectedTopicUsage] = useState(null);
   const [showTopicUsageModal, setShowTopicUsageModal] = useState(false);
   const [viewMode, setViewMode] = useState('upload'); // 'upload', 'topics', 'topic-questions'
@@ -273,6 +274,9 @@ const CRTUpload = () => {
         return;
       }
 
+      // Store the question for reference in the modal
+      setCurrentQuestionForUsage(question);
+
       setSelectedQuestionUsage({
         loading: true,
         data: null,
@@ -283,9 +287,18 @@ const CRTUpload = () => {
       console.log('Fetching question usage for ID:', questionId);
       const response = await getQuestionUsageDetails(questionId);
       if (response.data.success) {
+        // Extract the data fields from response (excluding 'success' field)
+        const usageData = {
+          question_id: response.data.question_id,
+          question_text: response.data.question_text,
+          total_uses: response.data.total_uses || 0,
+          tests: response.data.tests || [],
+          courses: response.data.courses || [],
+          batches: response.data.batches || [],
+        };
         setSelectedQuestionUsage({
           loading: false,
-          data: response.data,
+          data: usageData,
           error: null,
         });
       } else {
@@ -300,7 +313,7 @@ const CRTUpload = () => {
       setSelectedQuestionUsage({
         loading: false,
         data: null,
-        error: 'Failed to fetch usage details',
+        error: error.response?.data?.message || 'Failed to fetch usage details',
       });
     }
   };
@@ -1413,92 +1426,6 @@ const CRTUpload = () => {
           </div>
         )}
       </div>
-
-      {/* Question Usage Modal */}
-      {showQuestionUsageModal && (
-        <Modal
-          isOpen={showQuestionUsageModal}
-          onClose={() => {
-            setShowQuestionUsageModal(false);
-            setSelectedQuestionUsage(null);
-          }}
-          title="Question Usage Details"
-          size="xl"
-        >
-          <div className="space-y-4">
-            {selectedQuestionUsage?.loading && (
-              <p className="text-sm text-gray-600">Loading usage details...</p>
-            )}
-            {selectedQuestionUsage?.error && (
-              <p className="text-sm text-red-600">{selectedQuestionUsage.error}</p>
-            )}
-            {selectedQuestionUsage?.data && (
-              <>
-                <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <h3 className="font-semibold text-gray-800 mb-2">Question</h3>
-                  <div className="max-h-32 overflow-y-auto">
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">{selectedQuestionUsage.data.question_text}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 rounded">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Total Uses:</span>{' '}
-                    <span className="text-blue-600 font-bold">{selectedQuestionUsage.data.total_uses}</span>
-                  </p>
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Unique Courses:</span>{' '}
-                    <span className="text-green-600 font-bold">{selectedQuestionUsage.data.courses.length}</span>
-                    {'  |  '}
-                    <span className="font-semibold">Unique Batches:</span>{' '}
-                    <span className="text-purple-600 font-bold">{selectedQuestionUsage.data.batches.length}</span>
-                  </p>
-                </div>
-                {selectedQuestionUsage.data.tests.length === 0 ? (
-                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
-                    <p className="text-sm text-gray-500">This question has not been used in any tests yet.</p>
-                  </div>
-                ) : (
-                  <div className="max-h-96 overflow-y-auto border rounded-lg">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Test Name</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Module</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Courses</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Batches</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Start</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-700">End</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {selectedQuestionUsage.data.tests.map((t) => (
-                          <tr key={t.test_id} className="hover:bg-gray-50">
-                            <td className="px-3 py-2">{t.name || t.test_id}</td>
-                            <td className="px-3 py-2">{t.module_id || 'N/A'}</td>
-                            <td className="px-3 py-2 text-xs">
-                              {t.course_ids && t.course_ids.length > 0 ? t.course_ids.join(', ') : 'N/A'}
-                            </td>
-                            <td className="px-3 py-2 text-xs">
-                              {t.batch_ids && t.batch_ids.length > 0 ? t.batch_ids.join(', ') : 'N/A'}
-                            </td>
-                            <td className="px-3 py-2 text-xs">
-                              {t.created_at ? new Date(t.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
-                            </td>
-                            <td className="px-3 py-2 text-xs">
-                              {t.endDateTime ? new Date(t.endDateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </Modal>
-      )}
-
     </motion.div>
   );
 
@@ -2060,6 +1987,98 @@ const CRTUpload = () => {
                         </p>
                       </div>
                     </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
+      
+      {/* Question Usage Modal - Available in all views */}
+      {showQuestionUsageModal && (
+        <Modal
+          isOpen={showQuestionUsageModal}
+          onClose={() => {
+            setShowQuestionUsageModal(false);
+            setSelectedQuestionUsage(null);
+            setCurrentQuestionForUsage(null);
+          }}
+          title="Question Usage Details"
+          size="xl"
+        >
+          <div className="space-y-4">
+            {selectedQuestionUsage?.loading && (
+              <p className="text-sm text-gray-600">Loading usage details...</p>
+            )}
+            {selectedQuestionUsage?.error && (
+              <p className="text-sm text-red-600">{selectedQuestionUsage.error}</p>
+            )}
+            {selectedQuestionUsage?.data && (
+              <>
+                <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-gray-800 mb-2">Question</h3>
+                  <div className="max-h-32 overflow-y-auto">
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
+                      {selectedQuestionUsage.data.question_text || currentQuestionForUsage?.question || 'Question text not available'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 rounded">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Total Uses:</span>{' '}
+                    <span className="text-blue-600 font-bold">{selectedQuestionUsage.data.total_uses || 0}</span>
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Unique Courses:</span>{' '}
+                    <span className="text-green-600 font-bold">{selectedQuestionUsage.data.courses?.length || 0}</span>
+                    {'  |  '}
+                    <span className="font-semibold">Unique Batches:</span>{' '}
+                    <span className="text-purple-600 font-bold">{selectedQuestionUsage.data.batches?.length || 0}</span>
+                  </p>
+                </div>
+                {!selectedQuestionUsage.data.tests || selectedQuestionUsage.data.tests.length === 0 ? (
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                    <p className="text-sm text-gray-500">This question has not been used in any tests yet.</p>
+                  </div>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto border rounded-lg">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50 border-b sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Test Name</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Module</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Courses</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Batches</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">Start</th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">End</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {selectedQuestionUsage.data.tests.map((t, idx) => (
+                          <tr key={t.test_id || idx} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-xs">{t.name || t.test_id || 'N/A'}</td>
+                            <td className="px-3 py-2 text-xs">{t.module_id || 'N/A'}</td>
+                            <td className="px-3 py-2 text-xs">
+                              {t.course_ids && Array.isArray(t.course_ids) && t.course_ids.length > 0 
+                                ? t.course_ids.join(', ') 
+                                : 'N/A'}
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              {t.batch_ids && Array.isArray(t.batch_ids) && t.batch_ids.length > 0 
+                                ? t.batch_ids.join(', ') 
+                                : 'N/A'}
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              {t.created_at ? new Date(t.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              {t.endDateTime ? new Date(t.endDateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </>

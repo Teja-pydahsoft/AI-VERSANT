@@ -9,7 +9,7 @@ import { toast } from 'react-hot-toast'
 
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import api from '../../services/api'
-import { Upload, Plus, Trash2, ChevronLeft, ChevronRight, FileText, CheckCircle, Briefcase, Users, FileQuestion, Sparkles, Eye, Edit, MoreVertical, Play, Pause, AlertTriangle, ChevronDown, Code, Mic, AlertCircle, X, Shuffle, Download, Copy, Search } from 'lucide-react'
+import { Upload, Plus, Trash2, ChevronLeft, ChevronRight, FileText, CheckCircle, Briefcase, Users, FileQuestion, Sparkles, Eye, Edit, MoreVertical, Play, Pause, AlertTriangle, ChevronDown, Code, Mic, AlertCircle, X, Shuffle, Download, Copy, Search, Info } from 'lucide-react'
 import { MultiSelect } from 'react-multi-select-component'
 import clsx from 'clsx'
 import Papa from 'papaparse'
@@ -1123,37 +1123,70 @@ const TestCreationWizard = ({ onTestCreated, setView, uploadedQuestions, setUplo
   });
 
   const nextStep = () => {
-    // For CRT_TECHNICAL module, add an extra step for question type selection
-    if (testData.module === 'CRT_TECHNICAL' && step === 4) {
-      setStep(5); // Go to technical question type step
-    } else if (testData.module === 'CRT_TECHNICAL' && step === 5) {
-      setStep(6); // Go to question upload step
-    } else if (testData.module === 'CRT_TECHNICAL' && step === 6) {
-      setStep(7); // Go to final confirmation step
-    } else if (testData.test_type?.toLowerCase() === 'online' && step === 4) {
-      setStep(5); // Go to online test configuration step
-    } else if (testData.test_type?.toLowerCase() === 'online' && step === 5) {
-      setStep(6); // Go to question upload step
-    } else if (testData.test_type?.toLowerCase() === 'online' && step === 6) {
-      setStep(7); // Go to final confirmation step
-    } else {
-      setStep(prev => prev < 7 ? prev + 1 : prev);
+    // Step 3: Audience Selection -> Step 4: Module and Level Selection
+    if (step === 3) {
+      setStep(4); // Go to module and level selection
+    }
+    // Step 4: Module and Level Selection (includes topic selection for CRT) -> Step 5: Next step
+    else if (step === 4) {
+      // Topic selection is now part of module/level step, so go directly to next step
+      if (testData.module === 'CRT_TECHNICAL') {
+        setStep(5); // Go to technical question type
+      } else if (testData.test_type?.toLowerCase() === 'online') {
+        setStep(5); // Go to online test configuration
+      } else {
+        setStep(5); // Go to question upload
+      }
+    }
+    // Step 5: Technical Question Type or Online Config -> Question Upload
+    else if (step === 5) {
+      if (testData.module === 'CRT_TECHNICAL' || testData.test_type?.toLowerCase() === 'online') {
+        setStep(6); // Go to question upload
+      } else {
+        setStep(6); // Go to final confirmation
+      }
+    }
+    // Step 6: Question Upload -> Final Confirmation
+    else if (step === 6) {
+      setStep(7); // Go to final confirmation
+    }
+    // Default increment
+    else {
+      setStep(prev => prev < 8 ? prev + 1 : prev);
     }
   }
 
   const prevStep = () => {
-    // For CRT_TECHNICAL module, handle the extra step
-    if (testData.module === 'CRT_TECHNICAL' && step === 6) {
-      setStep(5); // Go back to technical question type step
-    } else if (testData.module === 'CRT_TECHNICAL' && step === 5) {
-      setStep(4); // Go back to audience selection step
-    } else if (testData.test_type?.toLowerCase() === 'online' && step === 7) {
-      setStep(6); // Go back to question upload step
-    } else if (testData.test_type?.toLowerCase() === 'online' && step === 6) {
-      setStep(5); // Go back to online test configuration step
-    } else if (testData.test_type?.toLowerCase() === 'online' && step === 5) {
-      setStep(4); // Go back to audience selection step
-    } else {
+    // Step 7: Final Confirmation -> Question Upload
+    if (step === 7) {
+      if (testData.module === 'CRT_TECHNICAL' || testData.test_type?.toLowerCase() === 'online') {
+        setStep(6); // Go back to question upload
+      } else {
+        setStep(6); // Go back to question upload
+      }
+    }
+    // Step 6: Question Upload -> Previous step
+    else if (step === 6) {
+      if (testData.module === 'CRT_TECHNICAL' || testData.test_type?.toLowerCase() === 'online') {
+        setStep(5); // Go back to technical question type or online config
+      } else {
+        setStep(5); // Go back to question upload (shouldn't happen, but handle it)
+      }
+    }
+    // Step 5: Technical Question Type or Online Config or Question Upload -> Module/Level Selection
+    else if (step === 5) {
+      setStep(4); // Go back to module and level selection
+    }
+    // Step 4: Module and Level Selection -> Audience Selection
+    else if (step === 4) {
+      setStep(3); // Go back to audience selection
+    }
+    // Step 3: Audience Selection -> Test Type
+    else if (step === 3) {
+      setStep(2); // Go back to test type
+    }
+    // Default decrement
+    else {
       setStep(prev => prev > 1 ? prev - 1 : prev);
     }
   }
@@ -1169,31 +1202,35 @@ const TestCreationWizard = ({ onTestCreated, setView, uploadedQuestions, setUplo
       case 2:
         return <Step2TestType nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} />;
       case 3:
-        return <Step3TestName nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} />;
+        // Show audience selection (moved before module/level selection)
+        return <Step4AudienceSelection nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} setStep={setStep} />;
       case 4:
-        return <Step4AudienceSelection nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} />;
+        // Show module and level selection after audience selection
+        return <Step3TestName nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} />;
       case 5:
+        // Show technical question type step for CRT_TECHNICAL
+        if (testData.module === 'CRT_TECHNICAL') {
+          return <TechnicalTestQuestionType onNext={nextStep} onBack={prevStep} updateTestData={updateTestData} testData={testData} />;
+        }
         // Show online test configuration step for online tests
-        if (testData.test_type?.toLowerCase() === 'online') {
+        else if (testData.test_type?.toLowerCase() === 'online') {
           return <Step5OnlineTestConfig nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} />;
         }
-        // Show technical question type step only for CRT_TECHNICAL
-        else if (testData.module === 'CRT_TECHNICAL') {
-          return <TechnicalTestQuestionType onNext={nextStep} onBack={prevStep} updateTestData={updateTestData} testData={testData} />;
-        } else {
+        // Show question upload step
+        else {
           return <Step5QuestionUpload nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} uploadedQuestions={uploadedQuestions} setUploadedQuestions={setUploadedQuestions} />;
         }
       case 6:
-        // Show question upload step
-        if (testData.module === 'CRT_TECHNICAL') {
+        // Show question upload step (for CRT_TECHNICAL or online tests)
+        if (testData.module === 'CRT_TECHNICAL' || testData.test_type?.toLowerCase() === 'online') {
           return <Step5QuestionUpload nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} uploadedQuestions={uploadedQuestions} setUploadedQuestions={setUploadedQuestions} />;
-        } else if (testData.test_type?.toLowerCase() === 'online') {
-          return <Step5QuestionUpload nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} uploadedQuestions={uploadedQuestions} setUploadedQuestions={setUploadedQuestions} />;
-        } else {
+        }
+        // Show final confirmation for other tests
+        else {
           return <Step6ConfirmAndGenerate prevStep={prevStep} testData={testData} onTestCreated={onTestCreated} uploadedQuestions={uploadedQuestions} />;
         }
       case 7:
-        // Final confirmation step for CRT_TECHNICAL and online tests
+        // Final confirmation step (for CRT_TECHNICAL or online tests)
         return <Step6ConfirmAndGenerate prevStep={prevStep} testData={testData} onTestCreated={onTestCreated} uploadedQuestions={uploadedQuestions} />;
       default:
         return <Step1TestCategory nextStep={nextStep} prevStep={prevStep} updateTestData={updateTestData} testData={testData} />;
@@ -1201,7 +1238,18 @@ const TestCreationWizard = ({ onTestCreated, setView, uploadedQuestions, setUplo
   };
 
   // Calculate total steps based on module and test type
-  const totalSteps = (testData.module === 'CRT_TECHNICAL' || testData.test_type?.toLowerCase() === 'online') ? 7 : 6;
+  const getTotalSteps = () => {
+    let steps = 5; // Base: Category, Type, Audience, Module/Level/Topic, Question Upload, Confirmation
+    if (testData.module === 'CRT_TECHNICAL') {
+      steps += 1; // Add technical question type step
+    }
+    if (testData.test_type?.toLowerCase() === 'online') {
+      steps += 1; // Add online test configuration step
+    }
+    // Topic selection is now part of Module/Level step (Step 4), so no extra step needed
+    return steps;
+  };
+  const totalSteps = getTotalSteps();
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
@@ -1228,12 +1276,12 @@ const TestCreationWizard = ({ onTestCreated, setView, uploadedQuestions, setUplo
             Step {step} of {totalSteps}: {
               step === 1 ? 'Select Test Category' :
                 step === 2 ? 'Select Test Type' :
-                  step === 3 ? 'Select Module and Level' :
-                    step === 4 ? 'Select Audience' :
-                      step === 5 ? (testData.test_type?.toLowerCase() === 'online' ? 'Configure Online Test' : 
-                                   testData.module === 'CRT_TECHNICAL' ? 'Select Question Type' : 'Upload Questions') :
-                        step === 6 ? (testData.module === 'CRT_TECHNICAL' ? 'Upload Questions' : 
-                                     testData.test_type?.toLowerCase() === 'online' ? 'Upload Questions' : 'Final Confirmation') :
+                  step === 3 ? 'Select Audience' :
+                    step === 4 ? 'Select Module, Level, and Topic' :
+                      step === 5 ? (testData.module === 'CRT_TECHNICAL' ? 'Select Question Type' :
+                                   testData.test_type?.toLowerCase() === 'online' ? 'Configure Online Test' : 
+                                   'Upload Questions') :
+                        step === 6 ? (testData.module === 'CRT_TECHNICAL' || testData.test_type?.toLowerCase() === 'online' ? 'Upload Questions' : 'Final Confirmation') :
                           step === 7 ? 'Final Confirmation' : ''
             }
           </p>
@@ -1714,7 +1762,9 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
   const [levels, setLevels] = useState([]);
   const [grammarCategories, setGrammarCategories] = useState([]);
   const [crtTopics, setCrtTopics] = useState([]);
-  const [selectedTopic, setSelectedTopic] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState(testData.topic_id || testData.selectedTopic || '');
+  const [selectedTopicUsage, setSelectedTopicUsage] = useState(null);
+  const [showTopicUsageModal, setShowTopicUsageModal] = useState(false);
   const [isCheckingName, setIsCheckingName] = useState(false);
   const [nameExists, setNameExists] = useState(false);
   const [nameAvailable, setNameAvailable] = useState(false);
@@ -1809,24 +1859,115 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
     }
   };
 
-  const handleModuleChange = (e) => {
-    setModule(e.target.value);
-    setLevel(''); // Reset level when module changes
-    setSubcategory(''); // Reset subcategory when module changes
-    setSelectedTopic(''); // Reset topic when module changes
-  };
-
-  const handleTopicChange = (e) => {
-    const topicId = e.target.value;
-    setSelectedTopic(topicId);
-    // Update testData with the selected topic_id
-    updateTestData({ topic_id: topicId, selectedTopic: topicId });
-  };
+  // Fetch topics for the selected CRT module
+  useEffect(() => {
+    const fetchTopics = async () => {
+      if (!module || !module.startsWith('CRT_')) {
+        setCrtTopics([]);
+        return;
+      }
+      
+      try {
+        // Build query parameters with selected batches and courses
+        const params = new URLSearchParams();
+        
+        // Extract batch IDs - handle both object format {value, label} and direct ID format
+        if (testData.batches && Array.isArray(testData.batches) && testData.batches.length > 0) {
+          const batchIds = testData.batches
+            .map(b => {
+              if (typeof b === 'string') return b;
+              if (typeof b === 'object') return b.value || b._id || b.id || null;
+              return null;
+            })
+            .filter(Boolean)
+            .join(',');
+          if (batchIds) params.append('batch_ids', batchIds);
+        }
+        
+        // Extract course IDs - handle both object format {value, label} and direct ID format
+        if (testData.courses && Array.isArray(testData.courses) && testData.courses.length > 0) {
+          const courseIds = testData.courses
+            .map(c => {
+              if (typeof c === 'string') return c;
+              if (typeof c === 'object') return c.value || c._id || c.id || null;
+              return null;
+            })
+            .filter(Boolean)
+            .join(',');
+          if (courseIds) params.append('course_ids', courseIds);
+        }
+        
+        const url = `/test-management/crt-topics${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await api.get(url);
+        if (response.data.success) {
+          const filteredTopics = response.data.data.filter(topic => topic.module_id === module);
+          setCrtTopics(filteredTopics);
+        }
+      } catch (error) {
+        console.error('Error fetching topics:', error);
+      }
+    };
+    fetchTopics();
+  }, [
+    module, 
+    testData.batches?.length || 0,
+    testData.courses?.length || 0,
+    testData.batches?.map(b => b?.value || b?._id || b).join(',') || '',
+    testData.courses?.map(c => c?.value || c?._id || c).join(',') || ''
+  ]);
 
   // Get topics for the selected CRT module
   const getTopicsForModule = () => {
     if (!module || !module.startsWith('CRT_')) return [];
     return crtTopics.filter(topic => topic.module_id === module);
+  };
+
+  // Get the currently selected topic data (always from latest crtTopics)
+  const getSelectedTopicData = () => {
+    if (!selectedTopic) return null;
+    return getTopicsForModule().find(t => t._id === selectedTopic);
+  };
+
+  const handleTopicChange = (e) => {
+    const topicId = e.target.value;
+    setSelectedTopic(topicId);
+    updateTestData({ topic_id: topicId, selectedTopic: topicId });
+  };
+
+  const handleViewTopicUsage = async (topicId) => {
+    try {
+      setSelectedTopicUsage({ loading: true, data: null, error: null });
+      setShowTopicUsageModal(true);
+      
+      // Build query parameters with selected batches and courses
+      const params = new URLSearchParams();
+      if (testData.batches && testData.batches.length > 0) {
+        const batchIds = testData.batches.map(b => b.value || b._id || b).filter(Boolean).join(',');
+        if (batchIds) params.append('batch_ids', batchIds);
+      }
+      if (testData.courses && testData.courses.length > 0) {
+        const courseIds = testData.courses.map(c => c.value || c._id || c).filter(Boolean).join(',');
+        if (courseIds) params.append('course_ids', courseIds);
+      }
+      
+      const url = `/test-management/topic-usage/${topicId}${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await api.get(url);
+      if (response.data.success) {
+        setSelectedTopicUsage({ loading: false, data: response.data.data, error: null });
+      } else {
+        setSelectedTopicUsage({ loading: false, data: null, error: response.data.message || 'Failed to fetch topic usage' });
+      }
+    } catch (error) {
+      console.error('Error fetching topic usage:', error);
+      setSelectedTopicUsage({ loading: false, data: null, error: error.response?.data?.message || 'Failed to fetch topic usage' });
+    }
+  };
+
+  const handleModuleChange = (e) => {
+    setModule(e.target.value);
+    setLevel(''); // Reset level when module changes
+    setSubcategory(''); // Reset subcategory when module changes
+    setSelectedTopic(''); // Reset topic when module changes
   };
 
   const handleLevelChange = (e) => {
@@ -1912,7 +2053,6 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
       module,
       level: module === 'GRAMMAR' ? subcategory : (module.startsWith('CRT_') ? module : level),
       subcategory: module === 'GRAMMAR' ? subcategory : null,
-      topic_id: module.startsWith('CRT_') ? selectedTopic : null,
       test_name: testName
     };
     updateTestData(updateData);
@@ -2007,38 +2147,6 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
             </div>
           )}
 
-          {module && module.startsWith('CRT_') && (
-            <div>
-              <label className="block text-base font-semibold text-gray-800 mb-2">Topic (Optional)</label>
-              <select
-                value={selectedTopic}
-                onChange={handleTopicChange}
-                className="w-full p-4 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 bg-white hover:border-blue-300"
-                disabled={loading}
-              >
-                <option value="">Select Topic (Optional)</option>
-                {getTopicsForModule().map(topic => (
-                  <option key={topic._id} value={topic._id}>
-                    {topic.topic_name} ({topic.total_questions || 0} questions, {topic.completion_percentage}% completed)
-                  </option>
-                ))}
-              </select>
-              {getTopicsForModule().length === 0 && (
-                <p className="text-sm text-gray-500 mt-1">No topics available for this module. Questions will be selected from all available questions.</p>
-              )}
-              {selectedTopic && (
-                <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-800">
-                    <strong>Selected Topic:</strong> {getTopicsForModule().find(t => t._id === selectedTopic)?.topic_name}
-                  </p>
-                  <p className="text-xs text-blue-600 mt-1">
-                    Total Questions: {getTopicsForModule().find(t => t._id === selectedTopic)?.total_questions || 0} |
-                    Available: {getTopicsForModule().find(t => t._id === selectedTopic)?.total_questions - getTopicsForModule().find(t => t._id === selectedTopic)?.used_questions || 0}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
 
           <div>
             <label className="block text-base font-semibold text-gray-800 mb-2">Test Name</label>
@@ -2080,6 +2188,90 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
             )}
           </div>
 
+          {module && module.startsWith('CRT_') && (
+            <div>
+              <label className="block text-base font-semibold text-gray-800 mb-2">Topic (Optional)</label>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="flex flex-col items-center space-y-3">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    <p className="text-sm text-gray-600">Loading topics...</p>
+                  </div>
+                </div>
+              ) : (
+                <select
+                  value={selectedTopic}
+                  onChange={handleTopicChange}
+                  className="w-full p-4 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 bg-white hover:border-blue-300"
+                  disabled={loading}
+                >
+                  <option value="">Select Topic (Optional)</option>
+                  {getTopicsForModule().map(topic => (
+                    <option key={topic._id} value={topic._id}>
+                      {topic.topic_name} ({topic.total_questions || 0} questions, {topic.completion_percentage || 0}% completed)
+                    </option>
+                  ))}
+                </select>
+              )}
+              {getTopicsForModule().length === 0 && !loading && (
+                <p className="text-sm text-gray-500 mt-1">No topics available for this module. Questions will be selected from all available questions.</p>
+              )}
+              {selectedTopic && (() => {
+                const topicData = getSelectedTopicData();
+                if (!topicData) return null;
+                return (
+                  <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-blue-900 mb-2">
+                          Selected Topic: {topicData.topic_name}
+                        </p>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-blue-700">
+                              <strong>Total Questions:</strong> {topicData.total_questions || 0}
+                            </p>
+                            <p className="text-blue-700">
+                              <strong>Available:</strong> {(topicData.total_questions || 0) - (topicData.used_questions || 0)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-blue-700">
+                              <strong>Completion:</strong> {topicData.completion_percentage || 0}%
+                            </p>
+                            <p className="text-blue-700">
+                              <strong>Used Questions:</strong> {topicData.used_questions || 0}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      {testData.batches && testData.batches.length > 0 && (
+                        <button
+                          onClick={() => handleViewTopicUsage(selectedTopic)}
+                          className="ml-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center space-x-2"
+                        >
+                          <Info className="h-4 w-4" />
+                          <span>View Usage</span>
+                        </button>
+                      )}
+                    </div>
+                    {testData.batches && testData.batches.length > 0 && (
+                      <div className="mt-3 p-2 bg-green-50 rounded border border-green-200">
+                        <p className="text-xs text-green-700">
+                          <strong>Selected Audience:</strong> {testData.batches.map(b => b.label || b.name).join(', ')}
+                          {testData.courses && testData.courses.length > 0 && ` | ${testData.courses.map(c => c.label || c.name).join(', ')}`}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          Usage details will be filtered by the selected batches and courses.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {error && <div className="text-red-600 p-4 bg-red-50 border-2 border-red-200 rounded-xl">{error}</div>}
 
           <div className="flex justify-between items-center pt-8 border-t border-gray-100 mt-10">
@@ -2094,17 +2286,174 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
               onClick={handleNext}
               className="inline-flex items-center justify-center px-8 py-3 text-sm font-medium rounded-xl shadow-lg text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all duration-200 transform hover:scale-105 hover:shadow-xl"
             >
-              Next: Select Audience
+              Next: Select Module and Level
               <ChevronRight className="h-5 w-5 ml-2" />
             </button>
           </div>
         </div>
       </div>
+
+      {/* Topic Usage Modal */}
+      {showTopicUsageModal && (
+        <Modal
+          isOpen={showTopicUsageModal}
+          onClose={() => {
+            setShowTopicUsageModal(false);
+            setSelectedTopicUsage(null);
+          }}
+          title="Topic Usage Tracking"
+          size="2xl"
+        >
+          <div className="space-y-4">
+            {selectedTopicUsage?.loading && (
+              <p className="text-sm text-gray-600">Loading topic usage details...</p>
+            )}
+            {selectedTopicUsage?.error && (
+              <p className="text-sm text-red-600">{selectedTopicUsage.error}</p>
+            )}
+            {selectedTopicUsage?.data && (
+              <>
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-gray-800 mb-1">Topic: {selectedTopicUsage.data.topic_name}</h3>
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-sm text-gray-700">
+                      <span className="font-semibold">Total Questions:</span>{' '}
+                      {selectedTopicUsage.data.total_questions}
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      <span className="font-semibold">Total Tests Using Topic:</span>{' '}
+                      {selectedTopicUsage.data.total_uses}
+                    </p>
+                  </div>
+                  {testData.batches && testData.batches.length > 0 && (
+                    <div className="mt-2 p-2 bg-green-50 rounded border border-green-200">
+                      <p className="text-xs text-green-700">
+                        <strong>Filtered by:</strong> {testData.batches.map(b => b.label || b.name).join(', ')}
+                        {testData.courses && testData.courses.length > 0 && ` | ${testData.courses.map(c => c.label || c.name).join(', ')}`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {(selectedTopicUsage.data.batch_course_usage && selectedTopicUsage.data.batch_course_usage.length > 0) || 
+                 (selectedTopicUsage.data.tests && selectedTopicUsage.data.tests.length > 0) ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Usage by Batch & Course - Left Side */}
+                    {selectedTopicUsage.data.batch_course_usage && selectedTopicUsage.data.batch_course_usage.length > 0 ? (
+                      <div>
+                        <h4 className="font-semibold text-gray-800 mb-2">Usage by Batch & Course</h4>
+                        <div className="max-h-[500px] overflow-y-auto border rounded-lg">
+                          <table className="min-w-full text-sm">
+                            <thead className="bg-gray-50 border-b sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Batch</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Course</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Used</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Total</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Percentage</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {selectedTopicUsage.data.batch_course_usage.map((usage, idx) => (
+                                <tr 
+                                  key={`${usage.batch_id}-${usage.course_id}-${idx}`} 
+                                  className={`hover:bg-gray-50 ${usage.is_fully_used ? 'bg-red-50' : ''}`}
+                                >
+                                  <td className="px-3 py-2 font-medium text-xs">{usage.batch_name}</td>
+                                  <td className="px-3 py-2 text-xs">{usage.course_name}</td>
+                                  <td className="px-3 py-2 text-xs">{usage.used_questions}</td>
+                                  <td className="px-3 py-2 text-xs">{usage.total_questions}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                      usage.percentage >= 100 ? 'bg-red-100 text-red-800' :
+                                      usage.percentage >= 75 ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-green-100 text-green-800'
+                                    }`}>
+                                      {usage.percentage.toFixed(1)}%
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs">
+                                    {usage.is_fully_used ? (
+                                      <span className="text-red-600 font-semibold">Fully Used</span>
+                                    ) : (
+                                      <span className="text-green-600">Available</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                        <p className="text-sm text-gray-600">
+                          No batch/course usage data available for the selected audience.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Tests Using This Topic - Right Side */}
+                    <div>
+                      <h4 className="font-semibold text-gray-800 mb-2">Tests Using This Topic</h4>
+                      {selectedTopicUsage.data.tests && selectedTopicUsage.data.tests.length > 0 ? (
+                        <div className="max-h-[500px] overflow-y-auto border rounded-lg">
+                          <table className="min-w-full text-sm">
+                            <thead className="bg-gray-50 border-b sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Test Name</th>
+                                <th className="px-3 py-2 text-center font-semibold text-gray-700">Questions Used</th>
+                                <th className="px-3 py-2 text-center font-semibold text-gray-700">Batches</th>
+                                <th className="px-3 py-2 text-center font-semibold text-gray-700">Courses</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {selectedTopicUsage.data.tests.map((t) => (
+                                <tr key={t.test_id} className="hover:bg-gray-50">
+                                  <td className="px-3 py-2 text-xs">{t.name || t.test_id}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                      {t.topic_questions_used || 0}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-center">
+                                    {t.batch_ids && t.batch_ids.length > 0 ? t.batch_ids.length : 'N/A'}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-center">
+                                    {t.course_ids && t.course_ids.length > 0 ? t.course_ids.length : 'N/A'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                          <p className="text-sm text-gray-600">
+                            No tests using this topic for the selected audience.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                    <p className="text-sm text-gray-600">
+                      No usage data available for the selected audience.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
     </motion.div>
   );
 };
 
-const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData }) => {
+const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, setStep }) => {
   const { register, handleSubmit, watch, setValue, control, formState: { errors } } = useForm({
     defaultValues: {
       campus_id: testData.campus?.value || '',
@@ -2295,7 +2644,9 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData }
       batches: selectedBatches,
       courses: selectedCourses,
     });
-    nextStep();
+    // Go to module and level selection (step 4)
+    // Note: This component is now used in step 3, so we go to step 4
+    setStep(4);
   }
 
   return (
@@ -2506,6 +2857,389 @@ const AudioGenerationStatus = () => {
       <span>{getStatusIcon()}</span>
       <span>{details}</span>
     </div>
+  );
+};
+
+const Step5TopicSelection = ({ nextStep, prevStep, updateTestData, testData }) => {
+  const [crtTopics, setCrtTopics] = useState([]);
+  const [selectedTopic, setSelectedTopic] = useState(testData.topic_id || testData.selectedTopic || '');
+  const [loading, setLoading] = useState(false);
+  const [selectedTopicUsage, setSelectedTopicUsage] = useState(null);
+  const [showTopicUsageModal, setShowTopicUsageModal] = useState(false);
+  const { error: showError } = useNotification();
+
+  // Fetch topics for the selected CRT module
+  useEffect(() => {
+    const fetchTopics = async () => {
+      if (!testData.module?.startsWith('CRT_')) return;
+      
+      setLoading(true);
+      try {
+        // Build query parameters with selected batches and courses
+        const params = new URLSearchParams();
+        if (testData.batches && testData.batches.length > 0) {
+          const batchIds = testData.batches.map(b => b.value || b._id || b).filter(Boolean).join(',');
+          if (batchIds) params.append('batch_ids', batchIds);
+        }
+        if (testData.courses && testData.courses.length > 0) {
+          const courseIds = testData.courses.map(c => c.value || c._id || c).filter(Boolean).join(',');
+          if (courseIds) params.append('course_ids', courseIds);
+        }
+        
+        const url = `/test-management/crt-topics${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await api.get(url);
+        if (response.data.success) {
+          const filteredTopics = response.data.data.filter(topic => topic.module_id === testData.module);
+          setCrtTopics(filteredTopics);
+        }
+      } catch (error) {
+        console.error('Error fetching topics:', error);
+        showError('Failed to fetch topics');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTopics();
+  }, [testData.module, testData.batches, testData.courses]);
+
+  // Get topics for the selected CRT module
+  const getTopicsForModule = () => {
+    if (!testData.module || !testData.module.startsWith('CRT_')) return [];
+    return crtTopics.filter(topic => topic.module_id === testData.module);
+  };
+
+  const handleTopicChange = (e) => {
+    const topicId = e.target.value;
+    setSelectedTopic(topicId);
+    updateTestData({ topic_id: topicId, selectedTopic: topicId });
+  };
+
+  const handleViewTopicUsage = async (topicId) => {
+    try {
+      setSelectedTopicUsage({ loading: true, data: null, error: null });
+      setShowTopicUsageModal(true);
+      
+      // Build query parameters with selected batches and courses
+      const params = new URLSearchParams();
+      if (testData.batches && testData.batches.length > 0) {
+        const batchIds = testData.batches.map(b => b.value || b._id || b).filter(Boolean).join(',');
+        if (batchIds) params.append('batch_ids', batchIds);
+      }
+      if (testData.courses && testData.courses.length > 0) {
+        const courseIds = testData.courses.map(c => c.value || c._id || c).filter(Boolean).join(',');
+        if (courseIds) params.append('course_ids', courseIds);
+      }
+      
+      const url = `/test-management/topic-usage/${topicId}${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await api.get(url);
+      if (response.data.success) {
+        setSelectedTopicUsage({ loading: false, data: response.data.data, error: null });
+      } else {
+        setSelectedTopicUsage({ loading: false, data: null, error: response.data.message || 'Failed to fetch topic usage' });
+      }
+    } catch (error) {
+      console.error('Error fetching topic usage:', error);
+      setSelectedTopicUsage({ loading: false, data: null, error: error.response?.data?.message || 'Failed to fetch topic usage' });
+    }
+  };
+
+  const handleNext = () => {
+    // Topic selection is optional, so we can proceed without selecting one
+    // Go to audience selection (step 4)
+    setStep(4);
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
+      <div className="space-y-8">
+        <div className="flex items-center space-x-4 border-b border-gray-100 pb-6">
+          <div className="bg-gradient-to-r from-blue-500 to-purple-500 p-3 rounded-xl text-white shadow-lg">
+            <FileQuestion className="h-7 w-7" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800">Select Topic (Optional)</h2>
+            <p className="text-gray-600 mt-1">Choose a topic to track completion and usage across batches and courses</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 space-y-6">
+          {!testData.module?.startsWith('CRT_') ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>Topic selection is only available for CRT modules.</p>
+              <p className="text-sm mt-2">Please proceed to the next step.</p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-base font-semibold text-gray-800 mb-2">
+                  Select Topic (Optional)
+                </label>
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex flex-col items-center space-y-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                      <p className="text-sm text-gray-600">Loading topics...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedTopic}
+                    onChange={handleTopicChange}
+                    className="w-full p-4 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 bg-white hover:border-blue-300"
+                  >
+                    <option value="">Select Topic (Optional - Leave blank to use all questions)</option>
+                    {getTopicsForModule().map(topic => (
+                      <option key={topic._id} value={topic._id}>
+                        {topic.topic_name} ({topic.total_questions || 0} questions, {topic.completion_percentage || 0}% completed)
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {getTopicsForModule().length === 0 && !loading && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    No topics available for this module. Questions will be selected from all available questions.
+                  </p>
+                )}
+              </div>
+
+              {selectedTopic && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-blue-900 mb-2">
+                        Selected Topic: {getTopicsForModule().find(t => t._id === selectedTopic)?.topic_name}
+                      </p>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-blue-700">
+                            <strong>Total Questions:</strong> {getTopicsForModule().find(t => t._id === selectedTopic)?.total_questions || 0}
+                          </p>
+                          <p className="text-blue-700">
+                            <strong>Available:</strong> {(getTopicsForModule().find(t => t._id === selectedTopic)?.total_questions || 0) - (getTopicsForModule().find(t => t._id === selectedTopic)?.used_questions || 0)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-blue-700">
+                            <strong>Completion:</strong> {getTopicsForModule().find(t => t._id === selectedTopic)?.completion_percentage || 0}%
+                          </p>
+                          <p className="text-blue-700">
+                            <strong>Used Questions:</strong> {getTopicsForModule().find(t => t._id === selectedTopic)?.used_questions || 0}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleViewTopicUsage(selectedTopic)}
+                      className="ml-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center space-x-2"
+                    >
+                      <Info className="h-4 w-4" />
+                      <span>View Usage Details</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {testData.batches && testData.batches.length > 0 && (
+                <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-800 font-semibold mb-2">Selected Audience:</p>
+                  <div className="text-sm text-green-700 space-y-1">
+                    <p><strong>Batches:</strong> {testData.batches.map(b => b.label || b.name).join(', ')}</p>
+                    {testData.courses && testData.courses.length > 0 && (
+                      <p><strong>Courses:</strong> {testData.courses.map(c => c.label || c.name).join(', ')}</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-green-600 mt-2">
+                    Topic completion will be tracked for the selected batches and courses. You can reuse the same topic multiple times across different batches.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex justify-between items-center pt-8 border-t border-gray-100 mt-10">
+          <button
+            onClick={prevStep}
+            className="inline-flex items-center justify-center px-6 py-3 text-sm font-medium rounded-xl text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all duration-200 hover:shadow-md transform hover:scale-105"
+          >
+            <ChevronLeft className="h-5 w-5 mr-2" />
+            Back
+          </button>
+          <button
+            onClick={handleNext}
+            className="inline-flex items-center justify-center px-8 py-3 text-sm font-medium rounded-xl shadow-lg text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all duration-200 transform hover:scale-105 hover:shadow-xl"
+          >
+            {testData.module === 'CRT_TECHNICAL' ? 'Next: Select Question Type' :
+             testData.test_type?.toLowerCase() === 'online' ? 'Next: Configure Online Test' :
+             'Next: Upload Questions'}
+            <ChevronRight className="h-5 w-5 ml-2" />
+          </button>
+        </div>
+      </div>
+
+      {/* Topic Usage Modal */}
+      {showTopicUsageModal && (
+        <Modal
+          isOpen={showTopicUsageModal}
+          onClose={() => {
+            setShowTopicUsageModal(false);
+            setSelectedTopicUsage(null);
+          }}
+          title="Topic Usage Tracking"
+          size="2xl"
+        >
+          <div className="space-y-4">
+            {selectedTopicUsage?.loading && (
+              <p className="text-sm text-gray-600">Loading topic usage details...</p>
+            )}
+            {selectedTopicUsage?.error && (
+              <p className="text-sm text-red-600">{selectedTopicUsage.error}</p>
+            )}
+            {selectedTopicUsage?.data && (
+              <>
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-gray-800 mb-1">Topic: {selectedTopicUsage.data.topic_name}</h3>
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-sm text-gray-700">
+                      <span className="font-semibold">Total Questions:</span>{' '}
+                      {selectedTopicUsage.data.total_questions}
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      <span className="font-semibold">Total Tests Using Topic:</span>{' '}
+                      {selectedTopicUsage.data.total_uses}
+                    </p>
+                  </div>
+                  {testData.batches && testData.batches.length > 0 && (
+                    <div className="mt-2 p-2 bg-green-50 rounded border border-green-200">
+                      <p className="text-xs text-green-700">
+                        <strong>Filtered by:</strong> {testData.batches.map(b => b.label || b.name).join(', ')}
+                        {testData.courses && testData.courses.length > 0 && ` | ${testData.courses.map(c => c.label || c.name).join(', ')}`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {(selectedTopicUsage.data.batch_course_usage && selectedTopicUsage.data.batch_course_usage.length > 0) || 
+                 (selectedTopicUsage.data.tests && selectedTopicUsage.data.tests.length > 0) ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Usage by Batch & Course - Left Side */}
+                    {selectedTopicUsage.data.batch_course_usage && selectedTopicUsage.data.batch_course_usage.length > 0 ? (
+                      <div>
+                        <h4 className="font-semibold text-gray-800 mb-2">Usage by Batch & Course</h4>
+                        <div className="max-h-[500px] overflow-y-auto border rounded-lg">
+                          <table className="min-w-full text-sm">
+                            <thead className="bg-gray-50 border-b sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Batch</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Course</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Used</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Total</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Percentage</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {selectedTopicUsage.data.batch_course_usage.map((usage, idx) => (
+                                <tr 
+                                  key={`${usage.batch_id}-${usage.course_id}-${idx}`} 
+                                  className={`hover:bg-gray-50 ${usage.is_fully_used ? 'bg-red-50' : ''}`}
+                                >
+                                  <td className="px-3 py-2 font-medium text-xs">{usage.batch_name}</td>
+                                  <td className="px-3 py-2 text-xs">{usage.course_name}</td>
+                                  <td className="px-3 py-2 text-xs">{usage.used_questions}</td>
+                                  <td className="px-3 py-2 text-xs">{usage.total_questions}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                      usage.percentage >= 100 ? 'bg-red-100 text-red-800' :
+                                      usage.percentage >= 75 ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-green-100 text-green-800'
+                                    }`}>
+                                      {usage.percentage.toFixed(1)}%
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs">
+                                    {usage.is_fully_used ? (
+                                      <span className="text-red-600 font-semibold">Fully Used</span>
+                                    ) : (
+                                      <span className="text-green-600">Available</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                        <p className="text-sm text-gray-600">
+                          No batch/course usage data available yet.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Tests Using This Topic - Right Side */}
+                    <div>
+                      <h4 className="font-semibold text-gray-800 mb-2">Tests Using This Topic</h4>
+                      {selectedTopicUsage.data.tests && selectedTopicUsage.data.tests.length > 0 ? (
+                        <div className="max-h-[500px] overflow-y-auto border rounded-lg">
+                          <table className="min-w-full text-sm">
+                            <thead className="bg-gray-50 border-b sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Test Name</th>
+                                <th className="px-3 py-2 text-center font-semibold text-gray-700">Questions Used</th>
+                                <th className="px-3 py-2 text-center font-semibold text-gray-700">Batches</th>
+                                <th className="px-3 py-2 text-center font-semibold text-gray-700">Courses</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {selectedTopicUsage.data.tests.map((t) => (
+                                <tr key={t.test_id} className="hover:bg-gray-50">
+                                  <td className="px-3 py-2 text-xs">{t.name || t.test_id}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                      {t.topic_questions_used || 0}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-center">
+                                    {t.batch_ids && t.batch_ids.length > 0 ? t.batch_ids.length : 'N/A'}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-center">
+                                    {t.course_ids && t.course_ids.length > 0 ? t.course_ids.length : 'N/A'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                          <p className="text-sm text-gray-600">
+                            This topic has not been used in any tests yet.
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Questions from this topic will appear here once they are used in tests.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                    <p className="text-sm text-gray-600">
+                      This topic has not been used in any tests yet.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Questions from this topic will appear here once they are used in tests.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
+    </motion.div>
   );
 };
 
@@ -2793,6 +3527,9 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
           topic_id: testData.topic_id
         });
 
+        // Clear any previous errors
+        setError('');
+
         if (append) {
           setBankQuestions(prev => [...prev, ...questions]);
         } else {
@@ -2801,12 +3538,36 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
 
         setHasMoreQuestions(hasMore);
         setCurrentPage(page);
+        
+        // If no questions found but total count > 0, it might be a pagination issue
+        // or all questions are used (which is still valid - questions can be reused)
+        if (questions.length === 0 && totalQuestions > 0) {
+          console.log('No questions on current page, but total questions exist:', totalQuestions);
+          // If we're on page 1 and have total questions but got 0, there might be an issue
+          // But don't show error - the backend should handle this and return questions
+          if (page === 1) {
+            console.warn('Page 1 returned 0 questions but total_count > 0. This may indicate all questions are used, but they should still be returned.');
+            // Show a warning message instead of error - questions exist, they're just all used (can be reused)
+            setError('All questions in this topic have been used, but they can still be reused. If questions are not showing, please try again or contact support.');
+          }
+        } else if (questions.length > 0) {
+          // Clear any previous errors when questions are successfully fetched
+          setError('');
+        }
+        
         console.log('Fetched questions:', questions.length, 'Total:', totalQuestions, 'Has more:', hasMore);
         return questions;
       } else {
         console.error('Failed to fetch questions:', response.data.message);
         console.error('Response data:', response.data);
-        setError('Failed to fetch questions from bank');
+        
+        // Check if it's because all questions are used (100% usage)
+        const errorMessage = response.data.message || 'Failed to fetch questions from bank';
+        if (errorMessage.includes('used') || errorMessage.includes('available')) {
+          setError('All questions in this topic have been used. Questions can still be reused for new tests.');
+        } else {
+          setError(errorMessage);
+        }
         return [];
       }
     } catch (error) {
@@ -3408,9 +4169,32 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
       {/* Question Bank Selection */}
       {questionSource === 'bank' && (
         <div className="bg-white rounded-lg shadow-md p-6">
+          {error && !error.includes('used') && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start">
+                <AlertTriangle className="w-5 h-5 text-red-600 mr-2 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm text-red-800 font-medium">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
+          {error && error.includes('used') && (
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-start">
+                <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm text-yellow-800 font-medium">{error}</p>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    You can still select and reuse these questions for new tests. Questions will be displayed below.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
-          {uploadedQuestions.length === 0 ? (
+          {uploadedQuestions.length === 0 && bankQuestions.length === 0 && !loadingBankQuestions && !error ? (
             <div className="text-center py-8 text-gray-500">
               <p>No questions selected from the bank.</p>
               <p className="text-sm mt-2">Click on "Question Bank" to select questions.</p>
