@@ -2367,11 +2367,47 @@ def get_online_tests_overview():
         
         # Filter by campus if user is campus admin
         if user.get('role') == 'campus_admin' and user.get('campus_id'):
-            match_stage['campus_id'] = user.get('campus_id')
+            # Check both new format (campus_ids array) and old format (campus_id single)
+            campus_id = ObjectId(user.get('campus_id'))
+            # First get test_ids that match the campus
+            matching_tests = list(mongo_db.tests.find({
+                '$or': [
+                    {'campus_ids': campus_id},
+                    {'campus_id': campus_id}
+                ],
+                'test_type': 'online',
+                'status': 'completed'
+            }, {'_id': 1}))
+            matching_test_ids = [t['_id'] for t in matching_tests]
+            if matching_test_ids:
+                match_stage['test_id'] = {'$in': matching_test_ids}
+            else:
+                # No matching tests, return empty result
+                return jsonify({
+                    'success': True,
+                    'data': [],
+                    'message': 'No online tests found for your campus'
+                })
         
-        # Filter by campus if user is course admin (course admin should only see tests from their campus)
-        if user.get('role') == 'course_admin' and user.get('campus_id'):
-            match_stage['campus_id'] = user.get('campus_id')
+        # Filter by course if user is course admin (course admin should only see tests for their course)
+        elif user.get('role') == 'course_admin' and user.get('course_id'):
+            course_id = ObjectId(user.get('course_id'))
+            # First get test_ids that match the course
+            matching_tests = list(mongo_db.tests.find({
+                'course_ids': course_id,
+                'test_type': 'online',
+                'status': 'completed'
+            }, {'_id': 1}))
+            matching_test_ids = [t['_id'] for t in matching_tests]
+            if matching_test_ids:
+                match_stage['test_id'] = {'$in': matching_test_ids}
+            else:
+                # No matching tests, return empty result
+                return jsonify({
+                    'success': True,
+                    'data': [],
+                    'message': 'No online tests found for your course'
+                })
         
         pipeline = [
             {
@@ -2473,10 +2509,26 @@ def get_online_tests_overview():
         
         # Get tests without attempts
         attempted_test_ids = [stat['test_id'] for stat in test_stats]
-        tests_without_attempts = list(mongo_db.tests.find({
+        
+        # Build query for tests without attempts, applying RBAC filters
+        tests_without_attempts_query = {
             'test_type': 'online',
+            'status': 'completed',
             '_id': {'$nin': attempted_test_ids}
-        }, {
+        }
+        
+        # Apply RBAC filters for tests without attempts
+        if user.get('role') == 'campus_admin' and user.get('campus_id'):
+            campus_id = ObjectId(user.get('campus_id'))
+            tests_without_attempts_query['$or'] = [
+                {'campus_ids': campus_id},
+                {'campus_id': campus_id}
+            ]
+        elif user.get('role') == 'course_admin' and user.get('course_id'):
+            course_id = ObjectId(user.get('course_id'))
+            tests_without_attempts_query['course_ids'] = course_id
+        
+        tests_without_attempts = list(mongo_db.tests.find(tests_without_attempts_query, {
             '_id': 1, 'name': 1, 'module_id': 1, 'created_at': 1,
             'campus_ids': 1, 'course_ids': 1, 'batch_ids': 1
         }))
@@ -2606,30 +2658,49 @@ def get_test_attempts(test_id):
                 'message': 'Test not found'
             }), 404
         
+        # RBAC: Check if user has access to this test
+        if user.get('role') == 'campus_admin':
+            campus_id = user.get('campus_id')
+            if campus_id:
+                campus_object_id = ObjectId(campus_id)
+                test_campus_ids = test.get('campus_ids', [])
+                test_campus_id = test.get('campus_id')
+                # Check if test belongs to user's campus
+                if campus_object_id not in test_campus_ids and test_campus_id != campus_object_id:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Access denied. You can only view tests for your campus.'
+                    }), 403
+        elif user.get('role') == 'course_admin':
+            course_id = user.get('course_id')
+            if course_id:
+                course_object_id = ObjectId(course_id)
+                test_course_ids = test.get('course_ids', [])
+                # Check if test belongs to user's course
+                if course_object_id not in test_course_ids:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Access denied. You can only view tests for your course.'
+                    }), 403
+        
         # Get all students assigned to this test based on campus, course, and batch assignments
         campus_ids = test.get('campus_ids', [])
         course_ids = test.get('course_ids', [])
         batch_ids = test.get('batch_ids', [])
         
-        # Check for course_id filter from query parameter (for course admin)
-        filter_course_id = request.args.get('course_id')
-        if filter_course_id:
-            try:
-                filter_course_object_id = ObjectId(filter_course_id)
-                # Override course_ids with the filtered course
-                course_ids = [filter_course_object_id]
-            except Exception:
-                pass  # Invalid course_id, ignore filter
+        # For course_admin, ensure we only show students from their course
+        if user.get('role') == 'course_admin' and user.get('course_id'):
+            course_object_id = ObjectId(user.get('course_id'))
+            course_ids = [course_object_id]  # Override with user's course only
         
-        # Check for campus_id filter from query parameter (for course admin)
-        filter_campus_id = request.args.get('campus_id')
-        if filter_campus_id:
-            try:
-                filter_campus_object_id = ObjectId(filter_campus_id)
-                # Override campus_ids with the filtered campus
-                campus_ids = [filter_campus_object_id]
-            except Exception:
-                pass  # Invalid campus_id, ignore filter
+        # For campus_admin, ensure we only show students from their campus
+        if user.get('role') == 'campus_admin' and user.get('campus_id'):
+            campus_object_id = ObjectId(user.get('campus_id'))
+            # Check both new format (campus_ids array) and old format (campus_id single)
+            if campus_object_id in campus_ids or test.get('campus_id') == campus_object_id:
+                campus_ids = [campus_object_id]  # Override with user's campus only
+            else:
+                campus_ids = []  # No access
         
         # Build student query
         student_query = {}

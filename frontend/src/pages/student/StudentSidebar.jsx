@@ -270,11 +270,11 @@ const StudentSidebar = () => {
             </AnimatePresence>
             
             {/* Main Content */}
-            <div className={`flex-1 bg-[#fefefe] transition-all duration-300 min-h-screen ${
+            <div className={`flex-1 bg-[#fefefe] transition-all duration-300 flex flex-col h-screen overflow-hidden ${
                 isDesktop ? (isCollapsed ? 'ml-[70px]' : 'ml-[260px]') : 'ml-0'
             }`}>
                 {/* Header */}
-                <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm shadow-sm flex items-center h-16 px-4 border-b border-gray-200/70">
+                <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm shadow-sm flex items-center h-16 px-4 border-b border-gray-200/70 flex-shrink-0">
                     <div className="flex items-center justify-between w-full">
                         <div className="flex items-center space-x-4">
                         <button
@@ -313,7 +313,7 @@ const StudentSidebar = () => {
                 </header>
                 
                 {/* Content Area */}
-                <div className="p-3 sm:p-4 lg:p-6 xl:p-8 min-h-screen w-full overflow-x-auto">
+                <div className="flex-1 p-3 sm:p-4 lg:p-6 xl:p-8 w-full overflow-y-auto overflow-x-hidden">
                     <Outlet />
                 </div>
             </div>

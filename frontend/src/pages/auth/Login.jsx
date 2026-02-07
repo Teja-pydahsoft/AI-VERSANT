@@ -57,7 +57,7 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F0F4FF] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#F0F4FF] flex items-center justify-center p-4 relative overflow-y-auto">
       {/* Dynamic SVG background shapes */}
       <motion.div
         className="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-blue-200 to-indigo-300 rounded-full opacity-50"

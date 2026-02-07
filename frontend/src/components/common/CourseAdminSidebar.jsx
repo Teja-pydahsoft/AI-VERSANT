@@ -226,8 +226,10 @@ const CourseAdminSidebar = () => {
           </button>
         </motion.div>
       </motion.div>
-      <div className="ml-64 flex-1 bg-gray-50 w-full">
-        <Outlet />
+      <div className="ml-64 flex-1 bg-gray-50 w-full flex flex-col h-screen overflow-hidden">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <Outlet />
+        </div>
       </div>
     </div>
   )

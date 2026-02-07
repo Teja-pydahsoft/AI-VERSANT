@@ -334,7 +334,7 @@ const CampusAdminSidebar = () => {
         </header>
         
         {/* Content Area */}
-        <div className="p-3 sm:p-4 lg:p-6 xl:p-8 min-h-screen w-full overflow-x-auto">
+        <div className="p-3 sm:p-4 lg:p-6 xl:p-8 min-h-screen w-full overflow-y-auto overflow-x-auto">
         <Outlet />
         </div>
       </div>

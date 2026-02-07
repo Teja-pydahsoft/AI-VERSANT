@@ -302,7 +302,7 @@ const StudentDashboard = () => {
   const shouldBlockDashboard = hasIncompleteForms()
 
   return (
-    <div className="min-h-screen bg-[#fefefe]">
+    <div className="w-full bg-[#fefefe]">
       {/* Block dashboard content if forms are required */}
       {shouldBlockDashboard && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 z-30 flex items-center justify-center">
