@@ -89,7 +89,7 @@ const GetStarted = () => {
 
   return (
     // Added scroll-smooth for better anchor link navigation
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-x-hidden scroll-smooth">
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-x-hidden overflow-y-auto scroll-smooth h-auto">
       {/* Enhanced Background Animations */}
       <div className="fixed inset-0 -z-10 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-blue-200 rounded-full mix-blend-multiply filter blur-2xl opacity-60 animate-blob"></div>
@@ -230,7 +230,7 @@ const GetStarted = () => {
       {/* Main Content with proper spacing for fixed header */}
       <div className="pt-20">
         {/* Hero Section */}
-        <section id="home" className="w-full min-h-[calc(100vh-5rem)] flex items-center justify-center py-16 px-4 sm:px-6 lg:px-8">
+        <section id="home" className="w-full min-h-[calc(100vh-5rem)] flex items-center justify-center py-8 sm:py-12 md:py-16 px-4 sm:px-6 lg:px-8">
           <div className="w-full max-w-6xl xl:max-w-7xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -243,7 +243,7 @@ const GetStarted = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.2 }}
-                className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-gray-900 mb-6"
+                className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold text-gray-900 mb-4 sm:mb-6 px-2"
               >
                 Welcome to{' '}
                 <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
@@ -255,7 +255,7 @@ const GetStarted = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.4 }}
-                className="text-lg md:text-xl text-gray-600 mb-6 max-w-4xl mx-auto leading-relaxed"
+                className="text-base sm:text-lg md:text-xl text-gray-600 mb-4 sm:mb-6 max-w-4xl mx-auto leading-relaxed px-2"
               >
                 The ultimate comprehensive learning platform designed to transform your{' '}
                 <span className="font-bold text-blue-600">English language skills</span> and{' '}
@@ -266,7 +266,7 @@ const GetStarted = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.6 }}
-                className="text-base text-gray-500 mb-12 max-w-3xl mx-auto"
+                className="text-sm sm:text-base text-gray-500 mb-8 sm:mb-12 max-w-3xl mx-auto px-2"
               >
                 From foundational grammar to advanced programming logic, Pydah Apex offers an immersive learning experience that adapts to your pace and goals.
               </motion.p>
@@ -276,10 +276,10 @@ const GetStarted = () => {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.8, delay: 0.8 }}
-                className="bg-white/60 backdrop-blur-sm border border-blue-200 p-6 rounded-2xl mb-12 max-w-4xl mx-auto shadow-lg"
+                className="bg-white/60 backdrop-blur-sm border border-blue-200 p-4 sm:p-6 rounded-xl sm:rounded-2xl mb-8 sm:mb-12 max-w-4xl mx-auto shadow-lg px-4 sm:px-6"
               >
-                <h3 className="text-2xl md:text-3xl font-bold mb-3 text-gray-800">🚀 Ready to Transform Your Skills?</h3>
-                <p className="text-base md:text-lg text-gray-700">
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2 sm:mb-3 text-gray-800">🚀 Ready to Transform Your Skills?</h3>
+                <p className="text-sm sm:text-base md:text-lg text-gray-700">
                   Join thousands of students mastering English and critical thinking. 
                   <span className="font-semibold text-blue-600"> Login now to unlock your personalized learning journey!</span>
                 </p>
@@ -298,10 +298,10 @@ const GetStarted = () => {
                 >
                   <Link
                     to="/login"
-                    className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 shadow-lg hover:shadow-xl"
+                    className="inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-bold rounded-lg sm:rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 shadow-lg hover:shadow-xl"
                   >
                     Start Learning Now
-                    <ArrowRight className="ml-3 w-5 h-5" />
+                    <ArrowRight className="ml-2 sm:ml-3 w-4 h-4 sm:w-5 sm:h-5" />
                   </Link>
                 </motion.div>
               </motion.div>
@@ -310,18 +310,18 @@ const GetStarted = () => {
         </section>
 
         {/* Features Section */}
-        <section id="features" className="w-full py-16 md:py-24 bg-white/50 px-4 sm:px-6 lg:px-8">
+        <section id="features" className="w-full py-12 sm:py-16 md:py-24 bg-white/50 px-4 sm:px-6 lg:px-8">
           <div className="w-full max-w-6xl xl:max-w-7xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
-              className="text-center mb-12 md:mb-16"
+              className="text-center mb-8 sm:mb-12 md:mb-16"
             >
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 mb-3 sm:mb-4 px-2">
                 Comprehensive Learning Features
               </h2>
-              <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+              <p className="text-base sm:text-lg text-gray-600 max-w-3xl mx-auto px-2">
                 Discover our wide range of learning modules designed to enhance every aspect of your skills
               </p>
             </motion.div>
@@ -331,7 +331,7 @@ const GetStarted = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 mb-16"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8 mb-12 sm:mb-16"
             >
               {features.map((feature, index) => (
                 <motion.div
@@ -346,14 +346,14 @@ const GetStarted = () => {
                   }}
                   className="group relative"
                 >
-                  <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden h-full flex flex-col items-center">
-                    <div className="mb-6 flex items-center justify-center">
-                      <feature.icon className="w-12 h-12 text-blue-600 group-hover:text-purple-600 transition-colors duration-300" strokeWidth={1.5} />
+                  <div className="bg-white rounded-xl sm:rounded-2xl p-6 sm:p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden h-full flex flex-col items-center">
+                    <div className="mb-4 sm:mb-6 flex items-center justify-center">
+                      <feature.icon className="w-10 h-10 sm:w-12 sm:h-12 text-blue-600 group-hover:text-purple-600 transition-colors duration-300" strokeWidth={1.5} />
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors text-center">
+                    <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2 sm:mb-3 group-hover:text-blue-600 transition-colors text-center">
                       {feature.title}
                     </h3>
-                    <p className="text-base text-gray-600 leading-relaxed text-center">
+                    <p className="text-sm sm:text-base text-gray-600 leading-relaxed text-center">
                       {feature.description}
                     </p>
                     {/* Card lighting effect */}
@@ -383,10 +383,10 @@ const GetStarted = () => {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.6, delay: 0.8 + index * 0.1 }}
-                    className="flex items-center space-x-4 p-4 rounded-xl hover:bg-blue-50 transition-all duration-300"
+                    className="flex items-center space-x-3 sm:space-x-4 p-3 sm:p-4 rounded-lg sm:rounded-xl hover:bg-blue-50 transition-all duration-300"
                   >
-                    <CheckCircle className="w-6 h-6 text-green-500 flex-shrink-0" />
-                    <span className="text-base font-medium text-gray-700">{benefit}</span>
+                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-500 flex-shrink-0" />
+                    <span className="text-sm sm:text-base font-medium text-gray-700">{benefit}</span>
                   </motion.div>
                 ))}
               </div>
@@ -395,27 +395,27 @@ const GetStarted = () => {
         </section>
 
         {/* About Section */}
-        <section id="about" className="w-full py-16 md:py-24 px-4 sm:px-6 lg:px-8">
+        <section id="about" className="w-full py-12 sm:py-16 md:py-24 px-4 sm:px-6 lg:px-8">
           <div className="w-full max-w-6xl xl:max-w-7xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
-              className="bg-white rounded-2xl p-8 md:p-12 shadow-lg"
+              className="bg-white rounded-xl sm:rounded-2xl p-6 sm:p-8 md:p-12 shadow-lg"
             >
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-16 items-center">
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.8, delay: 0.2 }}
                 >
-                  <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">
+                  <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 mb-4 sm:mb-6">
                     About Pydah Apex
                   </h2>
-                  <p className="text-lg text-gray-600 mb-6 leading-relaxed">
+                  <p className="text-base sm:text-lg text-gray-600 mb-4 sm:mb-6 leading-relaxed">
                     Pydah Apex is a comprehensive learning platform designed to transform how students approach English language learning and cognitive skill development. Our mission is to provide an immersive, adaptive learning experience that caters to individual needs and learning styles.
                   </p>
-                  <p className="text-lg text-gray-600 mb-8 leading-relaxed">
+                  <p className="text-base sm:text-lg text-gray-600 mb-6 sm:mb-8 leading-relaxed">
                     With cutting-edge technology and expert-curated content, we help students master essential skills from foundational grammar to advanced programming logic, ensuring they're well-prepared for academic and professional success.
                   </p>
                   <div className="grid grid-cols-2 gap-6">
@@ -435,23 +435,23 @@ const GetStarted = () => {
                   transition={{ duration: 0.8, delay: 0.4 }}
                   className="relative"
                 >
-                  <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl p-8 md:p-12 text-white">
-                    <h3 className="text-3xl font-bold mb-6">Our Mission</h3>
-                    <p className="text-lg mb-8 leading-relaxed">
+                  <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl sm:rounded-2xl p-6 sm:p-8 md:p-12 text-white">
+                    <h3 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6">Our Mission</h3>
+                    <p className="text-base sm:text-lg mb-6 sm:mb-8 leading-relaxed">
                       To empower learners worldwide with comprehensive, adaptive learning experiences that transform their English language skills and cognitive abilities, preparing them for success in an increasingly globalized world.
                     </p>
                     <div className="space-y-4">
-                      <div className="flex items-center space-x-4">
-                        <CheckCircle className="w-6 h-6 text-green-400" />
-                        <span className="text-lg font-semibold">Personalized Learning Paths</span>
+                      <div className="flex items-center space-x-3 sm:space-x-4">
+                        <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
+                        <span className="text-base sm:text-lg font-semibold">Personalized Learning Paths</span>
                       </div>
-                      <div className="flex items-center space-x-4">
-                        <CheckCircle className="w-6 h-6 text-green-400" />
-                        <span className="text-lg font-semibold">Expert-Curated Content</span>
+                      <div className="flex items-center space-x-3 sm:space-x-4">
+                        <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
+                        <span className="text-base sm:text-lg font-semibold">Expert-Curated Content</span>
                       </div>
-                      <div className="flex items-center space-x-4">
-                        <CheckCircle className="w-6 h-6 text-green-400" />
-                        <span className="text-lg font-semibold">Real-time Progress Tracking</span>
+                      <div className="flex items-center space-x-3 sm:space-x-4">
+                        <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
+                        <span className="text-base sm:text-lg font-semibold">Real-time Progress Tracking</span>
                       </div>
                     </div>
                   </div>
@@ -462,9 +462,9 @@ const GetStarted = () => {
         </section>
 
         {/* Footer */}
-        <footer className="w-full bg-gray-900 text-white py-12 md:py-16 mt-16">
+        <footer className="w-full bg-gray-900 text-white py-8 sm:py-12 md:py-16 mt-12 sm:mt-16">
           <div className="w-full max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
