@@ -2427,13 +2427,29 @@ def get_online_tests_overview():
                 {
                     '$lookup': {
                         'from': 'students',
-                        'localField': 'student_id',
-                        'foreignField': '_id',
+                        'let': {'attempt_student_id': '$student_id', 'attempt_user_id': '$user_id'},
+                        'pipeline': [
+                            {
+                                '$match': {
+                                    '$expr': {
+                                        '$or': [
+                                            {'$eq': ['$_id', '$$attempt_student_id']},
+                                            {'$eq': ['$user_id', '$$attempt_student_id']},
+                                            {'$eq': ['$_id', '$$attempt_user_id']},
+                                            {'$eq': ['$user_id', '$$attempt_user_id']}
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
                         'as': 'student_info'
                     }
                 },
                 {
-                    '$unwind': '$student_info'
+                    '$unwind': {
+                        'path': '$student_info',
+                        'preserveNullAndEmptyArrays': False
+                    }
                 },
                 {
                     '$match': {
@@ -2444,12 +2460,21 @@ def get_online_tests_overview():
             current_app.logger.info(f"Course admin - Filtering attempts by course_id: {user_course_id}")
         
         # Add grouping stage
+        # For course_admin, use student_info._id for unique students (after lookup)
+        # For others, use student_id from attempts
+        if user.get('role') == 'course_admin' and user.get('course_id'):
+            # After lookup and unwind, we have student_info, so use student_info._id
+            unique_students_field = '$student_info._id'
+        else:
+            # Use student_id from attempts
+            unique_students_field = '$student_id'
+        
         pipeline.extend([
             {
                 '$group': {
                     '_id': '$test_id',
                     'total_attempts': {'$sum': 1},
-                    'unique_students': {'$addToSet': '$student_id'},
+                    'unique_students': {'$addToSet': unique_students_field},
                     'all_scores': {
                         '$push': {
                             '$cond': [
@@ -2505,8 +2530,18 @@ def get_online_tests_overview():
                     'total_attempts': 1,
                     # Number of students who have attempted at least once
                     'attempted_students_count': {'$size': '$unique_students'},
-                    'highest_score': {'$max': '$all_scores'},
-                    'average_score': {'$avg': '$all_scores'},
+                    'highest_score': {
+                        '$ifNull': [
+                            {'$max': '$all_scores'},
+                            0
+                        ]
+                    },
+                    'average_score': {
+                        '$ifNull': [
+                            {'$avg': '$all_scores'},
+                            0
+                        ]
+                    },
                     'campus_ids': {
                         '$map': {
                             'input': '$test_details.campus_ids',
@@ -2540,6 +2575,15 @@ def get_online_tests_overview():
         test_stats = list(mongo_db.student_test_attempts.aggregate(pipeline))
         if user.get('role') == 'course_admin':
             current_app.logger.info(f"Course admin - Aggregation returned {len(test_stats)} tests with attempts")
+            if len(test_stats) == 0:
+                # Debug: Check if there are any attempts at all for the matching test_ids
+                if 'test_id' in match_stage and '$in' in match_stage['test_id']:
+                    test_ids = match_stage['test_id']['$in']
+                    total_attempts = mongo_db.student_test_attempts.count_documents({
+                        'test_id': {'$in': test_ids},
+                        'test_type': 'online'
+                    })
+                    current_app.logger.info(f"Course admin - Total attempts for {len(test_ids)} test_ids (before filtering): {total_attempts}")
         
         # Get tests without attempts
         attempted_test_ids = [stat['test_id'] for stat in test_stats]
@@ -2607,8 +2651,8 @@ def get_online_tests_overview():
                 # Placeholders, will be updated with accurate values below
                 'total_assigned_students': 0,
                 'pending_students': 0,
-                'highest_score': round(stat.get('highest_score', 0), 2),
-                'average_score': round(stat.get('average_score', 0), 2),
+                'highest_score': round(float(stat.get('highest_score') or 0), 2),
+                'average_score': round(float(stat.get('average_score') or 0), 2),
                 'created_at': safe_isoformat(stat.get('created_at')),
                 'campus_ids': [str(cid) for cid in stat.get('campus_ids', [])],
                 'course_ids': [str(cid) for cid in stat.get('course_ids', [])],
@@ -2666,6 +2710,10 @@ def get_online_tests_overview():
 
             test['total_assigned_students'] = total_assigned
             test['pending_students'] = pending
+            
+            # Debug logging for course admin
+            if user.get('role') == 'course_admin':
+                current_app.logger.info(f"Course admin - Test {test['test_id']}: total_assigned={total_assigned}, attempted={attempted}, pending={pending}")
         
         if user.get('role') == 'course_admin':
             current_app.logger.info(f"Course admin - Returning {len(tests_overview)} total tests in overview")

@@ -883,10 +883,13 @@ const CourseReports = () => {
                 if (testsData.length > 0) {
                     console.log('Course Admin - Sample test:', {
                         test_id: testsData[0].test_id,
+                        test_name: testsData[0].test_name,
+                        highest_score: testsData[0].highest_score,
+                        average_score: testsData[0].average_score,
+                        highest_score_type: typeof testsData[0].highest_score,
+                        average_score_type: typeof testsData[0].average_score,
                         campus_ids: testsData[0].campus_ids,
-                        batch_ids: testsData[0].batch_ids,
-                        campus_ids_type: typeof testsData[0].campus_ids?.[0],
-                        batch_ids_type: typeof testsData[0].batch_ids?.[0]
+                        batch_ids: testsData[0].batch_ids
                     });
                 }
                 setTests(testsData);
@@ -1435,10 +1438,22 @@ const CourseReports = () => {
                                                             {test.total_attempts || 0}
                                                         </td>
                                                         <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-green-600">
-                                                            {test.highest_score?.toFixed(1) || '0.0'}%
+                                                            {(() => {
+                                                                const score = test.highest_score;
+                                                                if (score == null || score === undefined || score === '') return '0.0%';
+                                                                const numScore = typeof score === 'number' ? score : parseFloat(score);
+                                                                if (isNaN(numScore)) return '0.0%';
+                                                                return `${numScore.toFixed(1)}%`;
+                                                            })()}
                                                         </td>
                                                         <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-blue-600">
-                                                            {test.average_score?.toFixed(1) || '0.0'}%
+                                                            {(() => {
+                                                                const score = test.average_score;
+                                                                if (score == null || score === undefined || score === '') return '0.0%';
+                                                                const numScore = typeof score === 'number' ? score : parseFloat(score);
+                                                                if (isNaN(numScore)) return '0.0%';
+                                                                return `${numScore.toFixed(1)}%`;
+                                                            })()}
                                                         </td>
                                                         <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
                                                             {releaseStatus[test.test_id] ? (
