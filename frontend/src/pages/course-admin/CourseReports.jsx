@@ -1228,62 +1228,61 @@ const CourseReports = () => {
                                 </div>
                             </div>
 
-                    {/* Error Message */}
-                    {errorMsg && (
-                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                            <p className="text-red-700">{errorMsg}</p>
-                        </div>
-                    )}
+                            {/* Error Message */}
+                            {errorMsg && (
+                                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                                    <p className="text-red-700">{errorMsg}</p>
+                                </div>
+                            )}
 
-                    {/* Search and Filter Section */}
-                    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-6">
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            {/* Search Bar */}
-                            <div className="flex-1">
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search tests by name..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
-                                    />
-                                    {searchTerm && (
-                                        <button
-                                            onClick={() => setSearchTerm('')}
-                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                        >
-                                            <X className="w-5 h-5" />
-                                        </button>
+                            {/* Search and Filter Section */}
+                            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-6">
+                                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-end sm:items-center">
+                                    {/* Search Bar */}
+                                    <div className="flex-1 w-full sm:w-auto">
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                                            <input
+                                                type="text"
+                                                placeholder="Search tests by name..."
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                className="w-full pl-10 pr-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                                            />
+                                            {searchTerm && (
+                                                <button
+                                                    onClick={() => setSearchTerm('')}
+                                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                                >
+                                                    <X className="w-5 h-5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Batch Filter */}
+                                    {filteredBatchOptions.length > 0 && (
+                                        <div className="w-full sm:w-64 flex-shrink-0">
+                                            <select
+                                                value={selectedBatchFilter}
+                                                onChange={(e) => setSelectedBatchFilter(e.target.value)}
+                                                className="w-full px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base bg-white"
+                                            >
+                                                <option value="all">All Batches</option>
+                                                {filteredBatchOptions.map((batchId) => (
+                                                    <option key={batchId} value={batchId}>
+                                                        {batchMap[String(batchId)] || 'Unnamed Batch'}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Batch Filter */}
-                            {filteredBatchOptions.length > 0 && (
-                                <div className="flex flex-col sm:flex-row gap-3">
-                                    <div className="flex flex-col">
-                                        <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Batch</label>
-                                        <select
-                                            value={selectedBatchFilter}
-                                            onChange={(e) => setSelectedBatchFilter(e.target.value)}
-                                            className="px-3 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm sm:text-base min-w-[150px]"
-                                        >
-                                            <option value="all">All Batches</option>
-                                            {filteredBatchOptions.map(batchId => (
-                                                <option key={batchId} value={batchId}>
-                                                    {batchMap[batchId] || `Batch ${batchId}`}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Clear Filters */}
                             {(searchTerm || selectedBatchFilter !== 'all') && (
-                                <div className="flex flex-col justify-end">
+                                <div className="mb-4 flex justify-end">
                                     <button
                                         onClick={() => {
                                             setSearchTerm('');
@@ -1296,184 +1295,182 @@ const CourseReports = () => {
                                     </button>
                                 </div>
                             )}
-                        </div>
-                    </div>
 
-                    {/* Tests Table */}
-                    <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead className="bg-gray-50 border-b border-gray-200">
-                                    <tr>
-                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[50px]">
-                                            S. NO
-                                        </th>
-                                        <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
-                                            Test Name
-                                        </th>
-                                        <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
-                                            Category
-                                        </th>
-                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
-                                            Campus
-                                        </th>
-                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
-                                            Batch
-                                        </th>
-                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
-                                            Total Students
-                                        </th>
-                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
-                                            Pending Students
-                                        </th>
-                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">
-                                            Attempts
-                                        </th>
-                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
-                                            Highest Score
-                                        </th>
-                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
-                                            Average Score
-                                        </th>
-                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
-                                            Results Status
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {filteredAndSortedTests.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="11" className="px-6 py-12 text-center">
-                                                <div className="flex flex-col items-center">
-                                                    <BarChart3 className="w-12 h-12 text-gray-400 mb-4" />
-                                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No online tests found</h3>
-                                                    <p className="text-gray-500">No online tests are available for your course.</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filteredAndSortedTests.map((test, index) => (
-                                            <motion.tr
-                                                key={test.test_id}
-                                                initial={{ opacity: 0, y: 20 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                transition={{ delay: index * 0.1 }}
-                                                className="hover:bg-gray-50 cursor-pointer"
-                                                onClick={() => handleTestClick(test.test_id)}
-                                            >
-                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                                                    {index + 1}
-                                                </td>
-                                                <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-normal break-words text-xs sm:text-sm font-medium text-gray-900">
-                                                    {test.test_name}
-                                                </td>
-                                                <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                                                    {test.category}
-                                                </td>
-                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                                                    {Array.isArray(test.campus_ids) && test.campus_ids.length > 0
-                                                        ? (() => {
-                                                            const campusNames = test.campus_ids
-                                                                .map((id) => {
-                                                                    const idStr = String(id).trim();
-                                                                    const name = campusMap[idStr];
-                                                                    if (!name && Object.keys(campusMap).length > 0) {
-                                                                        console.log('Campus not found in map:', {
-                                                                            id,
-                                                                            idStr,
-                                                                            idType: typeof id,
-                                                                            mapKeys: Object.keys(campusMap).slice(0, 3),
-                                                                            testCampusIds: test.campus_ids
-                                                                        });
-                                                                    }
-                                                                    return name;
-                                                                })
-                                                                .filter(Boolean); // Remove undefined/null values
-                                                            
-                                                            return campusNames.length > 0 
-                                                                ? campusNames.join(', ')
-                                                                : test.campus_ids.length > 0 
-                                                                    ? 'Unknown' 
-                                                                    : '-';
-                                                        })()
-                                                        : '-'}
-                                                </td>
-                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                                                    {Array.isArray(test.batch_ids) && test.batch_ids.length > 0
-                                                        ? (() => {
-                                                            const batchNames = test.batch_ids
-                                                                .map((id) => {
-                                                                    const idStr = String(id).trim();
-                                                                    const name = batchMap[idStr];
-                                                                    if (!name && Object.keys(batchMap).length > 0) {
-                                                                        console.log('Batch not found in map:', {
-                                                                            id,
-                                                                            idStr,
-                                                                            idType: typeof id,
-                                                                            mapKeys: Object.keys(batchMap).slice(0, 3),
-                                                                            testBatchIds: test.batch_ids
-                                                                        });
-                                                                    }
-                                                                    return name;
-                                                                })
-                                                                .filter(Boolean); // Remove undefined/null values
-                                                            
-                                                            return batchNames.length > 0 
-                                                                ? batchNames.join(', ')
-                                                                : test.batch_ids.length > 0 
-                                                                    ? 'Unknown' 
-                                                                    : '-';
-                                                        })()
-                                                        : '-'}
-                                                </td>
-                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                                                    {typeof test.total_assigned_students === 'number'
-                                                        ? test.total_assigned_students
-                                                        : 0}
-                                                </td>
-                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                                                    {test.pending_students ?? 0}
-                                                </td>
-                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                                                    {test.total_attempts || 0}
-                                                </td>
-                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-green-600">
-                                                    {test.highest_score?.toFixed(1) || '0.0'}%
-                                                </td>
-                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-blue-600">
-                                                    {test.average_score?.toFixed(1) || '0.0'}%
-                                                </td>
-                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
-                                                    {releaseStatus[test.test_id] ? (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                            <Unlock className="w-3 h-3" />
-                                                            Released
-                                                        </span>
-                                                    ) : (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleReleaseResults(test.test_id, test.test_name);
-                                                            }}
-                                                            disabled={releaseLoading[test.test_id]}
-                                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            {releaseLoading[test.test_id] ? (
-                                                                <RefreshCw className="w-3 h-3 animate-spin" />
+                            {/* Tests Table */}
+                            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[50px]">
+                                                    S. NO
+                                                </th>
+                                                <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
+                                                    Test Name
+                                                </th>
+                                                <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                                                    Category
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                                                    Campus
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                                                    Batch
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                                    Total Students
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                                    Pending Students
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">
+                                                    Attempts
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                                    Highest Score
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                                    Average Score
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                                                    Results Status
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {filteredAndSortedTests.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="11" className="px-6 py-12 text-center">
+                                                        <div className="flex flex-col items-center">
+                                                            <BarChart3 className="w-12 h-12 text-gray-400 mb-4" />
+                                                            <h3 className="text-lg font-medium text-gray-900 mb-2">No online tests found</h3>
+                                                            <p className="text-gray-500">No online tests are available for your course.</p>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                filteredAndSortedTests.map((test, index) => (
+                                                    <motion.tr
+                                                        key={test.test_id}
+                                                        initial={{ opacity: 0, y: 20 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        transition={{ delay: index * 0.1 }}
+                                                        className="hover:bg-gray-50 cursor-pointer"
+                                                        onClick={() => handleTestClick(test.test_id)}
+                                                    >
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {index + 1}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-normal break-words text-xs sm:text-sm font-medium text-gray-900">
+                                                            {test.test_name}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {test.category}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {Array.isArray(test.campus_ids) && test.campus_ids.length > 0
+                                                                ? (() => {
+                                                                    const campusNames = test.campus_ids
+                                                                        .map((id) => {
+                                                                            const idStr = String(id).trim();
+                                                                            const name = campusMap[idStr];
+                                                                            if (!name && Object.keys(campusMap).length > 0) {
+                                                                                console.log('Campus not found in map:', {
+                                                                                    id,
+                                                                                    idStr,
+                                                                                    idType: typeof id,
+                                                                                    mapKeys: Object.keys(campusMap).slice(0, 3),
+                                                                                    testCampusIds: test.campus_ids
+                                                                                });
+                                                                            }
+                                                                            return name;
+                                                                        })
+                                                                        .filter(Boolean); // Remove undefined/null values
+                                                                    
+                                                                    return campusNames.length > 0 
+                                                                        ? campusNames.join(', ')
+                                                                        : test.campus_ids.length > 0 
+                                                                            ? 'Unknown' 
+                                                                            : '-';
+                                                                })()
+                                                                : '-'}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {Array.isArray(test.batch_ids) && test.batch_ids.length > 0
+                                                                ? (() => {
+                                                                    const batchNames = test.batch_ids
+                                                                        .map((id) => {
+                                                                            const idStr = String(id).trim();
+                                                                            const name = batchMap[idStr];
+                                                                            if (!name && Object.keys(batchMap).length > 0) {
+                                                                                console.log('Batch not found in map:', {
+                                                                                    id,
+                                                                                    idStr,
+                                                                                    idType: typeof id,
+                                                                                    mapKeys: Object.keys(batchMap).slice(0, 3),
+                                                                                    testBatchIds: test.batch_ids
+                                                                                });
+                                                                            }
+                                                                            return name;
+                                                                        })
+                                                                        .filter(Boolean); // Remove undefined/null values
+                                                                    
+                                                                    return batchNames.length > 0 
+                                                                        ? batchNames.join(', ')
+                                                                        : test.batch_ids.length > 0 
+                                                                            ? 'Unknown' 
+                                                                            : '-';
+                                                                })()
+                                                                : '-'}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {typeof test.total_assigned_students === 'number'
+                                                                ? test.total_assigned_students
+                                                                : 0}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {test.pending_students ?? 0}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {test.total_attempts || 0}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-green-600">
+                                                            {test.highest_score?.toFixed(1) || '0.0'}%
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-blue-600">
+                                                            {test.average_score?.toFixed(1) || '0.0'}%
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
+                                                            {releaseStatus[test.test_id] ? (
+                                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                                    <Unlock className="w-3 h-3" />
+                                                                    Released
+                                                                </span>
                                                             ) : (
-                                                                <Lock className="w-3 h-3" />
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleReleaseResults(test.test_id, test.test_name);
+                                                                    }}
+                                                                    disabled={releaseLoading[test.test_id]}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {releaseLoading[test.test_id] ? (
+                                                                        <RefreshCw className="w-3 h-3 animate-spin" />
+                                                                    ) : (
+                                                                        <Lock className="w-3 h-3" />
+                                                                    )}
+                                                                    Not Released
+                                                                </button>
                                                             )}
-                                                            Not Released
-                                                        </button>
-                                                    )}
-                                                </td>
-                                            </motion.tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
+                                                        </td>
+                                                    </motion.tr>
+                                                ))
+                                            )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
                         </>
                     )}
                 </motion.div>
