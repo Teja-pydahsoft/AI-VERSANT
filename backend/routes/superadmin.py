@@ -2360,9 +2360,10 @@ def get_online_tests_overview():
             }), 403
         
         # Use aggregation pipeline for better performance
+        # Include both 'active' and 'completed' tests (not just 'completed')
         match_stage = {
             'test_type': 'online',
-            'status': 'completed'
+            'status': {'$in': ['active', 'completed']}
         }
         
         # Filter by campus if user is campus admin
@@ -2376,7 +2377,7 @@ def get_online_tests_overview():
                     {'campus_id': campus_id}
                 ],
                 'test_type': 'online',
-                'status': 'completed'
+                'status': {'$in': ['active', 'completed']}
             }, {'_id': 1}))
             matching_test_ids = [t['_id'] for t in matching_tests]
             if matching_test_ids:
@@ -2392,27 +2393,58 @@ def get_online_tests_overview():
         # Filter by course if user is course admin (course admin should only see tests for their course)
         elif user.get('role') == 'course_admin' and user.get('course_id'):
             course_id = ObjectId(user.get('course_id'))
+            current_app.logger.info(f"Course admin filtering - course_id: {course_id}")
             # First get test_ids that match the course
+            # course_ids is an array, so we need to check if course_id is in the array
+            # MongoDB automatically matches if the value is in the array, so we can use direct match
             matching_tests = list(mongo_db.tests.find({
-                'course_ids': course_id,
+                'course_ids': course_id,  # MongoDB will match if course_id is in the course_ids array
                 'test_type': 'online',
-                'status': 'completed'
-            }, {'_id': 1}))
+                'status': {'$in': ['active', 'completed']}
+            }, {'_id': 1, 'name': 1}))
+            current_app.logger.info(f"Course admin - Found {len(matching_tests)} matching tests")
             matching_test_ids = [t['_id'] for t in matching_tests]
             if matching_test_ids:
                 match_stage['test_id'] = {'$in': matching_test_ids}
+                current_app.logger.info(f"Course admin - Filtering attempts by {len(matching_test_ids)} test_ids")
             else:
-                # No matching tests, return empty result
-                return jsonify({
-                    'success': True,
-                    'data': [],
-                    'message': 'No online tests found for your course'
-                })
+                current_app.logger.info("Course admin - No matching tests found, will check tests without attempts")
+            # Note: Don't return early here - we still need to check for tests without attempts
+            # The tests_without_attempts_query will handle filtering by course_id
         
+        # For course_admin, we need to filter attempts by students in their course
+        # Add a lookup stage to filter by student's course_id
         pipeline = [
             {
                 '$match': match_stage
-            },
+            }
+        ]
+        
+        # For course_admin, add a lookup to filter attempts by student's course_id
+        if user.get('role') == 'course_admin' and user.get('course_id'):
+            user_course_id = ObjectId(user.get('course_id'))
+            pipeline.extend([
+                {
+                    '$lookup': {
+                        'from': 'students',
+                        'localField': 'student_id',
+                        'foreignField': '_id',
+                        'as': 'student_info'
+                    }
+                },
+                {
+                    '$unwind': '$student_info'
+                },
+                {
+                    '$match': {
+                        'student_info.course_id': user_course_id
+                    }
+                }
+            ])
+            current_app.logger.info(f"Course admin - Filtering attempts by course_id: {user_course_id}")
+        
+        # Add grouping stage
+        pipeline.extend([
             {
                 '$group': {
                     '_id': '$test_id',
@@ -2502,18 +2534,21 @@ def get_online_tests_overview():
                 # Sort by created_at so latest tests appear first instead of alphabetical order
                 '$sort': {'created_at': -1}
             }
-        ]
+        ])
         
         # Execute aggregation
         test_stats = list(mongo_db.student_test_attempts.aggregate(pipeline))
+        if user.get('role') == 'course_admin':
+            current_app.logger.info(f"Course admin - Aggregation returned {len(test_stats)} tests with attempts")
         
         # Get tests without attempts
         attempted_test_ids = [stat['test_id'] for stat in test_stats]
         
         # Build query for tests without attempts, applying RBAC filters
+        # Include both 'active' and 'completed' tests
         tests_without_attempts_query = {
             'test_type': 'online',
-            'status': 'completed',
+            'status': {'$in': ['active', 'completed']},
             '_id': {'$nin': attempted_test_ids}
         }
         
@@ -2526,12 +2561,15 @@ def get_online_tests_overview():
             ]
         elif user.get('role') == 'course_admin' and user.get('course_id'):
             course_id = ObjectId(user.get('course_id'))
+            # MongoDB automatically matches if the value is in the array field
             tests_without_attempts_query['course_ids'] = course_id
+            current_app.logger.info(f"Course admin - Filtering tests without attempts by course_id: {course_id}")
         
         tests_without_attempts = list(mongo_db.tests.find(tests_without_attempts_query, {
             '_id': 1, 'name': 1, 'module_id': 1, 'created_at': 1,
             'campus_ids': 1, 'course_ids': 1, 'batch_ids': 1
         }))
+        current_app.logger.info(f"Course admin - Found {len(tests_without_attempts)} tests without attempts")
         
         # Add tests without attempts
         for test in tests_without_attempts:
@@ -2564,7 +2602,7 @@ def get_online_tests_overview():
                 'test_name': stat.get('test_name', 'Unknown Test'),
                 'category': stat.get('category', 'Unknown Category'),
                 'total_attempts': stat.get('total_attempts', 0),
-                # Attempted students based on attempts collection
+                # Attempted students based on attempts collection (already filtered by RBAC in aggregation)
                 'attempted_students': stat.get('attempted_students_count', 0),
                 # Placeholders, will be updated with accurate values below
                 'total_assigned_students': 0,
@@ -2579,6 +2617,7 @@ def get_online_tests_overview():
 
         # Compute accurate total_assigned_students and pending_students
         # by reusing the same assignment logic as the detailed test attempts endpoint.
+        # For course_admin and campus_admin, filter by their assigned course/campus
         for test in tests_overview:
             total_assigned = 0
 
@@ -2601,9 +2640,24 @@ def get_online_tests_overview():
                 if batch_ids:
                     student_query['batch_id'] = {'$in': batch_ids}
 
+                # Apply RBAC filtering: course_admin should only see students from their course
+                if user.get('role') == 'course_admin' and user.get('course_id'):
+                    user_course_id = ObjectId(user.get('course_id'))
+                    # Override course_ids filter to only include the course admin's course
+                    student_query['course_id'] = user_course_id
+                    current_app.logger.info(f"Course admin - Filtering students by course_id: {user_course_id}")
+                # Apply RBAC filtering: campus_admin should only see students from their campus
+                elif user.get('role') == 'campus_admin' and user.get('campus_id'):
+                    user_campus_id = ObjectId(user.get('campus_id'))
+                    # Override campus_ids filter to only include the campus admin's campus
+                    student_query['campus_id'] = user_campus_id
+                    current_app.logger.info(f"Campus admin - Filtering students by campus_id: {user_campus_id}")
+
                 if student_query:
                     try:
                         total_assigned = mongo_db.students.count_documents(student_query)
+                        if user.get('role') == 'course_admin':
+                            current_app.logger.info(f"Course admin - Test {test['test_id']}: {total_assigned} accessible students")
                     except Exception:
                         total_assigned = 0
 
@@ -2612,6 +2666,9 @@ def get_online_tests_overview():
 
             test['total_assigned_students'] = total_assigned
             test['pending_students'] = pending
+        
+        if user.get('role') == 'course_admin':
+            current_app.logger.info(f"Course admin - Returning {len(tests_overview)} total tests in overview")
         
         return jsonify({
             'success': True,

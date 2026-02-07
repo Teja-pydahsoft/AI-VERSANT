@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     BarChart3, 
@@ -722,11 +722,15 @@ const TestDetailsView = ({
     );
 };
 
-// Main CourseReports Component - Similar structure to CampusReports
+// Main CourseReports Component - Similar structure to SuperAdmin ResultsManagement
 const CourseReports = () => {
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
     const [tests, setTests] = useState([]);
+    const [batches, setBatches] = useState([]);
+    const [campuses, setCampuses] = useState([]);
+    const [selectedBatchFilter, setSelectedBatchFilter] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
     const [testAttempts, setTestAttempts] = useState({});
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [studentAttemptDetails, setStudentAttemptDetails] = useState(null);
@@ -746,21 +750,146 @@ const CourseReports = () => {
         window.scrollTo(0, 0);
         fetchTests();
         fetchAutoReleaseSettings();
+        fetchFilterData();
     }, []);
+
+    const fetchFilterData = async () => {
+        try {
+            // Fetch batches for the course admin's course
+            // Use batch-management/campuses endpoint which doesn't require campus_management permission
+            const [batchRes, campusRes] = await Promise.all([
+                user?.course_id ? api.get(`/batch-management/?course_id=${user.course_id}`) : Promise.resolve({ data: { data: [] } }),
+                api.get('/batch-management/campuses').catch(() => ({ data: { data: [] } })) // Fallback if endpoint fails
+            ]);
+            
+            if (batchRes?.data?.data) {
+                setBatches(batchRes.data.data);
+                console.log('Course Admin - Batches fetched:', batchRes.data.data.length, batchRes.data.data);
+            } else if (Array.isArray(batchRes?.data)) {
+                setBatches(batchRes.data);
+                console.log('Course Admin - Batches fetched (array):', batchRes.data.length);
+            }
+            
+            if (campusRes?.data?.data) {
+                setCampuses(campusRes.data.data);
+                console.log('Course Admin - Campuses fetched:', campusRes.data.data.length, campusRes.data.data);
+            } else if (Array.isArray(campusRes?.data)) {
+                setCampuses(campusRes.data);
+                console.log('Course Admin - Campuses fetched (array):', campusRes.data.length);
+            }
+        } catch (err) {
+            console.error('Error fetching filter data:', err);
+        }
+    };
+
+    // Batch map for quick lookups
+    const batchMap = useMemo(() => {
+        const map = {};
+        batches.forEach(batch => {
+            if (!batch) return;
+            // Backend returns batches with 'id' field (string)
+            const id = batch.id || batch._id || batch.batch_id;
+            if (!id) {
+                console.warn('Batch missing ID:', batch);
+                return;
+            }
+            // Normalize to string and store
+            const idStr = String(id).trim();
+            const name = batch.name || batch.batch_name || batch.label || 'Unnamed Batch';
+            map[idStr] = name;
+        });
+        console.log('Course Admin - Batch Map created:', Object.keys(map).length, 'batches');
+        if (Object.keys(map).length > 0) {
+            console.log('Course Admin - Sample batch IDs:', Object.keys(map).slice(0, 3));
+        }
+        return map;
+    }, [batches]);
+
+    // Campus map for quick lookups
+    const campusMap = useMemo(() => {
+        const map = {};
+        campuses.forEach(campus => {
+            if (!campus) return;
+            // Backend returns campuses with 'id' field (string)
+            const id = campus.id || campus._id || campus.campus_id;
+            if (!id) {
+                console.warn('Campus missing ID:', campus);
+                return;
+            }
+            // Normalize to string and store
+            const idStr = String(id).trim();
+            const name = campus.name || campus.campus_name || campus.label || 'Unnamed Campus';
+            map[idStr] = name;
+        });
+        console.log('Course Admin - Campus Map created:', Object.keys(map).length, 'campuses');
+        if (Object.keys(map).length > 0) {
+            console.log('Course Admin - Sample campus IDs:', Object.keys(map).slice(0, 3));
+        }
+        return map;
+    }, [campuses]);
+
+    // Apply batch filter and search, ensure latest tests appear first
+    const filteredAndSortedTests = useMemo(() => {
+        const filtered = tests.filter(test => {
+            // Search filter for test name
+            const matchesSearch = !searchTerm || 
+                (test.test_name && test.test_name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+            const batchIds = test.batch_ids || [];
+
+            const matchesBatch =
+                selectedBatchFilter === 'all' ||
+                (Array.isArray(batchIds) && batchIds.includes(selectedBatchFilter));
+
+            return matchesSearch && matchesBatch;
+        });
+
+        return [...filtered].sort((a, b) => {
+            const aDate = a.created_at ? new Date(a.created_at) : new Date(0);
+            const bDate = b.created_at ? new Date(b.created_at) : new Date(0);
+            return bDate - aDate; // latest first
+        });
+    }, [tests, selectedBatchFilter, searchTerm]);
+
+    // Batch options from available tests
+    const filteredBatchOptions = useMemo(() => {
+        const ids = new Set();
+        tests.forEach(test => {
+            const batchIds = test.batch_ids || [];
+            if (Array.isArray(batchIds)) {
+                batchIds.forEach(id => ids.add(String(id)));
+            }
+        });
+        return Array.from(ids);
+    }, [tests]);
 
     const fetchTests = async () => {
         try {
             setLoading(true);
             setErrorMsg("");
             
-            // Use course-specific endpoint with campus filtering
-            const params = new URLSearchParams();
-            if (user?.course_id) params.append('course_id', user.course_id);
-            if (user?.campus_id) params.append('campus_id', user.campus_id);
+            // Backend automatically filters by course_id based on user role (RBAC)
+            const response = await api.get('/superadmin/online-tests-overview');
+            console.log('Course Admin - Tests Overview Response:', {
+                success: response.data.success,
+                dataLength: response.data.data?.length || 0,
+                message: response.data.message,
+                sampleTest: response.data.data?.[0]
+            });
             
-            const response = await api.get(`/superadmin/online-tests-overview?${params.toString()}`);
             if (response.data.success) {
-                setTests(response.data.data || []);
+                const testsData = response.data.data || [];
+                console.log('Course Admin - Setting tests:', testsData.length, 'tests');
+                if (testsData.length > 0) {
+                    console.log('Course Admin - Sample test:', {
+                        test_id: testsData[0].test_id,
+                        campus_ids: testsData[0].campus_ids,
+                        batch_ids: testsData[0].batch_ids,
+                        campus_ids_type: typeof testsData[0].campus_ids?.[0],
+                        batch_ids_type: typeof testsData[0].batch_ids?.[0]
+                    });
+                }
+                setTests(testsData);
             } else {
                 setErrorMsg(response.data.message || 'Failed to fetch tests.');
                 error(response.data.message || 'Failed to fetch tests.');
@@ -768,7 +897,8 @@ const CourseReports = () => {
         } catch (err) {
             setErrorMsg('Failed to fetch tests. Please check your login status and try again.');
             error('Failed to fetch tests.');
-            console.error('Error fetching tests:', err);
+            console.error('Course Admin - Error fetching tests:', err);
+            console.error('Course Admin - Error response:', err.response?.data);
         } finally {
             setLoading(false);
         }
@@ -776,23 +906,11 @@ const CourseReports = () => {
 
     const fetchTestAttempts = async (testId) => {
         try {
-            // Pass both course_id and campus_id as query parameters to filter on backend
-            const params = new URLSearchParams();
-            if (user?.course_id) params.append('course_id', user.course_id);
-            if (user?.campus_id) params.append('campus_id', user.campus_id);
-            
-            const response = await api.get(`/superadmin/test-attempts/${testId}?${params.toString()}`);
+            // Backend automatically filters by course_id based on user role (RBAC)
+            const response = await api.get(`/superadmin/test-attempts/${testId}`);
             
             if (response.data.success) {
                 const attempts = response.data.data || [];
-                
-                console.log('Course Admin - Test Attempts:', {
-                    testId,
-                    userCourseId: user?.course_id,
-                    userCampusId: user?.campus_id,
-                    attemptsReceived: attempts.length,
-                    sampleAttempt: attempts[0]
-                });
                 
                 setTestAttempts(prev => ({
                     ...prev,
@@ -1090,19 +1208,19 @@ const CourseReports = () => {
                     ) : (
                         <>
                             {/* Header */}
-                            <div className="flex justify-between items-center mb-8">
+                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
                                 <div>
-                                    <h1 className="text-3xl font-bold text-gray-900">
+                                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
                                         Online Tests Overview
                                     </h1>
-                                    <p className="mt-2 text-gray-600">
+                                    <p className="mt-2 text-sm sm:text-base text-gray-600">
                                         Click on a test to view student attempts and detailed results
                                     </p>
                                 </div>
                                 <div className="flex gap-3">
                                     <button
                                         onClick={() => setShowAutoReleaseModal(true)}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
                                     >
                                         <Settings className="w-4 h-4" />
                                         Auto Release Settings
@@ -1117,36 +1235,115 @@ const CourseReports = () => {
                         </div>
                     )}
 
+                    {/* Search and Filter Section */}
+                    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-6">
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            {/* Search Bar */}
+                            <div className="flex-1">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search tests by name..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                                    />
+                                    {searchTerm && (
+                                        <button
+                                            onClick={() => setSearchTerm('')}
+                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                        >
+                                            <X className="w-5 h-5" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Batch Filter */}
+                            {filteredBatchOptions.length > 0 && (
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <div className="flex flex-col">
+                                        <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Batch</label>
+                                        <select
+                                            value={selectedBatchFilter}
+                                            onChange={(e) => setSelectedBatchFilter(e.target.value)}
+                                            className="px-3 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm sm:text-base min-w-[150px]"
+                                        >
+                                            <option value="all">All Batches</option>
+                                            {filteredBatchOptions.map(batchId => (
+                                                <option key={batchId} value={batchId}>
+                                                    {batchMap[batchId] || `Batch ${batchId}`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Clear Filters */}
+                            {(searchTerm || selectedBatchFilter !== 'all') && (
+                                <div className="flex flex-col justify-end">
+                                    <button
+                                        onClick={() => {
+                                            setSearchTerm('');
+                                            setSelectedBatchFilter('all');
+                                        }}
+                                        className="flex items-center gap-2 px-4 py-2 sm:py-2.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                    >
+                                        <RefreshCw className="w-4 h-4" />
+                                        Clear Filters
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     {/* Tests Table */}
                     <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead className="bg-gray-50 border-b border-gray-200">
                                     <tr>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[50px]">
+                                            S. NO
+                                        </th>
+                                        <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                                             Test Name
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
                                             Category
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                                            Campus
+                                        </th>
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                                            Batch
+                                        </th>
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                            Total Students
+                                        </th>
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                            Pending Students
+                                        </th>
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">
                                             Attempts
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                                             Highest Score
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                                             Average Score
                                         </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
                                             Results Status
                                         </th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                    {tests.length === 0 ? (
+                                    {filteredAndSortedTests.length === 0 ? (
                                         <tr>
-                                            <td colSpan="6" className="px-6 py-12 text-center">
+                                            <td colSpan="11" className="px-6 py-12 text-center">
                                                 <div className="flex flex-col items-center">
                                                     <BarChart3 className="w-12 h-12 text-gray-400 mb-4" />
                                                     <h3 className="text-lg font-medium text-gray-900 mb-2">No online tests found</h3>
@@ -1155,7 +1352,7 @@ const CourseReports = () => {
                                             </td>
                                         </tr>
                                     ) : (
-                                        tests.map((test, index) => (
+                                        filteredAndSortedTests.map((test, index) => (
                                             <motion.tr
                                                 key={test.test_id}
                                                 initial={{ opacity: 0, y: 20 }}
@@ -1164,34 +1361,89 @@ const CourseReports = () => {
                                                 className="hover:bg-gray-50 cursor-pointer"
                                                 onClick={() => handleTestClick(test.test_id)}
                                             >
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center">
-                                                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
-                                                            {test.test_name?.charAt(0)?.toUpperCase() || 'T'}
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-medium text-gray-900">
-                                                                {test.test_name}
-                                                            </div>
-                                                            <div className="text-sm text-gray-500">
-                                                                {test.unique_students} students
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                    {index + 1}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-normal break-words text-xs sm:text-sm font-medium text-gray-900">
+                                                    {test.test_name}
+                                                </td>
+                                                <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                                     {test.category}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    {test.total_attempts}
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                    {Array.isArray(test.campus_ids) && test.campus_ids.length > 0
+                                                        ? (() => {
+                                                            const campusNames = test.campus_ids
+                                                                .map((id) => {
+                                                                    const idStr = String(id).trim();
+                                                                    const name = campusMap[idStr];
+                                                                    if (!name && Object.keys(campusMap).length > 0) {
+                                                                        console.log('Campus not found in map:', {
+                                                                            id,
+                                                                            idStr,
+                                                                            idType: typeof id,
+                                                                            mapKeys: Object.keys(campusMap).slice(0, 3),
+                                                                            testCampusIds: test.campus_ids
+                                                                        });
+                                                                    }
+                                                                    return name;
+                                                                })
+                                                                .filter(Boolean); // Remove undefined/null values
+                                                            
+                                                            return campusNames.length > 0 
+                                                                ? campusNames.join(', ')
+                                                                : test.campus_ids.length > 0 
+                                                                    ? 'Unknown' 
+                                                                    : '-';
+                                                        })()
+                                                        : '-'}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                                                    {test.highest_score}%
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                    {Array.isArray(test.batch_ids) && test.batch_ids.length > 0
+                                                        ? (() => {
+                                                            const batchNames = test.batch_ids
+                                                                .map((id) => {
+                                                                    const idStr = String(id).trim();
+                                                                    const name = batchMap[idStr];
+                                                                    if (!name && Object.keys(batchMap).length > 0) {
+                                                                        console.log('Batch not found in map:', {
+                                                                            id,
+                                                                            idStr,
+                                                                            idType: typeof id,
+                                                                            mapKeys: Object.keys(batchMap).slice(0, 3),
+                                                                            testBatchIds: test.batch_ids
+                                                                        });
+                                                                    }
+                                                                    return name;
+                                                                })
+                                                                .filter(Boolean); // Remove undefined/null values
+                                                            
+                                                            return batchNames.length > 0 
+                                                                ? batchNames.join(', ')
+                                                                : test.batch_ids.length > 0 
+                                                                    ? 'Unknown' 
+                                                                    : '-';
+                                                        })()
+                                                        : '-'}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                                                    {test.average_score}%
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                    {typeof test.total_assigned_students === 'number'
+                                                        ? test.total_assigned_students
+                                                        : 0}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                    {test.pending_students ?? 0}
+                                                </td>
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                    {test.total_attempts || 0}
+                                                </td>
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-green-600">
+                                                    {test.highest_score?.toFixed(1) || '0.0'}%
+                                                </td>
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-blue-600">
+                                                    {test.average_score?.toFixed(1) || '0.0'}%
+                                                </td>
+                                                <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
                                                     {releaseStatus[test.test_id] ? (
                                                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                                             <Unlock className="w-3 h-3" />
