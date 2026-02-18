@@ -2528,7 +2528,6 @@ def get_online_tests_overview():
                     'category': '$test_details.module_id',
                     'created_at': '$test_details.created_at',
                     'total_attempts': 1,
-                    # Number of students who have attempted at least once
                     'attempted_students_count': {'$size': '$unique_students'},
                     'highest_score': {
                         '$ifNull': [
@@ -2542,27 +2541,60 @@ def get_online_tests_overview():
                             0
                         ]
                     },
+                    'campus_ids': '$test_details.campus_ids',
+                    'course_ids': '$test_details.course_ids',
+                    'batch_ids': '$test_details.batch_ids'
+                }
+            },
+            {
+                '$lookup': {
+                    'from': 'campuses',
+                    'localField': 'campus_ids',
+                    'foreignField': '_id',
+                    'as': 'campus_docs'
+                }
+            },
+            {
+                '$lookup': {
+                    'from': 'batches',
+                    'localField': 'batch_ids',
+                    'foreignField': '_id',
+                    'as': 'batch_docs'
+                }
+            },
+            {
+                '$project': {
+                    'test_id': 1,
+                    'test_name': 1,
+                    'category': 1,
+                    'created_at': 1,
+                    'total_attempts': 1,
+                    'attempted_students_count': 1,
+                    'highest_score': 1,
+                    'average_score': 1,
                     'campus_ids': {
                         '$map': {
-                            'input': '$test_details.campus_ids',
-                            'as': 'campus_id',
-                            'in': {'$toString': '$$campus_id'}
+                            'input': {'$ifNull': ['$campus_ids', []]},
+                            'as': 'cid',
+                            'in': {'$toString': '$$cid'}
                         }
                     },
                     'course_ids': {
                         '$map': {
-                            'input': '$test_details.course_ids',
-                            'as': 'course_id',
-                            'in': {'$toString': '$$course_id'}
+                            'input': {'$ifNull': ['$course_ids', []]},
+                            'as': 'cid',
+                            'in': {'$toString': '$$cid'}
                         }
                     },
                     'batch_ids': {
                         '$map': {
-                            'input': '$test_details.batch_ids',
-                            'as': 'batch_id',
-                            'in': {'$toString': '$$batch_id'}
+                            'input': {'$ifNull': ['$batch_ids', []]},
+                            'as': 'bid',
+                            'in': {'$toString': '$$bid'}
                         }
-                    }
+                    },
+                    'campus_names': '$campus_docs.name',
+                    'batch_names': '$batch_docs.name'
                 }
             },
             {
@@ -2609,10 +2641,35 @@ def get_online_tests_overview():
             tests_without_attempts_query['course_ids'] = course_id
             current_app.logger.info(f"Course admin - Filtering tests without attempts by course_id: {course_id}")
         
-        tests_without_attempts = list(mongo_db.tests.find(tests_without_attempts_query, {
-            '_id': 1, 'name': 1, 'module_id': 1, 'created_at': 1,
-            'campus_ids': 1, 'course_ids': 1, 'batch_ids': 1
-        }))
+        # Use aggregation for tests without attempts as well to get campus and batch names
+        tests_without_attempts_pipeline = [
+            {'$match': tests_without_attempts_query},
+            {
+                '$lookup': {
+                    'from': 'campuses',
+                    'localField': 'campus_ids',
+                    'foreignField': '_id',
+                    'as': 'campus_docs'
+                }
+            },
+            {
+                '$lookup': {
+                    'from': 'batches',
+                    'localField': 'batch_ids',
+                    'foreignField': '_id',
+                    'as': 'batch_docs'
+                }
+            },
+            {
+                '$project': {
+                    '_id': 1, 'name': 1, 'module_id': 1, 'created_at': 1,
+                    'campus_ids': 1, 'course_ids': 1, 'batch_ids': 1,
+                    'campus_names': '$campus_docs.name',
+                    'batch_names': '$batch_docs.name'
+                }
+            }
+        ]
+        tests_without_attempts = list(mongo_db.tests.aggregate(tests_without_attempts_pipeline))
         current_app.logger.info(f"Course admin - Found {len(tests_without_attempts)} tests without attempts")
         
         # Add tests without attempts
@@ -2629,7 +2686,9 @@ def get_online_tests_overview():
                 'average_score': 0,
                 'campus_ids': [str(cid) for cid in test.get('campus_ids', [])],
                 'course_ids': [str(cid) for cid in test.get('course_ids', [])],
-                'batch_ids': [str(bid) for bid in test.get('batch_ids', [])]
+                'batch_ids': [str(bid) for bid in test.get('batch_ids', [])],
+                'campus_names': test.get('campus_names', []),
+                'batch_names': test.get('batch_names', [])
             })
 
         # Ensure final stats are sorted by created_at descending so the newest tests are always first
@@ -2656,7 +2715,9 @@ def get_online_tests_overview():
                 'created_at': safe_isoformat(stat.get('created_at')),
                 'campus_ids': [str(cid) for cid in stat.get('campus_ids', [])],
                 'course_ids': [str(cid) for cid in stat.get('course_ids', [])],
-                'batch_ids': [str(bid) for bid in stat.get('batch_ids', [])]
+                'batch_ids': [str(bid) for bid in stat.get('batch_ids', [])],
+                'campus_names': stat.get('campus_names', []),
+                'batch_names': stat.get('batch_names', [])
             })
 
         # Compute accurate total_assigned_students and pending_students

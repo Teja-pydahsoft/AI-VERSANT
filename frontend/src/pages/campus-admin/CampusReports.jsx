@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    BarChart3, 
-    Users, 
-    TrendingUp, 
-    Eye, 
-    ChevronDown, 
+import {
+    BarChart3,
+    Users,
+    TrendingUp,
+    Eye,
+    ChevronDown,
     ChevronUp,
     FileSpreadsheet,
     Download,
@@ -25,7 +25,6 @@ import {
     FileSpreadsheet as ExcelIcon,
     Unlock,
     Lock,
-    AlertCircle,
     Settings
 } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -38,12 +37,12 @@ import AutoReleaseSettingsModal from '../../components/common/AutoReleaseSetting
 import { autoReleaseSettingsAPI } from '../../services/autoReleaseSettings';
 
 // Test Details View Component
-const TestDetailsView = ({ 
-    test, 
-    testAttempts, 
-    onBack, 
-    onStudentClick, 
-    onExportTestResults, 
+const TestDetailsView = ({
+    test,
+    testAttempts,
+    onBack,
+    onStudentClick,
+    onExportTestResults,
     exportLoading,
     releaseStatus,
     releaseLoading,
@@ -52,28 +51,28 @@ const TestDetailsView = ({
     autoReleaseSchedule
 }) => {
     const attempts = testAttempts[test.test_id] || [];
-    
+
     // Filter states
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCampus, setSelectedCampus] = useState('all');
     const [selectedCourse, setSelectedCourse] = useState('all');
     const [selectedBatch, setSelectedBatch] = useState('all');
     const [selectedStatus, setSelectedStatus] = useState('all');
-    
+
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
-    
+
     // Reset pagination when filters change
     useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm, selectedCampus, selectedCourse, selectedBatch, selectedStatus]);
-    
+
     // Extract unique values for filters
     const uniqueCampuses = [...new Set(attempts.map(student => student.campus_name).filter(Boolean))];
     const uniqueCourses = [...new Set(attempts.map(student => student.course_name).filter(Boolean))];
     const uniqueBatches = [...new Set(attempts.map(student => student.batch_name).filter(Boolean))];
-    
+
     // Auto-select single values
     useEffect(() => {
         if (uniqueCampuses.length === 1) {
@@ -86,57 +85,57 @@ const TestDetailsView = ({
             setSelectedBatch(uniqueBatches[0]);
         }
     }, [uniqueCampuses, uniqueCourses, uniqueBatches]);
-    
+
     // Filter students based on all criteria
     const filteredAttempts = attempts.filter(student => {
         // Search filter
         const searchLower = searchTerm.toLowerCase();
-        const matchesSearch = !searchTerm || 
+        const matchesSearch = !searchTerm ||
             student.student_name?.toLowerCase().includes(searchLower) ||
             student.student_email?.toLowerCase().includes(searchLower) ||
             student.roll_number?.toLowerCase().includes(searchLower) ||
             student.campus_name?.toLowerCase().includes(searchLower) ||
             student.course_name?.toLowerCase().includes(searchLower) ||
             student.batch_name?.toLowerCase().includes(searchLower);
-        
+
         // Campus filter
         const matchesCampus = selectedCampus === 'all' || student.campus_name === selectedCampus;
-        
+
         // Course filter
         const matchesCourse = selectedCourse === 'all' || student.course_name === selectedCourse;
-        
+
         // Batch filter
         const matchesBatch = selectedBatch === 'all' || student.batch_name === selectedBatch;
-        
+
         // Status filter
-        const matchesStatus = selectedStatus === 'all' || 
+        const matchesStatus = selectedStatus === 'all' ||
             (selectedStatus === 'attempted' && student.has_attempted) ||
             (selectedStatus === 'unattempted' && !student.has_attempted);
-        
+
         return matchesSearch && matchesCampus && matchesCourse && matchesBatch && matchesStatus;
     });
-    
+
     // Reset pagination when filters change
     React.useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm, selectedCampus, selectedCourse, selectedBatch, selectedStatus]);
-    
+
     // Pagination logic
     const totalPages = Math.ceil(filteredAttempts.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedAttempts = filteredAttempts.slice(startIndex, endIndex);
-    
+
     // Calculate analytics based on filtered data
     const totalStudents = filteredAttempts.length;
     const attemptedStudents = filteredAttempts.filter(student => student.has_attempted).length;
     const unattemptedStudents = totalStudents - attemptedStudents;
     const passedStudents = filteredAttempts.filter(student => student.has_attempted && student.highest_score >= 50).length;
     const failedStudents = attemptedStudents - passedStudents;
-    const averageTime = filteredAttempts.length > 0 
+    const averageTime = filteredAttempts.length > 0
         ? (filteredAttempts.reduce((sum, student) => sum + (student.average_time || 0), 0) / filteredAttempts.length).toFixed(1)
         : 0;
-    
+
     // Reset all filters
     const resetFilters = () => {
         setSearchTerm('');
@@ -146,7 +145,7 @@ const TestDetailsView = ({
         setSelectedStatus('all');
         setCurrentPage(1);
     };
-    
+
     // Get active filter count
     const activeFiltersCount = [
         searchTerm,
@@ -155,96 +154,96 @@ const TestDetailsView = ({
         selectedBatch !== 'all' && uniqueBatches.length > 1,
         selectedStatus !== 'all'
     ].filter(Boolean).length;
-    
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
             {/* Header with Back Button */}
-            <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-                <button
-                    onClick={onBack}
-                    className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                    <ChevronDown className="w-4 h-4 rotate-90" />
-                    Back to Tests
-                </button>
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{test.test_name}</h1>
-                    <p className="text-gray-600">Detailed analysis and student performance</p>
-                    
-                    {/* Auto Release Schedule Info */}
-                    {autoReleaseSchedule && (
-                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <div className="flex items-center space-x-2">
-                                <Clock className="w-4 h-4 text-blue-600" />
-                                <span className="text-sm font-medium text-blue-900">Auto Release Scheduled</span>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    <button
+                        onClick={onBack}
+                        className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors self-start"
+                    >
+                        <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 rotate-90" />
+                        <span>Back to Tests</span>
+                    </button>
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 break-words">{test.test_name}</h1>
+                        <p className="text-xs sm:text-sm md:text-base text-gray-600 mt-1">Detailed analysis and student performance</p>
+
+                        {/* Auto Release Schedule Info */}
+                        {autoReleaseSchedule && (
+                            <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center space-x-2">
+                                    <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 flex-shrink-0" />
+                                    <span className="text-xs sm:text-sm font-medium text-blue-900">Auto Release Scheduled</span>
+                                </div>
+                                <p className="text-xs sm:text-sm text-blue-700 mt-1 break-words">
+                                    Results will be automatically released on{' '}
+                                    {new Date(autoReleaseSchedule.scheduled_release_time).toLocaleString()}
+                                </p>
+                                {autoReleaseSchedule.status === 'pending' && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mt-2">
+                                        Pending
+                                    </span>
+                                )}
                             </div>
-                            <p className="text-sm text-blue-700 mt-1">
-                                Results will be automatically released on{' '}
-                                {new Date(autoReleaseSchedule.scheduled_release_time).toLocaleString()}
-                            </p>
-                            {autoReleaseSchedule.status === 'pending' && (
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mt-2">
-                                    Pending
-                                </span>
-                            )}
-                        </div>
-                    )}
+                        )}
                     </div>
                 </div>
-                
+
                 {/* Release Controls */}
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                     {releaseStatus[test.test_id] ? (
-                        <div className="flex items-center gap-3">
-                            <span className="inline-flex items-center gap-1 px-3 py-2 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                                <Unlock className="w-4 h-4" />
-                                Results Released
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+                            <span className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-full text-xs sm:text-sm font-medium bg-green-100 text-green-800">
+                                <Unlock className="w-3 h-3 sm:w-4 sm:h-4" />
+                                <span>Results Released</span>
                             </span>
                             <button
                                 onClick={() => onUnreleaseResults(test.test_id, test.test_name)}
                                 disabled={releaseLoading[test.test_id]}
-                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {releaseLoading[test.test_id] ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                 ) : (
-                                    <Lock className="w-4 h-4" />
+                                    <Lock className="w-3 h-3 sm:w-4 sm:h-4" />
                                 )}
-                                Revoke Release
+                                <span>Revoke Release</span>
                             </button>
                         </div>
                     ) : (
                         <button
                             onClick={() => onReleaseResults(test.test_id, test.test_name)}
                             disabled={releaseLoading[test.test_id]}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {releaseLoading[test.test_id] ? (
-                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                             ) : (
-                                <Unlock className="w-4 h-4" />
+                                <Unlock className="w-3 h-3 sm:w-4 sm:h-4" />
                             )}
-                            Release Results
+                            <span>Release Results</span>
                         </button>
                     )}
                 </div>
             </div>
 
             {/* Analytics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Total Assigned</p>
-                            <p className="text-3xl font-bold text-gray-900">{totalStudents}</p>
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Total Assigned</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{totalStudents}</p>
                         </div>
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Users className="w-6 h-6 text-blue-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -253,15 +252,15 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Attempted</p>
-                            <p className="text-3xl font-bold text-green-600">{attemptedStudents}</p>
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Attempted</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-green-600">{attemptedStudents}</p>
                         </div>
-                        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                            <CheckCircle className="w-6 h-6 text-green-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -270,15 +269,15 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Unattempted</p>
-                            <p className="text-3xl font-bold text-red-600">{unattemptedStudents}</p>
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Unattempted</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-red-600">{unattemptedStudents}</p>
                         </div>
-                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                            <XCircle className="w-6 h-6 text-red-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <XCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -287,17 +286,17 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Pass Rate</p>
-                            <p className="text-3xl font-bold text-blue-600">
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Pass Rate</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-blue-600">
                                 {attemptedStudents > 0 ? ((passedStudents / attemptedStudents) * 100).toFixed(1) : 0}%
                             </p>
                         </div>
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                            <TrendingUp className="w-6 h-6 text-blue-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -306,17 +305,17 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Highest Score</p>
-                            <p className="text-3xl font-bold text-purple-600">
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Highest Score</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-purple-600">
                                 {attemptedStudents > 0 ? Math.max(...filteredAttempts.filter(s => s.has_attempted).map(s => s.highest_score)).toFixed(1) : 0}%
                             </p>
                         </div>
-                        <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                            <BarChart3 className="w-6 h-6 text-purple-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
                         </div>
                     </div>
                 </motion.div>
@@ -325,35 +324,35 @@ const TestDetailsView = ({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6"
                 >
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-600">Average Score</p>
-                            <p className="text-3xl font-bold text-orange-600">
+                            <p className="text-xs sm:text-sm font-medium text-gray-600">Average Score</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-orange-600">
                                 {attemptedStudents > 0 ? (filteredAttempts.filter(s => s.has_attempted).reduce((sum, s) => sum + s.average_score, 0) / attemptedStudents).toFixed(1) : 0}%
                             </p>
                         </div>
-                        <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                            <TrendingUp className="w-6 h-6 text-orange-600" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
                         </div>
                     </div>
                 </motion.div>
             </div>
 
             {/* Filters and Search Section */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-                <div className="flex flex-col lg:flex-row gap-4 mb-4">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-3 sm:p-4 md:p-6">
+                <div className="flex flex-col lg:flex-row gap-3 sm:gap-4 mb-3 sm:mb-4">
                     {/* Search Bar */}
                     <div className="flex-1">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <Search className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
                             <input
                                 type="text"
-                                placeholder="Search students by name, email, roll number, campus, course, or batch..."
+                                placeholder="Search students..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                             {searchTerm && (
                                 <button
@@ -367,17 +366,16 @@ const TestDetailsView = ({
                     </div>
 
                     {/* Filter Controls */}
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2 sm:gap-3">
                         {/* Campus Filter */}
-                        <div className="flex flex-col">
-                            <label className="text-sm font-medium text-gray-700 mb-1">Campus</label>
+                        <div className="flex flex-col min-w-[120px] sm:min-w-[150px]">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Campus</label>
                             <select
                                 value={selectedCampus}
                                 onChange={(e) => setSelectedCampus(e.target.value)}
                                 disabled={uniqueCampuses.length <= 1}
-                                className={`px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                    uniqueCampuses.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-                                }`}
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${uniqueCampuses.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                                    }`}
                             >
                                 {uniqueCampuses.length > 1 && <option value="all">All Campuses</option>}
                                 {uniqueCampuses.map(campus => (
@@ -387,15 +385,14 @@ const TestDetailsView = ({
                         </div>
 
                         {/* Course Filter */}
-                        <div className="flex flex-col">
-                            <label className="text-sm font-medium text-gray-700 mb-1">Course</label>
+                        <div className="flex flex-col min-w-[120px] sm:min-w-[150px]">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Course</label>
                             <select
                                 value={selectedCourse}
                                 onChange={(e) => setSelectedCourse(e.target.value)}
                                 disabled={uniqueCourses.length <= 1}
-                                className={`px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                    uniqueCourses.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-                                }`}
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${uniqueCourses.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                                    }`}
                             >
                                 {uniqueCourses.length > 1 && <option value="all">All Courses</option>}
                                 {uniqueCourses.map(course => (
@@ -405,15 +402,14 @@ const TestDetailsView = ({
                         </div>
 
                         {/* Batch Filter */}
-                        <div className="flex flex-col">
-                            <label className="text-sm font-medium text-gray-700 mb-1">Batch</label>
+                        <div className="flex flex-col min-w-[120px] sm:min-w-[150px]">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Batch</label>
                             <select
                                 value={selectedBatch}
                                 onChange={(e) => setSelectedBatch(e.target.value)}
                                 disabled={uniqueBatches.length <= 1}
-                                className={`px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                    uniqueBatches.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-                                }`}
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${uniqueBatches.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                                    }`}
                             >
                                 {uniqueBatches.length > 1 && <option value="all">All Batches</option>}
                                 {uniqueBatches.map(batch => (
@@ -423,12 +419,12 @@ const TestDetailsView = ({
                         </div>
 
                         {/* Status Filter */}
-                        <div className="flex flex-col">
-                            <label className="text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <div className="flex flex-col min-w-[120px] sm:min-w-[150px]">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1">Status</label>
                             <select
                                 value={selectedStatus}
                                 onChange={(e) => setSelectedStatus(e.target.value)}
-                                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                             >
                                 <option value="all">All Students</option>
                                 <option value="attempted">Attempted</option>
@@ -441,10 +437,10 @@ const TestDetailsView = ({
                             <div className="flex flex-col justify-end">
                                 <button
                                     onClick={resetFilters}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                    className="flex items-center justify-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                                 >
-                                    <RefreshCw className="w-4 h-4" />
-                                    Reset Filters
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4" />
+                                    <span>Reset</span>
                                 </button>
                             </div>
                         )}
@@ -452,21 +448,21 @@ const TestDetailsView = ({
                 </div>
 
                 {/* Filter Status */}
-                <div className="flex items-center justify-between text-sm text-gray-600">
-                    <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 text-xs sm:text-sm text-gray-600">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                         <span>
                             Showing <span className="font-semibold text-gray-900">{totalStudents}</span> of{' '}
                             <span className="font-semibold text-gray-900">{attempts.length}</span> students
                         </span>
                         {activeFiltersCount > 0 && (
-                            <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                            <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                                 <Filter className="w-3 h-3" />
                                 {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''} active
                             </span>
                         )}
                     </div>
                     {searchTerm && (
-                        <div className="text-gray-500">
+                        <div className="text-gray-500 text-xs sm:text-sm break-words">
                             Search results for: <span className="font-medium">"{searchTerm}"</span>
                         </div>
                     )}
@@ -475,53 +471,56 @@ const TestDetailsView = ({
 
             {/* Student Attempts Section */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div className="p-6 border-b border-gray-200">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-semibold text-gray-900">
+                <div className="p-3 sm:p-4 md:p-6 border-b border-gray-200">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4">
+                        <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900">
                             Student Attempts ({totalStudents} students)
                         </h2>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                             <button
                                 onClick={() => onExportTestResults(test.test_id, test.test_name, 'complete', filteredAttempts, attempts)}
                                 disabled={exportLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                                className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
                             >
                                 {exportLoading ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                 ) : (
-                                    <FileSpreadsheet className="w-4 h-4" />
+                                    <FileSpreadsheet className="w-3 h-3 sm:w-4 sm:h-4" />
                                 )}
-                                Export Complete
+                                <span className="hidden sm:inline">Export Complete</span>
+                                <span className="sm:hidden">Complete</span>
                             </button>
                             <button
                                 onClick={() => onExportTestResults(test.test_id, test.test_name, 'excel', filteredAttempts, attempts)}
                                 disabled={exportLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                                className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                             >
                                 {exportLoading ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                 ) : (
-                                    <FileSpreadsheet className="w-4 h-4" />
+                                    <FileSpreadsheet className="w-3 h-3 sm:w-4 sm:h-4" />
                                 )}
-                                Export Attempted
+                                <span className="hidden sm:inline">Export Attempted</span>
+                                <span className="sm:hidden">Attempted</span>
                             </button>
                             <button
                                 onClick={() => onExportTestResults(test.test_id, test.test_name, 'csv', filteredAttempts, attempts)}
                                 disabled={exportLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                             >
                                 {exportLoading ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                 ) : (
-                                    <Download className="w-4 h-4" />
+                                    <Download className="w-3 h-3 sm:w-4 sm:h-4" />
                                 )}
-                                Export CSV
+                                <span className="hidden sm:inline">Export CSV</span>
+                                <span className="sm:hidden">CSV</span>
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto overflow-y-auto max-h-[50vh] sm:max-h-[60vh] md:max-h-none">
                     {filteredAttempts.length === 0 ? (
                         <div className="text-center py-12">
                             <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -529,8 +528,8 @@ const TestDetailsView = ({
                                 {attempts.length === 0 ? 'No attempts found' : 'No students match the current filters'}
                             </h3>
                             <p className="text-gray-500">
-                                {attempts.length === 0 
-                                    ? 'No students have attempted this test yet.' 
+                                {attempts.length === 0
+                                    ? 'No students have attempted this test yet.'
                                     : 'Try adjusting your search or filter criteria.'
                                 }
                             </p>
@@ -544,37 +543,37 @@ const TestDetailsView = ({
                             )}
                         </div>
                     ) : (
-                        <table className="w-full">
+                        <table className="w-full min-w-[800px]">
                             <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Student Name
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Email
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Campus
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Course
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Batch
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Total Questions
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Correct Answers
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Score
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Attempts
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Latest Attempt
                                     </th>
                                 </tr>
@@ -589,7 +588,7 @@ const TestDetailsView = ({
                                         className={`hover:bg-gray-50 ${student.has_attempted ? 'cursor-pointer' : 'cursor-default'}`}
                                         onClick={() => student.has_attempted && onStudentClick(student.student_id, test.test_id)}
                                     >
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap">
                                             <div className="flex items-center">
                                                 {student.has_attempted ? (
                                                     <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
@@ -604,50 +603,58 @@ const TestDetailsView = ({
                                                     <div className="text-sm font-medium text-gray-900">
                                                         {student.student_name}
                                                     </div>
-                                                    <div className={`text-xs px-2 py-1 rounded-full inline-block w-fit ${
-                                                        student.has_attempted 
-                                                            ? 'bg-green-100 text-green-800' 
-                                                            : 'bg-red-100 text-red-800'
-                                                    }`}>
+                                                    <div className={`text-xs px-2 py-1 rounded-full inline-block w-fit ${student.has_attempted
+                                                        ? 'bg-green-100 text-green-800'
+                                                        : 'bg-red-100 text-red-800'
+                                                        }`}>
                                                         {student.has_attempted ? 'Attempted' : 'Not Attempted'}
                                                     </div>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.student_email || '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.campus_name || '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.course_name || '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.batch_name || '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.has_attempted ? student.total_questions : '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.has_attempted ? student.correct_answers : '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm font-medium">
                                             {student.has_attempted ? (
-                                                <span className={`${
-                                                    student.highest_score >= 70 ? 'text-green-600' :
-                                                    student.highest_score >= 50 ? 'text-yellow-600' : 'text-red-600'
-                                                }`}>
-                                                    {student.highest_score.toFixed(1)}%
+                                                <span className={`${(() => {
+                                                    const score = student.percentage !== undefined && student.percentage !== null
+                                                        ? student.percentage
+                                                        : student.highest_score;
+                                                    return score >= 70 ? 'text-green-600' :
+                                                        score >= 50 ? 'text-yellow-600' : 'text-red-600';
+                                                })()
+                                                    }`}>
+                                                    {(() => {
+                                                        const score = student.percentage !== undefined && student.percentage !== null
+                                                            ? student.percentage
+                                                            : student.highest_score;
+                                                        return score.toFixed(1);
+                                                    })()}%
                                                 </span>
                                             ) : (
                                                 <span className="text-gray-400">-</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                                             {student.attempts_count}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <td className="px-2 sm:px-3 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">
                                             {student.has_attempted ? (
                                                 <button
                                                     onClick={(e) => {
@@ -671,10 +678,10 @@ const TestDetailsView = ({
                         </table>
                     )}
                 </div>
-                
+
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
-                    <div className="bg-white px-6 py-4 border-t border-gray-200">
+                    <div className="bg-white px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-t border-gray-200">
                         <div className="flex items-center justify-between">
                             <div className="text-sm text-gray-700">
                                 Showing {startIndex + 1} to {Math.min(endIndex, filteredAttempts.length)} of {filteredAttempts.length} students
@@ -687,7 +694,7 @@ const TestDetailsView = ({
                                 >
                                     Previous
                                 </button>
-                                
+
                                 <div className="flex space-x-1">
                                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                                         let pageNum;
@@ -700,23 +707,22 @@ const TestDetailsView = ({
                                         } else {
                                             pageNum = currentPage - 2 + i;
                                         }
-                                        
+
                                         return (
                                             <button
                                                 key={pageNum}
                                                 onClick={() => setCurrentPage(pageNum)}
-                                                className={`px-3 py-2 text-sm font-medium rounded-md ${
-                                                    currentPage === pageNum
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
-                                                }`}
+                                                className={`px-3 py-2 text-sm font-medium rounded-md ${currentPage === pageNum
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
+                                                    }`}
                                             >
                                                 {pageNum}
                                             </button>
                                         );
                                     })}
                                 </div>
-                                
+
                                 <button
                                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                     disabled={currentPage === totalPages}
@@ -739,6 +745,11 @@ const ResultsManagement = () => {
     const [errorMsg, setErrorMsg] = useState("");
     const [tests, setTests] = useState([]);
     const [expandedTest, setExpandedTest] = useState(null);
+    const [campuses, setCampuses] = useState([]);
+    const [batches, setBatches] = useState([]);
+    const [selectedCampusFilter, setSelectedCampusFilter] = useState('all');
+    const [selectedBatchFilter, setSelectedBatchFilter] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
     const [testAttempts, setTestAttempts] = useState({});
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [studentAttemptDetails, setStudentAttemptDetails] = useState(null);
@@ -759,13 +770,101 @@ const ResultsManagement = () => {
         window.scrollTo(0, 0);
         fetchTests();
         fetchAutoReleaseSettings();
+        fetchFilterData();
     }, []);
+
+    const fetchFilterData = async () => {
+        try {
+            // For Campus Admin, we can use simpler endpoints that don't require module permissions
+            const [campusRes, batchRes] = await Promise.all([
+                api.get('/campus-management/campuses'),
+                api.get(`/batch-management/campus/${user?.campus_id}/batches`)
+            ]);
+
+            // Handle campus response
+            if (campusRes.data.success) {
+                setCampuses(campusRes.data.data || []);
+            } else if (Array.isArray(campusRes.data)) {
+                setCampuses(campusRes.data);
+            }
+
+            // Handle batch response
+            if (batchRes.data.success) {
+                setBatches(batchRes.data.data || []);
+            } else if (Array.isArray(batchRes.data)) {
+                setBatches(batchRes.data);
+            }
+        } catch (err) {
+            console.error('Error fetching filter data:', err);
+            // Fallback: If fetch fails, at least populate campuses from user object
+            if (user?.campus_id) {
+                setCampuses([{
+                    id: user.campus_id,
+                    _id: user.campus_id,
+                    name: user.campus_name || 'My Campus'
+                }]);
+            }
+        }
+    };
+
+    // Create maps for quick lookup
+    const campusMap = React.useMemo(() => {
+        const map = {};
+
+        // 1. Initial priority: Add from user object if available
+        if (user?.campus_id) {
+            map[String(user.campus_id)] = user.campus_name || 'My Campus';
+        }
+
+        // 2. Add campuses from fetched list
+        campuses.forEach(c => {
+            if (!c) return;
+            const id = c.id || c._id || c.campus_id;
+            const name = c.name || c.campus_name || c.label;
+            if (id && name) map[String(id)] = name;
+        });
+
+        // 3. Add campuses from tests themselves (now returned by backend as campus_names)
+        tests.forEach(test => {
+            if (Array.isArray(test.campus_ids)) {
+                test.campus_ids.forEach((id, idx) => {
+                    if (!id) return;
+                    const name = Array.isArray(test.campus_names) ? test.campus_names[idx] : null;
+                    if (name && !map[String(id)]) map[String(id)] = name;
+                });
+            }
+        });
+        return map;
+    }, [campuses, tests, user?.campus_id, user?.campus_name]);
+
+    const batchMap = React.useMemo(() => {
+        const map = {};
+        // 1. Add batches from fetched list
+        batches.forEach(b => {
+            if (!b) return;
+            const id = b.id || b._id || b.batch_id;
+            const name = b.name || b.batch_name || b.label;
+            if (id && name) map[String(id)] = name;
+        });
+
+        // 2. Add batches from tests themselves (now returned by backend as batch_names)
+        tests.forEach(test => {
+            if (Array.isArray(test.batch_ids)) {
+                test.batch_ids.forEach((id, idx) => {
+                    if (!id) return;
+                    const name = Array.isArray(test.batch_names) ? test.batch_names[idx] : null;
+                    if (name && !map[String(id)]) map[String(id)] = name;
+                });
+            }
+        });
+        return map;
+    }, [batches, tests]);
 
     const fetchTests = async () => {
         try {
             setLoading(true);
             setErrorMsg("");
-            
+
             const response = await api.get(`/superadmin/online-tests-overview?campus_id=${user?.campus_id || ''}`);
             if (response.data.success) {
                 setTests(response.data.data || []);
@@ -822,7 +921,7 @@ const ResultsManagement = () => {
         try {
             const response = await api.get(`/superadmin/student-attempts/${studentId}/${testId}`);
             if (response.data.success) {
-                console.log("student attempt details",response.data);
+                console.log("student attempt details", response.data);
                 setStudentAttemptDetails(response.data.data);
                 setSelectedStudent(studentId);
                 setShowDetailsModal(true);
@@ -871,10 +970,10 @@ const ResultsManagement = () => {
             studentAttemptDetails.forEach((attempt, attemptIndex) => {
                 if (attempt.detailed_results && attempt.detailed_results.length > 0) {
                     totalQuestions = attempt.detailed_results.length; // Get total questions from first attempt
-                    
+
                     attempt.detailed_results.forEach((result, questionIndex) => {
                         const marksObtained = result.marks_obtained || (result.is_correct ? 1 : 0);
-                        
+
                         questionData.push({
                             'Attempt': attemptIndex + 1,
                             'Question #': questionIndex + 1,
@@ -919,14 +1018,14 @@ const ResultsManagement = () => {
 
             // Create workbook
             const wb = XLSX.utils.book_new();
-            
+
             // Add student info sheet
             const studentInfoWS = XLSX.utils.json_to_sheet([studentInfo]);
             XLSX.utils.book_append_sheet(wb, studentInfoWS, 'Student Information');
 
             // Add questions sheet with better formatting
             const questionsWS = XLSX.utils.json_to_sheet(questionData);
-            
+
             // Set column widths
             const colWidths = [
                 { wch: 8 },   // Attempt
@@ -946,7 +1045,7 @@ const ResultsManagement = () => {
                 { wch: 15 }   // Attempt Score
             ];
             questionsWS['!cols'] = colWidths;
-            
+
             XLSX.utils.book_append_sheet(wb, questionsWS, 'Question Details');
 
             // Add summary sheet
@@ -974,19 +1073,19 @@ const ResultsManagement = () => {
             error('No attempt details available to export');
             return;
         }
-    
+
         setStudentExportLoading(true);
         try {
             const firstAttempt = studentAttemptDetails[0];
             const studentName = firstAttempt.student_name || 'N/A';
             const testName = firstAttempt.test_name || 'N/A';
-            
+
             // Create PDF in portrait orientation
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pageWidth = pdf.internal.pageSize.getWidth();
             const pageHeight = pdf.internal.pageSize.getHeight();
             let yPosition = 20;
-    
+
             // Color scheme: Green, White, Black
             const colors = {
                 primary: [34, 139, 34],      // Forest Green
@@ -996,13 +1095,13 @@ const ResultsManagement = () => {
                 white: [255, 255, 255],      // White
                 lightGray: [245, 245, 245]   // Light Gray
             };
-    
+
             // Helper function to add text with word wrap and alignment
             const addText = (text, x, y, maxWidth = pageWidth - 40, color = colors.text, fontSize = 10, fontStyle = 'normal', align = 'left') => {
                 pdf.setFontSize(fontSize);
                 pdf.setFont('helvetica', fontStyle);
                 pdf.setTextColor(color[0], color[1], color[2]);
-                
+
                 // For center alignment, calculate text width directly
                 if (align === 'center') {
                     const textWidth = pdf.getStringUnitWidth(String(text)) * fontSize / pdf.internal.scaleFactor;
@@ -1010,9 +1109,9 @@ const ResultsManagement = () => {
                     pdf.text(String(text), centerX, y);
                     return y + (fontSize * 0.35);
                 }
-                
+
                 const lines = pdf.splitTextToSize(String(text), maxWidth);
-                
+
                 // Handle text alignment
                 lines.forEach((line, index) => {
                     let textX = x;
@@ -1020,13 +1119,13 @@ const ResultsManagement = () => {
                         const textWidth = pdf.getStringUnitWidth(line) * fontSize / pdf.internal.scaleFactor;
                         textX = x + (maxWidth - textWidth);
                     }
-                    
+
                     pdf.text(line, textX, y + (index * (fontSize * 0.35)));
                 });
-                
+
                 return y + (lines.length * (fontSize * 0.35));
             };
-    
+
             // Helper function to add a new page if needed
             const checkNewPage = (requiredSpace = 20) => {
                 if (yPosition + requiredSpace > pageHeight - 20) {
@@ -1036,20 +1135,20 @@ const ResultsManagement = () => {
                 }
                 return false;
             };
-    
+
             // Helper function to draw a rectangle with color
             const drawRect = (x, y, width, height, fillColor = colors.white, strokeColor = colors.primary) => {
                 pdf.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
                 pdf.setDrawColor(strokeColor[0], strokeColor[1], strokeColor[2]);
                 pdf.rect(x, y, width, height, 'FD');
             };
-    
+
             // Helper function to draw a table cell with proper alignment
             const drawTableCell = (x, y, width, height, text, textColor = colors.text, fontSize = 9, fontStyle = 'normal', align = 'left', fillColor = colors.white) => {
                 drawRect(x, y, width, height, fillColor, colors.primary);
-                
-                const textY = y + height/2 + fontSize/3;
-                
+
+                const textY = y + height / 2 + fontSize / 3;
+
                 if (align === 'center') {
                     const textWidth = pdf.getStringUnitWidth(String(text)) * fontSize / pdf.internal.scaleFactor;
                     const centerX = x + (width - textWidth) / 2;
@@ -1062,59 +1161,59 @@ const ResultsManagement = () => {
                     addText(text, textX, textY, width - 6, textColor, fontSize, fontStyle, align);
                 }
             };
-    
+
             // Helper function to calculate required row height based on text length
             const calculateRowHeight = (text, maxWidth, fontSize = 6) => {
                 const lines = pdf.splitTextToSize(String(text), maxWidth);
                 return Math.max(8, lines.length * (fontSize * 0.4) + 4);
             };
-    
+
             // Title with green background - properly centered
             drawRect(10, 10, pageWidth - 20, 15, colors.primary);
-            addText(`${studentName}'s TEST ATTEMPT DETAILS`, pageWidth/2, 12, undefined, colors.white, 14, 'bold', 'center');
+            addText(`${studentName}'s TEST ATTEMPT DETAILS`, pageWidth / 2, 12, undefined, colors.white, 14, 'bold', 'center');
             yPosition = 30;
-    
+
             // Student Information Box - optimized for A4 portrait
             const margin = 15; // Standard margin for A4 portrait
             const infoBoxHeight = 35;
             drawRect(margin, yPosition, pageWidth - (margin * 2), infoBoxHeight, colors.secondary);
-            
+
             // Student Information Title - centered
-            addText('STUDENT INFORMATION', pageWidth/2, yPosition + 8, undefined, colors.accent, 12, 'bold', 'center');
-            
+            addText('STUDENT INFORMATION', pageWidth / 2, yPosition + 8, undefined, colors.accent, 12, 'bold', 'center');
+
             // Student details in two columns for portrait (better fit)
             const colWidth = (pageWidth - (margin * 2) - 20) / 2;
             const col1 = margin + 10;
             const col2 = col1 + colWidth;
-            
+
             // First row of details
             addText(`Student Name: ${studentName}`, col1, yPosition + 18, colWidth - 5, colors.text, 10);
             addText(`Roll Number: ${firstAttempt.roll_number || 'N/A'}`, col2, yPosition + 18, colWidth - 5, colors.text, 10);
-            
+
             // Second row of details
             addText(`Email: ${firstAttempt.email || 'N/A'}`, col1, yPosition + 25, colWidth - 5, colors.text, 10);
             addText(`Test Name: ${testName}`, col2, yPosition + 25, colWidth - 5, colors.text, 10);
-            
+
             // Third row of details
             addText(`Total Attempts: ${studentAttemptDetails.length}`, col1, yPosition + 32, colWidth - 5, colors.text, 10);
             addText(`Export Date: ${new Date().toLocaleString()}`, col2, yPosition + 32, colWidth - 5, colors.text, 10);
-            
+
             yPosition += infoBoxHeight + 10;
-    
+
             // Process each attempt
             let totalCorrect = 0;
             let totalIncorrect = 0;
             let totalScore = 0;
             let totalQuestions = 0;
-    
+
             studentAttemptDetails.forEach((attempt, attemptIndex) => {
                 checkNewPage(40);
-                
-                 // Attempt header with green background - A4 portrait optimized
-                 drawRect(margin, yPosition, pageWidth - (margin * 2), 12, colors.primary);
-                 addText(`ATTEMPT ${attemptIndex + 1}`, pageWidth/2, yPosition + 7, pageWidth - (margin * 2), colors.white, 12, 'bold', 'center');
-                 yPosition += 15;
-    
+
+                // Attempt header with green background - A4 portrait optimized
+                drawRect(margin, yPosition, pageWidth - (margin * 2), 12, colors.primary);
+                addText(`ATTEMPT ${attemptIndex + 1}`, pageWidth / 2, yPosition + 7, pageWidth - (margin * 2), colors.white, 12, 'bold', 'center');
+                yPosition += 15;
+
                 // Attempt details - A4 portrait optimized margins
                 addText(`Submitted: ${attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : 'N/A'}`, margin + 5, yPosition, pageWidth - (margin * 2) - 10, colors.text, 10);
                 yPosition += 6;
@@ -1122,14 +1221,14 @@ const ResultsManagement = () => {
                 yPosition += 6;
                 addText(`Score: ${attempt.score_percentage?.toFixed(1) || 0}%`, margin + 5, yPosition, pageWidth - (margin * 2) - 10, colors.text, 10);
                 yPosition += 12;
-    
+
                 if (attempt.detailed_results && attempt.detailed_results.length > 0) {
                     totalQuestions = attempt.detailed_results.length;
-                    
+
                     // Questions table - optimized for A4 portrait
                     const tableX = margin;
                     const tableWidth = pageWidth - (margin * 2);
-                    
+
                     // Column widths for portrait (210mm total width - 30mm margins = 180mm available)
                     const colWidths = [
                         15,  // Q# (15mm)
@@ -1138,60 +1237,60 @@ const ResultsManagement = () => {
                         40,  // Correct Answer (40mm)
                         5    // Status (5mm)
                     ]; // Total: 180mm
-                    
+
                     const headerRowHeight = 10;
                     const rowHeight = 12;
-                    
+
                     // Table header
                     checkNewPage(headerRowHeight + (attempt.detailed_results.length * rowHeight) + 10);
-                    
+
                     drawRect(tableX, yPosition, tableWidth, headerRowHeight, colors.accent);
-                    addText('Q#', tableX + colWidths[0]/2, yPosition + 6, colWidths[0], colors.white, 8, 'bold', 'center');
-                    addText('Question', tableX + colWidths[0] + colWidths[1]/2, yPosition + 6, colWidths[1], colors.white, 8, 'bold', 'center');
-                    addText('Student Answer', tableX + colWidths[0] + colWidths[1] + colWidths[2]/2, yPosition + 6, colWidths[2], colors.white, 8, 'bold', 'center');
-                    addText('Correct Answer', tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3]/2, yPosition + 6, colWidths[3], colors.white, 8, 'bold', 'center');
-                    addText('✓/✗', tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4]/2, yPosition + 6, colWidths[4], colors.white, 8, 'bold', 'center');
-                    
+                    addText('Q#', tableX + colWidths[0] / 2, yPosition + 6, colWidths[0], colors.white, 8, 'bold', 'center');
+                    addText('Question', tableX + colWidths[0] + colWidths[1] / 2, yPosition + 6, colWidths[1], colors.white, 8, 'bold', 'center');
+                    addText('Student Answer', tableX + colWidths[0] + colWidths[1] + colWidths[2] / 2, yPosition + 6, colWidths[2], colors.white, 8, 'bold', 'center');
+                    addText('Correct Answer', tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] / 2, yPosition + 6, colWidths[3], colors.white, 8, 'bold', 'center');
+                    addText('✓/✗', tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4] / 2, yPosition + 6, colWidths[4], colors.white, 8, 'bold', 'center');
+
                     yPosition += headerRowHeight;
-    
+
                     // Process each question in table format
                     attempt.detailed_results.forEach((result, questionIndex) => {
                         const isCorrect = result.is_correct;
                         const score = isCorrect ? 1 : 0;
-                        
+
                         // Check if we need a new page
                         checkNewPage(rowHeight + 5);
-                        
+
                         // Row background color based on correctness
                         const rowFillColor = isCorrect ? [240, 255, 240] : [255, 240, 240]; // Light green/red
                         const textColor = isCorrect ? [0, 100, 0] : [150, 0, 0];
-                        
+
                         // Question number (centered)
-                        drawTableCell(tableX, yPosition, colWidths[0], rowHeight, 
-                                     (questionIndex + 1).toString(), colors.text, 8, 'bold', 'center', rowFillColor);
-                        
+                        drawTableCell(tableX, yPosition, colWidths[0], rowHeight,
+                            (questionIndex + 1).toString(), colors.text, 8, 'bold', 'center', rowFillColor);
+
                         // Question text (left aligned, wrapped)
                         const questionText = String(result.question_text || 'N/A');
-                        drawTableCell(tableX + colWidths[0], yPosition, colWidths[1], rowHeight, 
-                                     questionText, colors.text, 7, 'normal', 'left', rowFillColor);
-                        
+                        drawTableCell(tableX + colWidths[0], yPosition, colWidths[1], rowHeight,
+                            questionText, colors.text, 7, 'normal', 'left', rowFillColor);
+
                         // Student answer (left aligned, wrapped)
                         const studentAnswer = String(result.student_answer || result.selected_answer || 'No answer');
-                        drawTableCell(tableX + colWidths[0] + colWidths[1], yPosition, colWidths[2], rowHeight, 
-                                     studentAnswer, textColor, 7, 'normal', 'left', rowFillColor);
-                        
+                        drawTableCell(tableX + colWidths[0] + colWidths[1], yPosition, colWidths[2], rowHeight,
+                            studentAnswer, textColor, 7, 'normal', 'left', rowFillColor);
+
                         // Correct answer (left aligned, wrapped)
                         const correctAnswer = String(result.correct_answer_text || result.correct_answer || 'N/A');
-                        drawTableCell(tableX + colWidths[0] + colWidths[1] + colWidths[2], yPosition, colWidths[3], rowHeight, 
-                                     correctAnswer, colors.text, 7, 'normal', 'left', rowFillColor);
-                        
+                        drawTableCell(tableX + colWidths[0] + colWidths[1] + colWidths[2], yPosition, colWidths[3], rowHeight,
+                            correctAnswer, colors.text, 7, 'normal', 'left', rowFillColor);
+
                         // Status (centered)
                         const statusSymbol = isCorrect ? '✓' : '✗';
-                        drawTableCell(tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], yPosition, colWidths[4], rowHeight, 
-                                     statusSymbol, textColor, 10, 'bold', 'center', rowFillColor);
-                        
+                        drawTableCell(tableX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], yPosition, colWidths[4], rowHeight,
+                            statusSymbol, textColor, 10, 'bold', 'center', rowFillColor);
+
                         yPosition += rowHeight;
-    
+
                         if (isCorrect) totalCorrect++;
                         else totalIncorrect++;
                         totalScore += score;
@@ -1199,33 +1298,33 @@ const ResultsManagement = () => {
                 }
                 yPosition += 15;
             });
-    
+
             // Summary section with green background
             checkNewPage(40);
             drawRect(margin, yPosition, pageWidth - (margin * 2), 12, colors.primary);
-            addText('SUMMARY', pageWidth/2, yPosition + 7, undefined, colors.white, 12, 'bold', 'center');
+            addText('SUMMARY', pageWidth / 2, yPosition + 7, undefined, colors.white, 12, 'bold', 'center');
             yPosition += 15;
-    
+
             // Summary details in a nice box
             const summaryBoxHeight = 40;
             drawRect(margin, yPosition, pageWidth - (margin * 2), summaryBoxHeight, colors.secondary);
-            
+
             const totalAttempts = studentAttemptDetails.length;
             const averageScore = totalAttempts > 0 ? (totalScore / (totalQuestions * totalAttempts) * 100).toFixed(1) : 0;
             const accuracy = totalQuestions > 0 ? ((totalCorrect / (totalQuestions * totalAttempts)) * 100).toFixed(1) : 0;
-    
+
             // Summary details in two columns for portrait
             addText(`Total Questions: ${totalQuestions}`, col1, yPosition + 10, colWidth, colors.text, 10, 'bold');
             addText(`Total Attempts: ${totalAttempts}`, col2, yPosition + 10, colWidth, colors.text, 10, 'bold');
-            
+
             addText(`Total Correct: ${totalCorrect}`, col1, yPosition + 18, colWidth, colors.accent, 10, 'bold');
             addText(`Total Incorrect: ${totalIncorrect}`, col2, yPosition + 18, colWidth, colors.text, 10, 'bold');
-            
+
             addText(`Total Score: ${totalScore}/${totalQuestions * totalAttempts}`, col1, yPosition + 26, colWidth, colors.text, 10, 'bold');
             addText(`Average Score: ${averageScore}%`, col2, yPosition + 26, colWidth, colors.text, 10, 'bold');
-            
+
             addText(`Overall Accuracy: ${accuracy}%`, col1, yPosition + 34, colWidth, colors.accent, 11, 'bold');
-    
+
             // Save PDF
             const filename = `${studentName.replace(/[^a-zA-Z0-9]/g, '_')}_${testName.replace(/[^a-zA-Z0-9]/g, '_')}_AttemptDetails_${new Date().toISOString().split('T')[0]}.pdf`;
             pdf.save(filename);
@@ -1252,13 +1351,13 @@ const ResultsManagement = () => {
                     // Export only attempted students from filtered list (for 'excel' format)
                     dataToExport = filteredData.filter(s => s.has_attempted);
                 }
-                
+
                 if (dataToExport.length === 0) {
                     error('No data to export with current filters. Try "Export Complete" to include all students.');
                     setExportLoading(false);
                     return;
                 }
-                
+
                 // Prepare data for export
                 const exportData = dataToExport.map(student => ({
                     'Student Name': student.student_name || 'N/A',
@@ -1274,7 +1373,7 @@ const ResultsManagement = () => {
                     'Latest Attempt': student.latest_attempt_date ? new Date(student.latest_attempt_date).toLocaleString() : 'N/A',
                     'Status': student.has_attempted ? 'Attempted' : 'Not Attempted'
                 }));
-                
+
                 if (format === 'csv') {
                     // Export as CSV
                     const headers = Object.keys(exportData[0]);
@@ -1283,12 +1382,12 @@ const ResultsManagement = () => {
                         ...exportData.map(row => headers.map(header => {
                             const value = row[header];
                             // Escape commas and quotes in CSV
-                            return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
-                                ? `"${value.replace(/"/g, '""')}"` 
+                            return typeof value === 'string' && (value.includes(',') || value.includes('"'))
+                                ? `"${value.replace(/"/g, '""')}"`
                                 : value;
                         }).join(','))
                     ].join('\n');
-                    
+
                     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                     const url = window.URL.createObjectURL(blob);
                     const link = document.createElement('a');
@@ -1305,7 +1404,7 @@ const ResultsManagement = () => {
                     XLSX.utils.book_append_sheet(wb, ws, 'Test Results');
                     XLSX.writeFile(wb, `${testName}_filtered_results.xlsx`);
                 }
-                
+
                 success(`Test results exported successfully! (${dataToExport.length} students)`);
             } else {
                 // Fallback to backend export (original behavior)
@@ -1313,7 +1412,7 @@ const ResultsManagement = () => {
                 let mimeType;
                 let fileExtension;
                 let fileName;
-                
+
                 if (format === 'complete') {
                     endpoint = `/superadmin/export-test-attempts-complete/${testId}`;
                     mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -1330,11 +1429,11 @@ const ResultsManagement = () => {
                     fileExtension = 'xlsx';
                     fileName = `${testName}_attempted_results.${fileExtension}`;
                 }
-                
+
                 const response = await api.get(endpoint, {
                     responseType: 'blob'
                 });
-                
+
                 const blob = new Blob([response.data], { type: mimeType });
                 const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
@@ -1344,7 +1443,7 @@ const ResultsManagement = () => {
                 link.click();
                 document.body.removeChild(link);
                 window.URL.revokeObjectURL(url);
-                
+
                 const formatName = format === 'complete' ? 'Complete (All Students)' : format.toUpperCase();
                 success(`Test results exported as ${formatName} successfully!`);
             }
@@ -1360,9 +1459,9 @@ const ResultsManagement = () => {
     const handleReleaseResults = async (testId, testName) => {
         try {
             setReleaseLoading(prev => ({ ...prev, [testId]: true }));
-            
+
             const response = await api.post(`/results-management/release/${testId}`);
-            
+
             if (response.data.success) {
                 setReleaseStatus(prev => ({ ...prev, [testId]: true }));
                 success(`Test results for "${testName}" have been released successfully!`);
@@ -1381,9 +1480,9 @@ const ResultsManagement = () => {
     const handleUnreleaseResults = async (testId, testName) => {
         try {
             setReleaseLoading(prev => ({ ...prev, [testId]: true }));
-            
+
             const response = await api.post(`/results-management/unrelease/${testId}`);
-            
+
             if (response.data.success) {
                 setReleaseStatus(prev => ({ ...prev, [testId]: false }));
                 success(`Test results for "${testName}" have been unreleased successfully!`);
@@ -1401,12 +1500,12 @@ const ResultsManagement = () => {
     // Fetch release status for all tests
     const fetchReleaseStatus = async () => {
         try {
-            const statusPromises = tests.map(test => 
+            const statusPromises = tests.map(test =>
                 api.get(`/results-management/status/${test.test_id}`)
                     .then(response => ({ testId: test.test_id, status: response.data.data }))
                     .catch(() => ({ testId: test.test_id, status: { is_released: false } }))
             );
-            
+
             const statuses = await Promise.all(statusPromises);
             const statusMap = {};
             statuses.forEach(({ testId, status }) => {
@@ -1429,9 +1528,9 @@ const ResultsManagement = () => {
     const handleMigrateExistingTests = async () => {
         try {
             setMigrationLoading(true);
-            
+
             const response = await api.post('/results-management/migrate-existing-tests');
-            
+
             if (response.data.success) {
                 success(`Migration completed! ${response.data.data.updated_tests} tests updated with release fields.`);
                 // Refresh the tests list and release status
@@ -1484,16 +1583,92 @@ const ResultsManagement = () => {
         }
     };
 
-    // Filter tests to show only those relevant to the campus admin's campus
-    const filteredTests = React.useMemo(() => {
+    // Memoized filter options for batch dropdown
+    const filteredBatchOptions = React.useMemo(() => {
+        if (selectedCampusFilter === 'all') {
+            return [...new Set(tests.flatMap(t => Array.isArray(t.batch_ids) ? t.batch_ids.map(id => String(id)) : []))];
+        }
+        // If campus selected, only show batches associated with that campus in the tests list
+        const testsInCampus = tests.filter(test =>
+            Array.isArray(test.campus_ids) && test.campus_ids.map(id => String(id)).includes(selectedCampusFilter)
+        );
+        return [...new Set(testsInCampus.flatMap(t => Array.isArray(t.batch_ids) ? t.batch_ids.map(id => String(id)) : []))];
+    }, [selectedCampusFilter, tests]);
+
+    // Filtering and sorting logic for the overview table
+    const filteredAndSortedTests = React.useMemo(() => {
+        let result = [...tests];
+
+        // 1. Campus Admin restriction - only show tests for their campus
         if (user?.role === 'campus_admin' && user?.campus_id) {
-            return tests.filter(test => 
-                test.campus_id === user.campus_id || 
-                (test.campus_ids && test.campus_ids.includes(user.campus_id))
+            result = result.filter(test =>
+                test.campus_id === user.campus_id ||
+                (Array.isArray(test.campus_ids) && test.campus_ids.includes(user.campus_id))
             );
         }
-        return tests; // For other roles or if no campus_id, show all fetched tests
-    }, [tests, user]);
+
+        // 2. Search Filter
+        if (searchTerm) {
+            const searchLower = searchTerm.toLowerCase();
+            result = result.filter(test =>
+                test.test_name?.toLowerCase().includes(searchLower) ||
+                test.category?.toLowerCase().includes(searchLower)
+            );
+        }
+
+        // 3. Campus Header Filter (Optional for Campus Admin but kept for flexibility if they have multiple)
+        if (selectedCampusFilter !== 'all') {
+            result = result.filter(test =>
+                Array.isArray(test.campus_ids) && test.campus_ids.map(id => String(id)).includes(selectedCampusFilter)
+            );
+        }
+
+        // 4. Batch Header Filter
+        if (selectedBatchFilter !== 'all') {
+            result = result.filter(test =>
+                Array.isArray(test.batch_ids) && test.batch_ids.map(id => String(id)).includes(selectedBatchFilter)
+            );
+        }
+
+        return result;
+    }, [tests, user, searchTerm, selectedCampusFilter, selectedBatchFilter]);
+
+    const handleExportOverviewToExcel = () => {
+        if (filteredAndSortedTests.length === 0) {
+            error('No tests found to export');
+            return;
+        }
+
+        try {
+            const exportData = filteredAndSortedTests.map((test, index) => ({
+                'S. No': index + 1,
+                'Test Name': test.test_name || 'N/A',
+                'Category': test.category || 'N/A',
+                'Campus': Array.isArray(test.campus_ids)
+                    ? test.campus_ids.map(id => campusMap[String(id)] || 'Unknown').join(', ')
+                    : 'N/A',
+                'Batch': Array.isArray(test.batch_ids)
+                    ? test.batch_ids.map(id => batchMap[String(id)] || 'Unknown').join(', ')
+                    : 'N/A',
+                'Total Students': test.total_assigned_students || 0,
+                'Pending Students': test.pending_students || 0,
+                'Attempts': test.total_attempts || 0,
+                'Highest Score (%)': test.highest_score || 0,
+                'Average Score (%)': test.average_score || 0,
+                'Status': releaseStatus[test.test_id] ? 'Released' : 'Not Released'
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Results Abstract');
+            XLSX.writeFile(wb, `Results_Abstract_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+            success('Results abstract exported successfully!');
+        } catch (err) {
+            console.error('Error exporting overview:', err);
+            error('Failed to export results abstract');
+        }
+    };
 
     if (loading) {
         return (
@@ -1510,7 +1685,7 @@ const ResultsManagement = () => {
 
     return (
         <>
-            <main className="px-6 lg:px-10 py-12">
+            <main className="px-3 sm:px-4 md:px-6 lg:px-10 py-3 sm:py-4 md:py-6 lg:py-8">
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     {currentView === 'test-details' && selectedTest ? (
                         <TestDetailsView
@@ -1541,138 +1716,227 @@ const ResultsManagement = () => {
                                 <div className="flex gap-3">
                                     <button
                                         onClick={() => setShowAutoReleaseModal(true)}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                        className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                                     >
-                                        <Settings className="w-4 h-4" />
-                                        Auto Release Settings
+                                        <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
+                                        <span className="hidden sm:inline">Auto Release Settings</span>
+                                        <span className="sm:hidden">Auto Release</span>
                                     </button>
-                                    {/* <button
-                                        onClick={handleMigrateExistingTests}
-                                        disabled={migrationLoading}
-                                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    <button
+                                        onClick={handleExportOverviewToExcel}
+                                        className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                        disabled={exportLoading}
                                     >
-                                        {migrationLoading ? (
-                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                        {exportLoading ? (
+                                            <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                                         ) : (
-                                            <AlertCircle className="w-4 h-4" />
+                                            <ExcelIcon className="w-3 h-3 sm:w-4 sm:h-4" />
                                         )}
-                                        {migrationLoading ? 'Migrating...' : 'Migrate Existing Tests'}
-                                    </button> */}
+                                        <span className="hidden sm:inline">Export Results Abstract</span>
+                                        <span className="sm:hidden">Export</span>
+                                    </button>
                                 </div>
                             </div>
 
-                    {/* Error Message */}
-                    {errorMsg && (
-                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                            <p className="text-red-700">{errorMsg}</p>
-                        </div>
-                    )}
+                            {/* Error Message */}
+                            {errorMsg && (
+                                <div className="mb-3 sm:mb-4 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
+                                    <p className="text-red-700 text-xs sm:text-sm">{errorMsg}</p>
+                                </div>
+                            )}
 
-                    {/* Tests Table */}
-                    <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead className="bg-gray-50 border-b border-gray-200">
-                                    <tr>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Test Name
-                                        </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Category
-                                        </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Attempts
-                                        </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Highest Score
-                                        </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Average Score
-                                        </th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Results Status
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {filteredTests.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="6" className="px-6 py-12 text-center">
-                                                <div className="flex flex-col items-center">
-                                                    <BarChart3 className="w-12 h-12 text-gray-400 mb-4" />
-                                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No online tests found</h3>
-                                                    <p className="text-gray-500">No online tests are available in the system.</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filteredTests.map((test, index) => (
-                                            <motion.tr
-                                                key={test.test_id}
-                                                initial={{ opacity: 0, y: 20 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                transition={{ delay: index * 0.1 }}
-                                                className="hover:bg-gray-50 cursor-pointer"
-                                                onClick={() => handleTestClick(test.test_id)}
-                                            >
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center">
-                                                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
-                                                            {test.test_name?.charAt(0)?.toUpperCase() || 'T'}
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-medium text-gray-900">
-                                                                {test.test_name}
-                                                            </div>
-                                                            <div className="text-sm text-gray-500">
-                                                                {test.unique_students} students
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    {test.category}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    {test.total_attempts}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                                                    {test.highest_score}%
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                                                    {test.average_score}%
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {releaseStatus[test.test_id] ? (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                            <Unlock className="w-3 h-3" />
-                                                            Released
-                                                        </span>
-                                                    ) : (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleReleaseResults(test.test_id, test.test_name);
-                                                            }}
-                                                            disabled={releaseLoading[test.test_id]}
-                                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            {releaseLoading[test.test_id] ? (
-                                                                <RefreshCw className="w-3 h-3 animate-spin" />
-                                                            ) : (
-                                                                <Lock className="w-3 h-3" />
-                                                            )}
-                                                            Not Released
-                                                        </button>
-                                                    )}
-                                                </td>
-                                            </motion.tr>
-                                        ))
+                            {/* Search Bar */}
+                            <div className="mb-4">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search by test name..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                    />
+                                    {searchTerm && (
+                                        <button
+                                            onClick={() => setSearchTerm('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
                                     )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tests Table */}
+                            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                                <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)', WebkitOverflowScrolling: 'touch' }}>
+                                    <table className="w-full min-w-[1000px]">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-14">
+                                                    S. No
+                                                </th>
+                                                <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                                                    Test Name
+                                                </th>
+                                                <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                                                    Category
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40 min-w-[120px]">
+                                                    <span className="block mb-1">Campus</span>
+                                                    <select
+                                                        value={selectedCampusFilter}
+                                                        onChange={(e) => setSelectedCampusFilter(e.target.value)}
+                                                        className="w-full border border-gray-300 rounded-md text-[11px] font-normal focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                    >
+                                                        <option value="all">All</option>
+                                                        {campuses.map((campus) => {
+                                                            const id = campus.id || campus._id || campus.campus_id;
+                                                            const name = campus.name || campus.campus_name || 'Unnamed Campus';
+                                                            return (
+                                                                <option key={id} value={String(id)}>
+                                                                    {name}
+                                                                </option>
+                                                            );
+                                                        })}
+                                                    </select>
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40 min-w-[120px]">
+                                                    <span className="block mb-1">Batch</span>
+                                                    <select
+                                                        value={selectedBatchFilter}
+                                                        onChange={(e) => setSelectedBatchFilter(e.target.value)}
+                                                        className="w-full border border-gray-300 rounded-md text-[10px] sm:text-[11px] font-normal focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                    >
+                                                        <option value="all">All</option>
+                                                        {filteredBatchOptions.map((batchId) => (
+                                                            <option key={batchId} value={batchId}>
+                                                                {batchMap[String(batchId)] || 'Unnamed Batch'}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                                    Total Students
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                                    Pending Students
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">
+                                                    Attempts
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                                    Highest Score
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                                                    Average Score
+                                                </th>
+                                                <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                                                    <div className="flex items-center gap-2">
+                                                        <span>Results Status</span>
+                                                        <button
+                                                            onClick={() => setShowAutoReleaseModal(true)}
+                                                            className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+                                                            title="Auto-release Settings"
+                                                        >
+                                                            <Settings className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {filteredAndSortedTests.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="11" className="px-6 py-12 text-center">
+                                                        <div className="flex flex-col items-center">
+                                                            <BarChart3 className="w-12 h-12 text-gray-400 mb-4" />
+                                                            <h3 className="text-lg font-medium text-gray-900 mb-2">No online tests found</h3>
+                                                            <p className="text-gray-500">No online tests are available in the system.</p>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                filteredAndSortedTests.map((test, index) => (
+                                                    <motion.tr
+                                                        key={test.test_id}
+                                                        initial={{ opacity: 0, y: 20 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        transition={{ delay: index * 0.1 }}
+                                                        className="hover:bg-gray-50 cursor-pointer"
+                                                        onClick={() => handleTestClick(test.test_id)}
+                                                    >
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {index + 1}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-normal break-words text-xs sm:text-sm font-medium text-gray-900">
+                                                            {test.test_name}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {test.category}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {Array.isArray(test.campus_ids) && test.campus_ids.length > 0
+                                                                ? test.campus_ids
+                                                                    .map((id) => campusMap[String(id)] || 'Unknown')
+                                                                    .join(', ')
+                                                                : '-'}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {Array.isArray(test.batch_ids) && test.batch_ids.length > 0
+                                                                ? test.batch_ids
+                                                                    .map((id) => batchMap[String(id)] || 'Unknown')
+                                                                    .join(', ')
+                                                                : '-'}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {typeof test.total_assigned_students === 'number'
+                                                                ? test.total_assigned_students
+                                                                : 0}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {test.pending_students ?? 0}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                                                            {test.total_attempts}
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-green-600">
+                                                            {test.highest_score}%
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium text-blue-600">
+                                                            {test.average_score}%
+                                                        </td>
+                                                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
+                                                            {releaseStatus[test.test_id] ? (
+                                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                                    <Unlock className="w-3 h-3" />
+                                                                    Released
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleReleaseResults(test.test_id, test.test_name);
+                                                                    }}
+                                                                    disabled={releaseLoading[test.test_id]}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {releaseLoading[test.test_id] ? (
+                                                                        <RefreshCw className="w-3 h-3 animate-spin" />
+                                                                    ) : (
+                                                                        <Lock className="w-3 h-3" />
+                                                                    )}
+                                                                    Not Released
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </motion.tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </>
                     )}
                 </motion.div>
@@ -1694,22 +1958,22 @@ const ResultsManagement = () => {
                                 </h3>
                                 <div className="flex items-center gap-3">
                                     {/* Export Buttons */}
-                                        <button
+                                    <button
                                         onClick={exportStudentAttemptToExcel}
                                         disabled={studentExportLoading}
                                         className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     >
                                         <ExcelIcon className="w-4 h-4" />
                                         {studentExportLoading ? 'Exporting...' : 'Export Excel'}
-                                        </button>
-                                        <button
+                                    </button>
+                                    <button
                                         onClick={exportStudentAttemptToPDF}
                                         disabled={studentExportLoading}
                                         className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     >
                                         <FileText className="w-4 h-4" />
                                         {studentExportLoading ? 'Exporting...' : 'Export PDF'}
-                                        </button>
+                                    </button>
                                     <button
                                         onClick={closeDetailsModal}
                                         className="text-gray-400 hover:text-gray-600 transition-colors p-2"
@@ -1752,113 +2016,267 @@ const ResultsManagement = () => {
 
                                             {attempt.detailed_results && attempt.detailed_results.length > 0 && (
                                                 <div className="space-y-3">
-                                                    {attempt.detailed_results.map((result, questionIndex) => (
-                                                        <div key={questionIndex} className="border border-gray-100 rounded-lg p-4">
-                                                            <div className="flex justify-between items-start mb-2">
-                                                                <h5 className="font-medium text-gray-900">
-                                                                    Question {questionIndex + 1}
-                                                                </h5>
-                                                                <div className={`flex items-center gap-1 ${
-                                                                    result.is_correct ? 'text-green-600' : 'text-red-600'
-                                                                }`}>
-                                                                    {result.is_correct ? (
-                                                                        <CheckCircle className="w-5 h-5" />
-                                                                    ) : (
-                                                                        <XCircle className="w-5 h-5" />
-                                                                    )}
-                                                                    <span className="text-sm font-medium">
-                                                                        {result.is_correct ? 'Correct' : 'Incorrect'}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <div className="mb-3">
-                                                                <p className="text-gray-700 mb-2">
-                                                                    {result.question_text || 'Question text not available'}
-                                                                </p>
-                                                            </div>
+                                                    {attempt.detailed_results.map((result, questionIndex) => {
+                                                        const isCompilerQuestion = result.question_type === 'compiler' || result.question_type === 'technical';
 
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                <div>
-                                                                    <label className="text-sm font-medium text-gray-600">Student's Answer:</label>
-                                                                    <p className={`mt-1 p-2 rounded ${
-                                                                        result.is_correct ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                                                                    }`}>
-                                                                        {result.student_answer || result.selected_answer || 'No answer provided'}
-                                                                    </p>
-                                                                </div>
-                                                                <div>
-                                                                    <label className="text-sm font-medium text-gray-600">Correct Answer:</label>
-                                                                    <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
-                                                                        {result.correct_answer_text || result.correct_answer || 'Not available'}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
+                                                        // Get test results from multiple sources
+                                                        let testResults = result.test_results || [];
 
-                                                            {/* Audio-specific details for listening/speaking tests */}
-                                                            {(result.question_type === 'audio' || result.question_type === 'listening' || result.question_type === 'speaking') && (
-                                                                <div className="mt-4 space-y-3">
-                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Student Transcript:</label>
-                                                                            <p className="mt-1 p-2 rounded bg-blue-50 text-blue-800">
-                                                                                {result.student_text || result.student_answer || 'No transcript available'}
+                                                        // Also check answers object for test results
+                                                        if (isCompilerQuestion && attempt.answers) {
+                                                            const answerData = attempt.answers[result.question_id];
+                                                            if (answerData && answerData.results && answerData.results.test_results) {
+                                                                // Use test results from answers if detailed_results doesn't have them or is incomplete
+                                                                if (testResults.length === 0 || !testResults.length) {
+                                                                    testResults = answerData.results.test_results;
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Get code from answers object - always prefer answers object (source of truth)
+                                                        let studentCode = result.student_answer || '';
+                                                        if (isCompilerQuestion && attempt.answers) {
+                                                            const answerData = attempt.answers[result.question_id];
+                                                            if (answerData) {
+                                                                // Always prefer code from answers object
+                                                                if (answerData.code !== undefined && answerData.code !== null) {
+                                                                    studentCode = answerData.code;
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Get language from answers if not in detailed_results
+                                                        let questionLanguage = result.language || '';
+                                                        if (isCompilerQuestion && !questionLanguage && attempt.answers) {
+                                                            const answerData = attempt.answers[result.question_id];
+                                                            if (answerData && answerData.language) {
+                                                                questionLanguage = answerData.language;
+                                                            }
+                                                        }
+
+                                                        return (
+                                                            <div key={questionIndex} className="border border-gray-100 rounded-lg p-4">
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <div className="flex-1">
+                                                                        <h5 className="font-medium text-gray-900">
+                                                                            Question {questionIndex + 1}
+                                                                        </h5>
+                                                                        {(result.question || result.question_text) && (
+                                                                            <p className="text-sm text-gray-600 mt-1">
+                                                                                {result.question || result.question_text}
                                                                             </p>
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Original Text:</label>
-                                                                            <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
-                                                                                {result.original_text || result.correct_answer || 'Not available'}
-                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {isCompilerQuestion && result.score !== undefined && (
+                                                                            <span className="text-xs font-medium text-gray-600">
+                                                                                {result.score}/{result.max_score || 1} ({result.percentage?.toFixed(1) || 0}%)
+                                                                            </span>
+                                                                        )}
+                                                                        <div className={`flex items-center gap-1 ${result.is_correct ? 'text-green-600' : 'text-red-600'
+                                                                            }`}>
+                                                                            {result.is_correct ? (
+                                                                                <CheckCircle className="w-5 h-5" />
+                                                                            ) : (
+                                                                                <XCircle className="w-5 h-5" />
+                                                                            )}
+                                                                            <span className="text-sm font-medium">
+                                                                                {result.is_correct ? 'Correct' : 'Incorrect'}
+                                                                            </span>
                                                                         </div>
                                                                     </div>
-                                                                    
-                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Similarity Score:</label>
-                                                                            <div className="mt-1 flex items-center gap-2">
-                                                                                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                                                                    <div 
-                                                                                        className={`h-2 rounded-full ${
-                                                                                            result.similarity_score >= 70 ? 'bg-green-500' : 
-                                                                                            result.similarity_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                                                                                        }`}
-                                                                                        style={{ width: `${Math.min(result.similarity_score || 0, 100)}%` }}
-                                                                                    ></div>
-                                                                                </div>
-                                                                                <span className="text-sm font-medium text-gray-700">
-                                                                                    {result.similarity_score?.toFixed(1) || 0}%
+                                                                </div>
+
+                                                                {/* Compiler/Technical Question Display */}
+                                                                {isCompilerQuestion ? (
+                                                                    <div className="space-y-3 mt-3">
+                                                                        {/* Language and Code */}
+                                                                        {questionLanguage && (
+                                                                            <div className="text-xs text-gray-600">
+                                                                                <span className="font-medium">Language: </span>
+                                                                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                                                                                    {questionLanguage}
                                                                                 </span>
                                                                             </div>
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="text-sm font-medium text-gray-600">Student Audio:</label>
-                                                                            {result.student_audio_url ? (
-                                                                                <div className="mt-1">
-                                                                                    <audio controls className="w-full">
-                                                                                        <source src={result.student_audio_url} type="audio/webm" />
-                                                                                        <source src={result.student_audio_url} type="audio/wav" />
-                                                                                        <source src={result.student_audio_url} type="audio/mp3" />
-                                                                                        Your browser does not support the audio element.
-                                                                                    </audio>
-                                                                                    <a 
-                                                                                        href={result.student_audio_url} 
-                                                                                        target="_blank" 
-                                                                                        rel="noopener noreferrer"
-                                                                                        className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
-                                                                                    >
-                                                                                        Download Audio
-                                                                                    </a>
+                                                                        )}
+
+                                                                        {/* Submitted Code */}
+                                                                        {studentCode ? (
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Student's Code:</label>
+                                                                                <pre className="mt-1 text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-x-auto max-h-48 overflow-y-auto">
+                                                                                    <code>{studentCode}</code>
+                                                                                </pre>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="text-xs text-gray-500 italic">
+                                                                                No code submitted
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* Test Case Results */}
+                                                                        {testResults.length > 0 && (
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Test Case Results:</label>
+                                                                                <div className="mt-2 space-y-2">
+                                                                                    {testResults.map((testCase, tcIndex) => (
+                                                                                        <div
+                                                                                            key={tcIndex}
+                                                                                            className={`p-2 rounded border text-xs ${testCase.passed
+                                                                                                ? 'bg-green-50 border-green-200'
+                                                                                                : testCase.status === 'partial'
+                                                                                                    ? 'bg-yellow-50 border-yellow-200'
+                                                                                                    : 'bg-red-50 border-red-200'
+                                                                                                }`}
+                                                                                        >
+                                                                                            <div className="flex items-center justify-between mb-1">
+                                                                                                <span className="font-medium text-gray-700">
+                                                                                                    Test Case {testCase.test_case_number || tcIndex + 1}
+                                                                                                    {testCase.is_sample && (
+                                                                                                        <span className="ml-2 text-xs text-blue-600">(Sample)</span>
+                                                                                                    )}
+                                                                                                </span>
+                                                                                                <div className="flex items-center gap-2">
+                                                                                                    {testCase.passed && (
+                                                                                                        <span className="text-green-600 font-medium">✓ Passed</span>
+                                                                                                    )}
+                                                                                                    {testCase.status === 'partial' && (
+                                                                                                        <span className="text-yellow-600 font-medium">⚠ Partial</span>
+                                                                                                    )}
+                                                                                                    {!testCase.passed && testCase.status !== 'partial' && (
+                                                                                                        <span className="text-red-600 font-medium">✗ Failed</span>
+                                                                                                    )}
+                                                                                                    <span className="text-gray-600">
+                                                                                                        {testCase.points_earned || 0}/{testCase.points || 1} pts
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                                                                                <div>
+                                                                                                    <span className="text-gray-500">Input: </span>
+                                                                                                    <span className="font-mono bg-gray-100 px-1 rounded">
+                                                                                                        {testCase.input || 'N/A'}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                <div>
+                                                                                                    <span className="text-gray-500">Expected: </span>
+                                                                                                    <span className="font-mono bg-gray-100 px-1 rounded">
+                                                                                                        {testCase.expected_output || 'N/A'}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                <div>
+                                                                                                    <span className="text-gray-500">Actual: </span>
+                                                                                                    <span className={`font-mono px-1 rounded ${testCase.passed ? 'bg-green-100' : 'bg-red-100'
+                                                                                                        }`}>
+                                                                                                        {testCase.actual_output || 'N/A'}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                {testCase.execution_time !== undefined && (
+                                                                                                    <div>
+                                                                                                        <span className="text-gray-500">Time: </span>
+                                                                                                        <span className="font-mono bg-gray-100 px-1 rounded">
+                                                                                                            {testCase.execution_time}ms
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            {testCase.error && (
+                                                                                                <div className="mt-1 text-xs text-red-600 bg-red-50 p-1 rounded">
+                                                                                                    <span className="font-medium">Error: </span>
+                                                                                                    {testCase.error}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    ))}
                                                                                 </div>
-                                                                            ) : (
-                                                                                <p className="mt-1 text-sm text-gray-500">No audio available</p>
-                                                                            )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    /* MCQ Question Display */
+                                                                    <div className="mt-3">
+                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Student's Answer:</label>
+                                                                                <p className={`mt-1 p-2 rounded ${result.is_correct ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                                                                                    }`}>
+                                                                                    {result.student_answer || result.selected_answer || 'No answer provided'}
+                                                                                </p>
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Correct Answer:</label>
+                                                                                <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
+                                                                                    {result.correct_answer_text || result.correct_answer || 'Not available'}
+                                                                                </p>
+                                                                            </div>
                                                                         </div>
                                                                     </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ))}
+                                                                )}
+
+                                                                {/* Audio-specific details for listening/speaking tests */}
+                                                                {(result.question_type === 'audio' || result.question_type === 'listening' || result.question_type === 'speaking') && (
+                                                                    <div className="mt-4 space-y-3">
+                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Student Transcript:</label>
+                                                                                <p className="mt-1 p-2 rounded bg-blue-50 text-blue-800">
+                                                                                    {result.student_text || result.student_answer || 'No transcript available'}
+                                                                                </p>
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Original Text:</label>
+                                                                                <p className="mt-1 p-2 rounded bg-gray-50 text-gray-800">
+                                                                                    {result.original_text || result.correct_answer || 'Not available'}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Similarity Score:</label>
+                                                                                <div className="mt-1 flex items-center gap-2">
+                                                                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                                                                        <div
+                                                                                            className={`h-2 rounded-full ${result.similarity_score >= 70 ? 'bg-green-500' :
+                                                                                                result.similarity_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                                                                                                }`}
+                                                                                            style={{ width: `${Math.min(result.similarity_score || 0, 100)}%` }}
+                                                                                        ></div>
+                                                                                    </div>
+                                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                                        {result.similarity_score?.toFixed(1) || 0}%
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-sm font-medium text-gray-600">Student Audio:</label>
+                                                                                {result.student_audio_url ? (
+                                                                                    <div className="mt-1">
+                                                                                        <audio controls className="w-full">
+                                                                                            <source src={result.student_audio_url} type="audio/webm" />
+                                                                                            <source src={result.student_audio_url} type="audio/wav" />
+                                                                                            <source src={result.student_audio_url} type="audio/mp3" />
+                                                                                            Your browser does not support the audio element.
+                                                                                        </audio>
+                                                                                        <a
+                                                                                            href={result.student_audio_url}
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                            className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
+                                                                                        >
+                                                                                            Download Audio
+                                                                                        </a>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <p className="mt-1 text-sm text-gray-500">No audio available</p>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )
+                                                    })}
                                                 </div>
                                             )}
                                         </div>
