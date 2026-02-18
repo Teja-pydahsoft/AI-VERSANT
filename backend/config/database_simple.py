@@ -2,6 +2,7 @@ import os
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from urllib.parse import urlparse
+import certifi
 
 load_dotenv()
 
@@ -54,7 +55,8 @@ class DatabaseConfig:
                 'w': 'majority',
                 'appName': 'Versant-LargeOps',
                 'heartbeatFrequencyMS': 30000,  # 30 seconds heartbeat
-                'maxConnecting': 20  # Allow more concurrent connections
+                'maxConnecting': 20, # Allow more concurrent connections
+                'tlsCAFile': certifi.where()
             }
             
             # Ensure required parameters are in the connection string

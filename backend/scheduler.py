@@ -5,9 +5,10 @@ from pymongo import MongoClient
 from routes.test_management import notify_students
 from flask import current_app
 
-# Adjust this to your MongoDB connection
-client = MongoClient('mongodb://localhost:27017/')
-db = client['your_db_name']  # Replace with your DB name
+from config.database_simple import DatabaseConfig
+
+# Use central configuration for MongoDB
+db = DatabaseConfig.get_database()
 
 def send_daily_test_notifications():
     print(f"[Scheduler] Running daily test notification job at {datetime.now()}")

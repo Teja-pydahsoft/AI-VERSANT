@@ -782,11 +782,21 @@ def update_test_end_time(test_id):
 
         # Optional: ensure startDateTime exists and is before new endDateTime
         start_dt = test_doc.get('startDateTime')
-        if start_dt and isinstance(start_dt, datetime) and start_dt >= new_end_dt:
-            return jsonify({
-                'success': False,
-                'message': 'End date must be after start date'
-            }), 400
+        if start_dt and isinstance(start_dt, datetime):
+            # Normalize for comparison (make both aware or both naive)
+            temp_start = start_dt
+            temp_new_end = new_end_dt
+            
+            if temp_start.tzinfo is None:
+                temp_start = temp_start.replace(tzinfo=timezone.utc)
+            if temp_new_end.tzinfo is None:
+                temp_new_end = temp_new_end.replace(tzinfo=timezone.utc)
+                
+            if temp_start >= temp_new_end:
+                return jsonify({
+                    'success': False,
+                    'message': 'End date must be after start date'
+                }), 400
 
         mongo_db.tests.update_one(
             {'_id': test_obj_id},
