@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, Response, stream_with_context
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from mongo import mongo_db
 from config.database_simple import DatabaseConfig
@@ -9,7 +9,15 @@ from datetime import datetime
 import pytz
 from utils.async_processor import async_route, performance_monitor, submit_background_task, cached_async_result
 from utils.date_formatter import format_date_to_ist
-from config.aws_config import presigned_url_for_audio, S3_BUCKET_NAME
+import os
+
+from config.aws_config import (
+    presigned_url_for_audio,
+    S3_BUCKET_NAME,
+    s3_object_key_from_audio_reference,
+    get_s3_client_safe,
+)
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 # Helper function to recursively convert ObjectId fields to strings
 def convert_objectids_to_strings(obj):
@@ -42,13 +50,41 @@ def safe_object_id_conversion(user_id):
         raise ValueError(f"Invalid user ID format: {user_id}")
 
 
-def _student_playable_audio_url(raw_audio_ref):
+_AUDIO_STREAM_SALT = 'student-listening-audio-v1'
+
+
+def _audio_stream_token(s3_key: str) -> str:
+    ser = URLSafeTimedSerializer(current_app.config['SECRET_KEY'], salt=_AUDIO_STREAM_SALT)
+    return ser.dumps({'k': s3_key})
+
+
+def _request_public_origin():
+    """Public origin for absolute audio URLs when the SPA and API run on different hosts."""
+    if request.headers.get('X-Forwarded-Host'):
+        scheme = request.headers.get('X-Forwarded-Proto') or request.scheme or 'https'
+        host = request.headers.get('X-Forwarded-Host')
+        return f'{scheme}://{host}'.rstrip('/')
+    return request.url_root.rstrip('/')
+
+
+def _student_playable_audio_url(raw_audio_ref, public_origin=None):
     """
-    Browsers cannot send AWS auth headers on <audio src>; private buckets need presigned GET URLs.
-    Falls back to legacy public URL if presigning is unavailable.
+    Prefer signed app URL that streams from S3 (no S3 CORS on the browser; no JWT on <audio>).
+    Otherwise presigned S3 GET, then legacy public URL.
     """
     if not raw_audio_ref:
         return None
+    key = s3_object_key_from_audio_reference(str(raw_audio_ref).strip(), S3_BUCKET_NAME)
+    if key and key.startswith('audio/') and '..' not in key:
+        try:
+            tok = _audio_stream_token(key)
+            path = f'/student/public-audio/{tok}'
+            base = (public_origin or '').rstrip('/')
+            if base:
+                return f'{base}{path}'
+            return path
+        except Exception:
+            current_app.logger.exception('Failed to build audio stream token')
     signed = presigned_url_for_audio(raw_audio_ref)
     if signed:
         return signed
@@ -58,6 +94,16 @@ def _student_playable_audio_url(raw_audio_ref):
     if S3_BUCKET_NAME:
         return f'https://{S3_BUCKET_NAME}.s3.amazonaws.com/{ref.lstrip("/")}'
     return ref
+
+
+def _rewrite_assignment_question_audio_urls(questions, public_origin):
+    """Random-assignment payloads store raw S3 refs; rewrite for browser playback."""
+    if not questions:
+        return
+    for q in questions:
+        raw = q.get('audio_url')
+        if raw:
+            q['audio_url'] = _student_playable_audio_url(raw, public_origin=public_origin) or raw
 
 
 def get_db():
@@ -99,6 +145,126 @@ def safe_isoformat(date_obj):
         return str(date_obj)
 
 student_bp = Blueprint('student', __name__)
+
+
+@student_bp.route('/public-audio/<token>', methods=['GET', 'HEAD'])
+def stream_public_audio(token):
+    """
+    Stream listening clips from S3 using a short-lived signed token (no JWT on <audio>).
+    """
+    try:
+        max_age = int(os.getenv('AUDIO_STREAM_TOKEN_MAX_AGE', '7200'))
+    except ValueError:
+        max_age = 7200
+    max_age = max(300, min(max_age, 86400))
+
+    try:
+        ser = URLSafeTimedSerializer(current_app.config['SECRET_KEY'], salt=_AUDIO_STREAM_SALT)
+        data = ser.loads(token, max_age=max_age)
+        s3_key = data.get('k')
+    except SignatureExpired:
+        return jsonify({'success': False, 'message': 'Link expired'}), 410
+    except BadSignature:
+        return jsonify({'success': False, 'message': 'Invalid link'}), 403
+
+    if not s3_key or '..' in s3_key or not s3_key.startswith('audio/'):
+        return jsonify({'success': False, 'message': 'Bad path'}), 400
+
+    bucket = S3_BUCKET_NAME
+    client = get_s3_client_safe()
+    if not client or not bucket:
+        return jsonify({'success': False, 'message': 'Storage unavailable'}), 503
+
+    try:
+        head = client.head_object(Bucket=bucket, Key=s3_key)
+    except Exception as e:
+        current_app.logger.warning('stream_public_audio head_object %s: %s', s3_key, e)
+        return jsonify({'success': False, 'message': 'Not found'}), 404
+
+    content_length = int(head.get('ContentLength') or 0)
+    content_type = head.get('ContentType') or 'application/octet-stream'
+
+    if request.method == 'HEAD':
+        return Response(
+            status=200,
+            headers={
+                'Accept-Ranges': 'bytes',
+                'Cache-Control': 'private, max-age=300',
+                'Content-Type': content_type,
+                'Content-Length': str(content_length),
+            },
+        )
+
+    range_header = request.headers.get('Range')
+    range_start = 0
+    range_end = max(content_length - 1, 0)
+    status_code = 200
+    extra_headers = {}
+
+    if range_header and range_header.startswith('bytes=') and content_length > 0:
+        spec = range_header.split('=', 1)[1].strip()
+        try:
+            if spec.startswith('-'):
+                suffix = int(spec[1:])
+                range_start = max(0, content_length - suffix)
+                range_end = content_length - 1
+            else:
+                start_s, _, end_s = spec.partition('-')
+                range_start = int(start_s) if start_s else 0
+                range_end = int(end_s) if end_s else content_length - 1
+        except ValueError:
+            range_start, range_end = 0, content_length - 1
+        range_end = min(range_end, content_length - 1)
+        if range_start > range_end or range_start >= content_length:
+            return Response(
+                status=416,
+                headers={'Content-Range': f'bytes */{content_length}'},
+            )
+        status_code = 206
+        rng_len = range_end - range_start + 1
+        extra_headers['Content-Range'] = f'bytes {range_start}-{range_end}/{content_length}'
+        extra_headers['Content-Length'] = str(rng_len)
+    else:
+        extra_headers['Content-Length'] = str(content_length)
+
+    common_headers = {
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'private, max-age=300',
+        'Content-Type': content_type,
+        **extra_headers,
+    }
+
+    get_kwargs = {'Bucket': bucket, 'Key': s3_key}
+    if status_code == 206:
+        get_kwargs['Range'] = f'bytes={range_start}-{range_end}'
+
+    try:
+        obj = client.get_object(**get_kwargs)
+        body = obj['Body']
+    except Exception as e:
+        current_app.logger.warning('stream_public_audio get_object %s: %s', s3_key, e)
+        return jsonify({'success': False, 'message': 'Not found'}), 404
+
+    def generate():
+        try:
+            while True:
+                chunk = body.read(65536)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            try:
+                body.close()
+            except Exception:
+                pass
+
+    return Response(
+        stream_with_context(generate()),
+        status=status_code,
+        headers=common_headers,
+        direct_passthrough=False,
+    )
+
 
 @student_bp.route('/profile', methods=['GET'])
 @jwt_required()
@@ -1272,7 +1438,9 @@ def get_student_random_test_assignment(test_id):
                 del question['correct_answer']
             if 'original_answer' in question:
                 del question['original_answer']
-        
+
+        _rewrite_assignment_question_audio_urls(test_data['questions'], _request_public_origin())
+
         return jsonify({
             'success': True,
             'message': 'Test assignment retrieved successfully',
@@ -1623,7 +1791,8 @@ def get_single_test(test_id):
 
             processed_questions = []
             shuffled_questions = []  # Store shuffled questions for validation
-            
+            public_origin = _request_public_origin()
+
             for idx, q in enumerate(test['questions']):
                 current_app.logger.info(f"Processing question {idx + 1}: {q.get('question_type', 'unknown')}")
                 
@@ -1695,7 +1864,7 @@ def get_single_test(test_id):
                         # For listening module, hide the sentence text from students
                         if test.get('module_id') == 'LISTENING':
                             raw_audio = q.get('audio_url')
-                            audio_url = _student_playable_audio_url(raw_audio) if raw_audio else None
+                            audio_url = _student_playable_audio_url(raw_audio, public_origin=public_origin) if raw_audio else None
                             if audio_url:
                                 current_app.logger.info('Prepared student LISTENING audio URL (presigned when S3 allows)')
                                 clean_q = {
@@ -1727,7 +1896,7 @@ def get_single_test(test_id):
                         else:
                             # For other modules, show the sentence normally
                             raw_audio = q.get('audio_url')
-                            audio_url = _student_playable_audio_url(raw_audio) if raw_audio else None
+                            audio_url = _student_playable_audio_url(raw_audio, public_origin=public_origin) if raw_audio else None
                             if audio_url:
                                 current_app.logger.info('Prepared student audio URL (presigned when S3 allows)')
                                 clean_q = {
@@ -1765,7 +1934,7 @@ def get_single_test(test_id):
                             )
 
                             if raw_alt:
-                                audio_url = _student_playable_audio_url(raw_alt)
+                                audio_url = _student_playable_audio_url(raw_alt, public_origin=public_origin)
                                 if audio_url:
                                     current_app.logger.info('Prepared student LISTENING audio URL from alternate fields')
                                     clean_q = {

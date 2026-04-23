@@ -10,6 +10,7 @@ import { BookOpen, BrainCircuit, ChevronLeft, Lock, Unlock, CheckCircle, XCircle
 import { io } from 'socket.io-client';
 import { useContext } from 'react';
 import { AuthContext } from '../../contexts/AuthContext';
+import { getPlayableAudioUrl } from '../../utils/audioPlayback';
 
 
 
@@ -1221,9 +1222,10 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                         </div>
                         
                         <audio 
-                            key={`audio-${currentQuestion.audio_id || questionId}-${currentQuestionIndex}-${(currentQuestion.audio_presigned_url || currentQuestion.audio_url || '').slice(-24)}`}
+                            key={`audio-${currentQuestion.audio_id || questionId}-${currentQuestionIndex}-${getPlayableAudioUrl(currentQuestion).slice(-32)}`}
                             controls 
                             className="mx-auto mb-4 w-full max-w-md"
+                            src={getPlayableAudioUrl(currentQuestion)}
                             onError={(e) => {
                                 const error = e.target.error;
                                 let errorMessage = 'Failed to load audio file.';
@@ -1251,18 +1253,6 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                             onLoad={() => {}}
                             preload="auto"
                         >
-                            <source
-                              src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
-                              type="audio/mpeg"
-                            />
-                            <source
-                              src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
-                              type="audio/wav"
-                            />
-                            <source
-                              src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
-                              type="audio/ogg"
-                            />
                             Your browser does not support the audio element.
                         </audio>
                         
@@ -1306,11 +1296,7 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                 {currentQuestion.question_type === 'audio' &&
                   (currentQuestion.audio_url || currentQuestion.audio_presigned_url) &&
                   currentQuestion.question_type !== 'listening' && (
-                    <audio controls className="mx-auto mb-4">
-                        <source
-                          src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
-                          type="audio/mpeg"
-                        />
+                    <audio controls className="mx-auto mb-4" src={getPlayableAudioUrl(currentQuestion)}>
                         Your browser does not support the audio element.
                     </audio>
                 )}

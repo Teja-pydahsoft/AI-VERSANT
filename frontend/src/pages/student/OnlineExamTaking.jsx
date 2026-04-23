@@ -6,6 +6,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import TechnicalCodeEditor from '../../components/TechnicalCodeEditor';
+import { getPlayableAudioUrl } from '../../utils/audioPlayback';
 
 const OnlineExamTaking = () => {
   const location = useLocation();
@@ -1074,9 +1075,10 @@ const OnlineExamTaking = () => {
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                         <p className="text-blue-700 font-medium mb-2 text-sm">Listen to the audio:</p>
                         <audio
-                          key={`audio-${currentQuestion.question_id}-${currentQuestionIndex}-${(currentQuestion.audio_presigned_url || currentQuestion.audio_url || '').slice(-24)}`}
+                          key={`audio-${currentQuestion.question_id}-${currentQuestionIndex}-${getPlayableAudioUrl(currentQuestion).slice(-32)}`}
                           controls
                           className="mx-auto w-full max-w-md"
+                          src={getPlayableAudioUrl(currentQuestion)}
                           onError={(e) => {
                             const error = e.target.error;
                             let errorMessage = 'Failed to load audio file.';
@@ -1101,18 +1103,6 @@ const OnlineExamTaking = () => {
                           }}
                           preload="auto"
                         >
-                          <source
-                            src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
-                            type="audio/mpeg"
-                          />
-                          <source
-                            src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
-                            type="audio/wav"
-                          />
-                          <source
-                            src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
-                            type="audio/ogg"
-                          />
                           Your browser does not support the audio element.
                         </audio>
                       </div>
@@ -1511,8 +1501,7 @@ const OnlineExamTaking = () => {
                             className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4"
                           >
                             <p className="text-green-700 font-semibold mb-2">Your Recording:</p>
-                            <audio controls className="w-full">
-                              <source src={audioURLs[currentQuestion.question_id]} type="audio/wav" />
+                            <audio controls className="w-full" src={audioURLs[currentQuestion.question_id]}>
                               Your browser does not support the audio element.
                             </audio>
                           </motion.div>
@@ -1607,8 +1596,7 @@ const OnlineExamTaking = () => {
                             className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4"
                           >
                             <p className="text-green-700 font-semibold mb-2">Your Recording:</p>
-                            <audio controls className="w-full">
-                              <source src={audioURLs[currentQuestion.question_id]} type="audio/wav" />
+                            <audio controls className="w-full" src={audioURLs[currentQuestion.question_id]}>
                               Your browser does not support the audio element.
                             </audio>
                           </motion.div>
