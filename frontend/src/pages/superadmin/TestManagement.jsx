@@ -3427,20 +3427,19 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
   const [audioGenerationProgress, setAudioGenerationProgress] = useState(0);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
 
-  // Fetch questions from bank when source changes or topic is selected
+  // Fetch questions from bank when source changes or topic is selected.
+  // Use only testData for topic keys — including local selectedTopic caused a second fetch after sync.
   useEffect(() => {
     if (questionSource === 'bank') {
       fetchQuestionsFromBank();
     }
-  }, [questionSource, testData.module, testData.level, testData.subcategory, testData.topic_id, selectedTopic]);
+  }, [questionSource, testData.module, testData.level, testData.subcategory, testData.topic_id, testData.selectedTopic]);
 
-  // Update selectedTopic when testData changes
+  // Keep local topic id aligned with wizard state (does not trigger bank refetch by itself).
   useEffect(() => {
     const topicId = testData.topic_id || testData.selectedTopic || '';
-    if (topicId !== selectedTopic) {
-      setSelectedTopic(topicId);
-    }
-  }, [testData.topic_id, testData.selectedTopic, selectedTopic]);
+    setSelectedTopic((prev) => (prev !== topicId ? topicId : prev));
+  }, [testData.topic_id, testData.selectedTopic]);
 
   const fetchQuestionsFromBank = async (count = 50, page = 1, append = false) => {
     if (page === 1) {
@@ -3453,9 +3452,8 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
       // Determine the correct level_id based on module type
       let levelId = testData.level;
       let subcategory = testData.subcategory;
-      // Use topic_id from testData first, then fallback to selectedTopic
-      // This ensures we use the most up-to-date topic selection
-      let topicId = testData.topic_id || selectedTopic || '';
+      // Single source of truth from wizard (avoids mismatch with refetch ordering).
+      let topicId = testData.topic_id || testData.selectedTopic || selectedTopic || '';
 
       if (testData.module.startsWith('CRT_')) {
         // For CRT modules, don't set level_id unless it's specifically needed

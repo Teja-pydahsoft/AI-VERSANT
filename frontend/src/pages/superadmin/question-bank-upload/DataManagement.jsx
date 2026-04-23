@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { 
   FileText, 
@@ -45,9 +45,77 @@ const DataManagement = ({ moduleName, levelId }) => {
     }
   };
 
-  const handleDelete = async (id) => {
+  /** Match backend _normalized_question_bank_text so duplicate rows pair correctly. */
+  const normalizeBankTextKey = (item) => {
+    let t = (item.question || item.sentence || item.paragraph || '').trim();
+    if (!t) return '';
+    t = t.replace(/^\uFEFF/, '');
+    t = t
+      .replace(/\u2019/g, "'")
+      .replace(/\u2018/g, "'")
+      .replace(/\u201c/g, '"')
+      .replace(/\u201d/g, '"');
+    t = t.replace(/\s+/g, ' ').trim().toLowerCase();
+    return t;
+  };
+
+  const duplicateTextCounts = useMemo(() => {
+    const counts = new Map();
+    for (const item of data) {
+      const k = normalizeBankTextKey(item);
+      if (!k) continue;
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return counts;
+  }, [data]);
+
+  const hasDuplicateSameText = (item) => {
+    const k = normalizeBankTextKey(item);
+    if (!k) return false;
+    return (duplicateTextCounts.get(k) || 0) > 1;
+  };
+
+  const usedCount = (item) => Number(item?.used_count) || 0;
+
+  const handleDelete = async (item) => {
+    const id = item._id;
+    const used = usedCount(item);
+    const dup = hasDuplicateSameText(item);
+
+    if (used > 0 && dup) {
+      if (
+        !window.confirm(
+          'This row is used in tests, but another bank row has the same text (duplicate). Delete this copy and move test references to the kept row? This cannot be undone.'
+        )
+      ) {
+        return;
+      }
+      try {
+        const response = await deleteQuestion(id, { mergeDuplicate: true });
+        if (response.data.success) {
+          toast.success(response.data.message || 'Duplicate removed; tests updated.');
+          fetchData();
+        }
+      } catch (error) {
+        console.error('Error removing duplicate:', error);
+        const msg =
+          error.response?.data?.message ||
+          error.message ||
+          'Failed to remove duplicate';
+        toast.error(msg);
+      }
+      return;
+    }
+
+    if (used > 0) {
+      toast.error(
+        'This question is used in tests. Remove it from those tests first, or ensure another row has the same text to delete as a duplicate.'
+      );
+      return;
+    }
+
     if (!window.confirm('Are you sure you want to delete this item?')) return;
-    
+
     try {
       const response = await deleteQuestion(id);
       if (response.data.success) {
@@ -56,7 +124,11 @@ const DataManagement = ({ moduleName, levelId }) => {
       }
     } catch (error) {
       console.error('Error deleting item:', error);
-      toast.error('Failed to delete item');
+      const msg =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to delete item';
+      toast.error(msg);
     }
   };
 
@@ -78,7 +150,11 @@ const DataManagement = ({ moduleName, levelId }) => {
       }
     } catch (error) {
       console.error('Error bulk deleting items:', error);
-      toast.error('Failed to delete items');
+      const msg =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to delete items';
+      toast.error(msg);
     }
   };
 
@@ -92,7 +168,11 @@ const DataManagement = ({ moduleName, levelId }) => {
       }
     } catch (error) {
       console.error('Error updating item:', error);
-      toast.error('Failed to update item');
+      const msg =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to update item';
+      toast.error(msg);
     }
   };
 
@@ -124,6 +204,13 @@ const DataManagement = ({ moduleName, levelId }) => {
     
     return matchesSearch && matchesFilter;
   });
+
+  const deletableFilteredIds = filteredData
+    .filter((item) => usedCount(item) === 0)
+    .map((item) => item._id);
+  const allDeletableSelected =
+    deletableFilteredIds.length > 0 &&
+    deletableFilteredIds.every((id) => selectedItems.includes(id));
 
   const renderItemContent = (item) => {
     if (item.question) {
@@ -246,10 +333,14 @@ const DataManagement = ({ moduleName, levelId }) => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                            <input
                          type="checkbox"
-                         checked={selectedItems.length === filteredData.length}
+                         checked={allDeletableSelected}
                          onChange={(e) => {
                            if (e.target.checked) {
-                             setSelectedItems(filteredData.map(item => item._id));
+                             setSelectedItems(
+                               filteredData
+                                 .filter((item) => (item.used_count ?? 0) === 0)
+                                 .map((item) => item._id)
+                             );
                            } else {
                              setSelectedItems([]);
                            }
@@ -269,6 +360,9 @@ const DataManagement = ({ moduleName, levelId }) => {
                      Created
                    </th>
                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                     In tests
+                   </th>
+                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                      Actions
                    </th>
                 </tr>
@@ -276,7 +370,7 @@ const DataManagement = ({ moduleName, levelId }) => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredData.map((item) => (
                   <motion.tr
-                    key={item.id}
+                    key={item._id || item.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="hover:bg-gray-50"
@@ -284,6 +378,12 @@ const DataManagement = ({ moduleName, levelId }) => {
                                          <td className="px-6 py-4 whitespace-nowrap">
                        <input
                          type="checkbox"
+                         disabled={usedCount(item) > 0}
+                         title={
+                           usedCount(item) > 0
+                             ? 'In use by tests; cannot bulk-delete'
+                             : undefined
+                         }
                          checked={selectedItems.includes(item._id)}
                          onChange={(e) => {
                            if (e.target.checked) {
@@ -292,7 +392,7 @@ const DataManagement = ({ moduleName, levelId }) => {
                              setSelectedItems(selectedItems.filter(id => id !== item._id));
                            }
                          }}
-                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
                        />
                      </td>
                                          <td className="px-6 py-4">
@@ -314,6 +414,15 @@ const DataManagement = ({ moduleName, levelId }) => {
                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                        {new Date(item.created_at || item.uploaded_at).toLocaleDateString()}
                      </td>
+                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                       {usedCount(item) > 0 ? (
+                         <span title="Used in tests. If another row has the same text, Delete will remove this duplicate and reassign tests.">
+                           {usedCount(item)}
+                         </span>
+                       ) : (
+                         <span className="text-gray-400">0</span>
+                       )}
+                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
@@ -328,10 +437,23 @@ const DataManagement = ({ moduleName, levelId }) => {
                         >
                           <Edit className="h-4 w-4" />
                         </button>
-                                                 <button
-                           onClick={() => handleDelete(item._id)}
-                           className="text-red-600 hover:text-red-900"
-                         >
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item)}
+                          disabled={usedCount(item) > 0 && !hasDuplicateSameText(item)}
+                          title={
+                            usedCount(item) > 0
+                              ? hasDuplicateSameText(item)
+                                ? 'Delete duplicate: tests will point to the other row with the same text'
+                                : 'Cannot delete: used in tests (no duplicate row with same text)'
+                              : 'Delete'
+                          }
+                          className={
+                            usedCount(item) > 0 && !hasDuplicateSameText(item)
+                              ? 'text-gray-300 cursor-not-allowed'
+                              : 'text-red-600 hover:text-red-900'
+                          }
+                        >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
@@ -361,6 +483,7 @@ const DataManagement = ({ moduleName, levelId }) => {
               {renderItemContent(viewModal.item)}
                              <div className="text-sm text-gray-500">
                  <div><strong>ID:</strong> {viewModal.item._id}</div>
+                 <div><strong>Used in tests:</strong> {viewModal.item.used_count ?? 0}</div>
                  {isAudioModule && (
                    <div><strong>Status:</strong> {viewModal.item.status || 'active'}</div>
                  )}

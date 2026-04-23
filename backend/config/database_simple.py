@@ -6,6 +6,11 @@ import certifi
 
 load_dotenv()
 
+
+def _mongo_verbose():
+    return os.getenv('MONGODB_VERBOSE', '').lower() in ('1', 'true', 'yes')
+
+
 class DatabaseConfig:
     # MongoDB URI from environment variable
     MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb+srv://teja:teja0000@versant.ia46v3i.mongodb.net/suma_madam?retryWrites=true&w=majority&appName=Versant&connectTimeoutMS=30000&socketTimeoutMS=30000&serverSelectionTimeoutMS=30000')
@@ -13,25 +18,28 @@ class DatabaseConfig:
     @staticmethod
     def get_database_name():
         """Extract database name from MongoDB URI"""
-        print(f"🔍 MONGODB_URI: {DatabaseConfig.MONGODB_URI}")
-        
+        if _mongo_verbose():
+            print(f'🔍 MONGODB_URI: {DatabaseConfig.MONGODB_URI}')
+
         if not DatabaseConfig.MONGODB_URI:
-            print("⚠️ No MONGODB_URI found, using default: suma_madam")
+            if _mongo_verbose():
+                print('⚠️ No MONGODB_URI found, using default: suma_madam')
             return 'suma_madam'  # Updated to match actual database
-        
+
         try:
-            # Parse the URI to extract database name
             parsed_uri = urlparse(DatabaseConfig.MONGODB_URI)
-            print(f"🔍 Parsed URI path: {parsed_uri.path}")
-            # The path will be like '/database_name?params'
+            if _mongo_verbose():
+                print(f'🔍 Parsed URI path: {parsed_uri.path}')
             db_name = parsed_uri.path.strip('/').split('?')[0]
-            print(f"🔍 Extracted database name: {db_name}")
-            # If no database name in URI, use suma_madam as default
+            if _mongo_verbose():
+                print(f'🔍 Extracted database name: {db_name}')
             final_db_name = db_name if db_name else 'suma_madam'
-            print(f"✅ Final database name: {final_db_name}")
+            if _mongo_verbose():
+                print(f'✅ Final database name: {final_db_name}')
             return final_db_name
         except Exception as e:
-            print(f"❌ Error parsing URI: {e}, using default: suma_madam")
+            if _mongo_verbose():
+                print(f'❌ Error parsing URI: {e}, using default: suma_madam')
             return 'suma_madam'  # Updated to match actual database
     
     @staticmethod
@@ -76,8 +84,9 @@ class DatabaseConfig:
                     else:
                         uri += f'?{param}'
             
-            print(f"🔗 Connecting to MongoDB...")
-            
+            if _mongo_verbose():
+                print('🔗 Connecting to MongoDB...')
+
             return MongoClient(uri, **client_options)
             
         except Exception as e:
@@ -89,9 +98,10 @@ class DatabaseConfig:
         """Get database instance"""
         client = DatabaseConfig.get_client()
         db_name = DatabaseConfig.get_database_name()
-        print(f"📊 Using database: {db_name}")
-        print(f"🔗 MongoDB URI: {DatabaseConfig.MONGODB_URI}")
-        print(f"🌐 Client address: {client.address}")
+        if _mongo_verbose():
+            print(f'📊 Using database: {db_name}')
+            print(f'🔗 MongoDB URI: {DatabaseConfig.MONGODB_URI}')
+            print(f'🌐 Client address: {client.address}')
         return client[db_name]
     
     @staticmethod

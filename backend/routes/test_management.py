@@ -40,6 +40,7 @@ from utils.audio_generator import generate_audio_from_text, calculate_similarity
 import functools
 import string
 import random
+import re
 from dateutil import tz
 from pymongo import DESCENDING
 from collections import defaultdict
@@ -1435,6 +1436,41 @@ def get_existing_questions():
         current_app.logger.error(f"Error fetching existing questions: {e}")
         return jsonify({'success': False, 'message': f'Failed to fetch existing questions: {e}'}), 500
 
+
+def _question_bank_id_str(q):
+    oid = q.get('_id')
+    return str(oid) if oid is not None else ''
+
+
+def _question_bank_created_sort_key(q):
+    """Stable created/upload time for ordering unused questions."""
+    d = q.get('created_at') or q.get('uploaded_at')
+    if not d:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    try:
+        if getattr(d, 'tzinfo', None) is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return d.astimezone(timezone.utc)
+    except Exception:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _stable_sort_unused_questions(unused_questions):
+    """Deterministic order (oldest first, then _id). Avoids random.shuffle so refetches match."""
+    unused_questions.sort(key=lambda q: (_question_bank_created_sort_key(q), _question_bank_id_str(q)))
+
+
+def _stable_sort_used_questions(used_questions):
+    """Least-used first, then last_used, then _id — deterministic."""
+    used_questions.sort(
+        key=lambda x: (
+            x.get('used_count', 0),
+            x.get('last_used') or 0,
+            _question_bank_id_str(x),
+        )
+    )
+
+
 @test_management_bp.route('/question-bank/fetch-for-test', methods=['POST'])
 @jwt_required()
 @require_superadmin
@@ -1495,30 +1531,20 @@ def fetch_questions_for_test():
         # Separate unused and used questions
         unused_questions = [q for q in all_questions if q.get('used_count', 0) == 0]
         used_questions = [q for q in all_questions if q.get('used_count', 0) > 0]
-        
-        # Sort used questions by usage (least used first)
-        used_questions.sort(key=lambda x: (x.get('used_count', 0), x.get('last_used', 0)))
-        
-        # Select questions: prefer unused, then least used
+
+        _stable_sort_unused_questions(unused_questions)
+        _stable_sort_used_questions(used_questions)
+
+        # Select questions: prefer unused (oldest first), then least-used — stable across calls
         selected_questions = []
-        
-        # First, add unused questions (randomized)
+
         if unused_questions:
-            import random
-            random.shuffle(unused_questions)
             selected_questions.extend(unused_questions[:n])
-        
-        # If we need more questions, add from used questions (randomized from least used)
+
         if len(selected_questions) < n and used_questions:
             remaining_needed = n - len(selected_questions)
-            # Take a larger pool of least used questions and randomize
-            pool_size = min(len(used_questions), remaining_needed * 3)  # 3x pool for better randomization
-            pool_questions = used_questions[:pool_size]
-            random.shuffle(pool_questions)
-            selected_questions.extend(pool_questions[:remaining_needed])
-        
-        # Final shuffle to randomize the order of selected questions
-        random.shuffle(selected_questions)
+            selected_questions.extend(used_questions[:remaining_needed])
+
         questions = selected_questions
     
     for q in questions:
@@ -1603,33 +1629,21 @@ def get_bulk_questions_from_bank():
         if not all_questions:
             questions = []
         else:
-            # Separate unused and used questions for smart selection
+            # Separate unused and used questions for smart selection (stable order, no shuffle)
             unused_questions = [q for q in all_questions if q.get('used_count', 0) == 0]
             used_questions = [q for q in all_questions if q.get('used_count', 0) > 0]
-            
-            # Sort used questions by usage (least used first)
-            used_questions.sort(key=lambda x: (x.get('used_count', 0), x.get('last_used', 0)))
-            
-            # Select questions: prefer unused, then least used
+
+            _stable_sort_unused_questions(unused_questions)
+            _stable_sort_used_questions(used_questions)
+
             selected_questions = []
-            import random
-            
-            # First, add unused questions (randomized)
             if unused_questions:
-                random.shuffle(unused_questions)
                 selected_questions.extend(unused_questions)
-            
-            # Always add used questions if they exist (even if all questions are used)
-            # This ensures that even when topic is 100% used, questions are still returned (they can be reused)
-            if used_questions:
-                # Use all used questions for better randomization
-                pool_questions = used_questions.copy()
-                random.shuffle(pool_questions)
-                # Only add if we don't already have all questions, or if all are used (unused_questions is empty)
-                if len(selected_questions) < len(all_questions) or len(unused_questions) == 0:
-                    selected_questions.extend(pool_questions)
-            
-            # Apply pagination to the randomized selection
+            if used_questions and (
+                len(selected_questions) < len(all_questions) or len(unused_questions) == 0
+            ):
+                selected_questions.extend(used_questions)
+
             skip = (page - 1) * limit
             questions = selected_questions[skip:skip + limit]
             
@@ -1665,33 +1679,21 @@ def get_bulk_questions_from_bank():
             if not all_questions:
                 questions = []
             else:
-                # Separate unused and used questions for smart selection
+                # Separate unused and used questions (stable order, no shuffle)
                 unused_questions = [q for q in all_questions if q.get('used_count', 0) == 0]
                 used_questions = [q for q in all_questions if q.get('used_count', 0) > 0]
-                
-                # Sort used questions by usage (least used first)
-                used_questions.sort(key=lambda x: (x.get('used_count', 0), x.get('last_used', 0)))
-                
-                # Select questions: prefer unused, then least used
+
+                _stable_sort_unused_questions(unused_questions)
+                _stable_sort_used_questions(used_questions)
+
                 selected_questions = []
-                import random
-                
-                # First, add unused questions (randomized)
                 if unused_questions:
-                    random.shuffle(unused_questions)
                     selected_questions.extend(unused_questions)
-                
-                # Always add used questions if they exist (even if all questions are used)
-                # This ensures that even when topic is 100% used, questions are still returned (they can be reused)
-                if used_questions:
-                    # Use all used questions for better randomization
-                    pool_questions = used_questions.copy()
-                    random.shuffle(pool_questions)
-                    # Only add if we don't already have all questions, or if all are used (unused_questions is empty)
-                    if len(selected_questions) < len(all_questions) or len(unused_questions) == 0:
-                        selected_questions.extend(pool_questions)
-                
-                # Apply pagination to the randomized selection
+                if used_questions and (
+                    len(selected_questions) < len(all_questions) or len(unused_questions) == 0
+                ):
+                    selected_questions.extend(used_questions)
+
                 skip = (page - 1) * limit
                 questions = selected_questions[skip:skip + limit]
         
@@ -4588,12 +4590,54 @@ def update_question(question_id):
             'message': f'Failed to update question: {str(e)}'
         }), 500
 
+def _normalized_question_bank_text(doc):
+    """Compare bank rows by primary text; collapse whitespace and smart quotes so duplicates match."""
+    text = (doc.get('question') or doc.get('sentence') or doc.get('paragraph') or '').strip()
+    if not text:
+        return ''
+    text = text.lstrip('\ufeff')
+    for smart, plain in (
+        ('\u2019', "'"),
+        ('\u2018', "'"),
+        ('\u201c', '"'),
+        ('\u201d', '"'),
+    ):
+        text = text.replace(smart, plain)
+    text = re.sub(r'\s+', ' ', text).strip().lower()
+    return text
+
+
+def _normalize_embedded_question_id(qid):
+    if qid is None:
+        return None
+    if isinstance(qid, ObjectId):
+        return qid
+    if isinstance(qid, str) and len(qid) == 24:
+        try:
+            return ObjectId(qid)
+        except Exception:
+            return None
+    return None
+
+
 @test_management_bp.route('/questions/<question_id>', methods=['DELETE'])
 @jwt_required()
 @require_superadmin
 def delete_question(question_id):
-    """Delete a question from the question bank"""
+    """Delete a question from the question bank.
+
+    Query param merge_duplicate=1: when this row is a duplicate (same module, level,
+    and normalized text as another bank row), reassign all test references from this
+    ``_id`` to the keeper row, then delete this row. Use this to remove duplicate bank
+    entries that already have ``used_count`` > 0.
+    """
     try:
+        merge_duplicate = str(request.args.get('merge_duplicate', '')).lower() in (
+            '1',
+            'true',
+            'yes',
+        )
+
         # Check if question exists
         existing_question = mongo_db.question_bank.find_one({'_id': ObjectId(question_id)})
         if not existing_question:
@@ -4601,28 +4645,136 @@ def delete_question(question_id):
                 'success': False,
                 'message': 'Question not found'
             }), 404
-        
-        # Check if question is used in any tests
+
+        delete_oid = ObjectId(question_id)
+        norm_text = _normalized_question_bank_text(existing_question)
+        if merge_duplicate and not norm_text:
+            return jsonify({
+                'success': False,
+                'message': 'Cannot merge duplicate: this row has no question/sentence text to match.',
+            }), 400
+
+        if merge_duplicate and existing_question.get('used_count', 0) > 0:
+            module_id = existing_question.get('module_id')
+            level_id = existing_question.get('level_id')
+            if not module_id or not level_id:
+                return jsonify({
+                    'success': False,
+                    'message': 'Cannot merge duplicate: missing module_id or level_id on this row.',
+                }), 400
+
+            peers = list(
+                mongo_db.question_bank.find(
+                    {'module_id': module_id, 'level_id': level_id},
+                    {'question': 1, 'sentence': 1, 'created_at': 1, 'used_in_tests': 1},
+                )
+            )
+            bucket = [p for p in peers if _normalized_question_bank_text(p) == norm_text]
+            if len(bucket) < 2:
+                return jsonify({
+                    'success': False,
+                    'message': (
+                        'No other question bank row has the same text for this module/level. '
+                        'Remove the question from any tests first, or delete without merge when unused.'
+                    ),
+                }), 400
+
+            def _created_ts(q):
+                ca = q.get('created_at')
+                if not ca:
+                    return 0.0
+                try:
+                    return float(ca.timestamp())
+                except Exception:
+                    return 0.0
+
+            bucket.sort(key=_created_ts)
+
+            if bucket[0]['_id'] == delete_oid:
+                keeper = bucket[1]
+            else:
+                keeper = bucket[0]
+            keeper_oid = keeper['_id']
+
+            tests_cursor = mongo_db.tests.find(
+                {'questions': {'$elemMatch': {'_id': delete_oid}}},
+                {'questions': 1},
+            )
+            migrated_tests = 0
+            for test in tests_cursor:
+                new_questions = []
+                changed = False
+                for q in test.get('questions', []) or []:
+                    q_copy = dict(q)
+                    qid = _normalize_embedded_question_id(q_copy.get('_id'))
+                    if qid == delete_oid:
+                        q_copy['_id'] = keeper_oid
+                        changed = True
+                    new_questions.append(q_copy)
+                if changed:
+                    mongo_db.tests.update_one(
+                        {'_id': test['_id']},
+                        {'$set': {'questions': new_questions}},
+                    )
+                    migrated_tests += 1
+
+            ref_tests = mongo_db.tests.count_documents(
+                {'questions': {'$elemMatch': {'_id': keeper_oid}}}
+            )
+            mongo_db.question_bank.update_one(
+                {'_id': keeper_oid},
+                {'$set': {'used_count': ref_tests, 'last_used': datetime.now(timezone.utc)}},
+            )
+
+            del_result = mongo_db.question_bank.delete_one({'_id': delete_oid})
+            if del_result.deleted_count == 0:
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to delete duplicate row after reassigning tests.',
+                }), 500
+
+            current_app.logger.info(
+                'Merged duplicate question %s into %s; updated %s test document(s).',
+                delete_oid,
+                keeper_oid,
+                migrated_tests,
+            )
+            return jsonify({
+                'success': True,
+                'message': (
+                    f'Duplicate removed: {migrated_tests} test(s) now point to the kept row. '
+                    f'Kept question id: {str(keeper_oid)}.'
+                ),
+                'data': {
+                    'keeper_question_id': str(keeper_oid),
+                    'tests_updated': migrated_tests,
+                },
+            }), 200
+
+        # Check if question is used in any tests (normal delete)
         if existing_question.get('used_count', 0) > 0:
             return jsonify({
                 'success': False,
-                'message': f'Cannot delete question. It has been used {existing_question["used_count"]} times in tests.'
+                'message': (
+                    f'Cannot delete question. It has been used {existing_question["used_count"]} times in tests. '
+                    'Delete again with merge_duplicate=1 if another row has the same text (duplicate cleanup).'
+                ),
             }), 400
-        
+
         # Delete the question
         result = mongo_db.question_bank.delete_one({'_id': ObjectId(question_id)})
-        
+
         if result.deleted_count == 0:
             return jsonify({
                 'success': False,
                 'message': 'Failed to delete question'
             }), 500
-        
+
         return jsonify({
             'success': True,
             'message': 'Question deleted successfully'
         }), 200
-        
+
     except Exception as e:
         current_app.logger.error(f"Error deleting question: {str(e)}")
         return jsonify({

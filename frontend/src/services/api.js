@@ -419,8 +419,12 @@ export const updateQuestion = async (questionId, data) => {
   return api.put(`/test-management/questions/${questionId}`, data);
 };
 
-export const deleteQuestion = async (questionId) => {
-  return api.delete(`/test-management/questions/${questionId}`);
+export const deleteQuestion = async (questionId, options = {}) => {
+  const params = {};
+  if (options.mergeDuplicate) {
+    params.merge_duplicate = '1';
+  }
+  return api.delete(`/test-management/questions/${questionId}`, { params });
 };
 
 export const bulkDeleteQuestions = async (questionIds) => {

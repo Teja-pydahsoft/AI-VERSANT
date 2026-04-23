@@ -201,11 +201,12 @@ class DatabaseConnectionPool:
         try:
             from config.database_simple import DatabaseConfig
             # Create initial connections
-            for _ in range(min(10, self.max_connections)):
+            # One warm client avoids ten parallel TLS handshakes and log spam; pool grows on demand.
+            for _ in range(min(1, self.max_connections)):
                 client = DatabaseConfig.get_client()
                 self.connections.put(client)
                 self.connection_count += 1
-            logger.info(f"✅ Database connection pool initialized with {self.connection_count} connections")
+            logger.info(f"✅ Database connection pool initialized with {self.connection_count} connection(s)")
         except Exception as e:
             logger.error(f"❌ Failed to initialize connection pool: {e}")
     
