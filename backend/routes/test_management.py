@@ -134,19 +134,30 @@ def convert_objectids(obj):
         return obj
 
 
-def question_submission_form_prefix(question, index):
+def question_upload_suffix_candidates(question, index):
     """
-    Stable multipart form field suffix for a question (question_<suffix>).
-    Must match the student UI so audio/text align when questions are shuffled vs stored order.
-    Legacy clients may still send question_<index> only.
+    Suffixes for multipart keys question_<suffix> that the client may send.
+    Order matches student UI (examQuestionAnswerKey): question_id, then _id, then list index.
     """
+    out = []
+    qid = question.get('question_id')
+    if qid is not None and str(qid).strip():
+        out.append(str(qid).strip())
     oid = question.get('_id')
     if oid is not None:
-        return str(oid)
-    ext = question.get('question_id')
-    if ext is not None and str(ext).strip():
-        return str(ext).strip()
-    return str(index)
+        s = str(oid)
+        if s not in out:
+            out.append(s)
+    si = str(index)
+    if si not in out:
+        out.append(si)
+    return out
+
+
+def question_submission_form_prefix(question, index):
+    """Primary suffix (first candidate) for logging / legacy single-key callers."""
+    cands = question_upload_suffix_candidates(question, index)
+    return cands[0] if cands else str(index)
 
 
 def generate_audio_from_text(text, accent='en-US', speed=1.0):
@@ -2683,24 +2694,29 @@ def submit_practice_test():
                     })
             else:
                 current_app.logger.info(f"Non-MCQ/Compiler question {i}: type={question.get('question_type')}")
-                # Handle audio question (Listening or Speaking) — match by question id when client sends it
-                q_prefix = question_submission_form_prefix(question, i)
-                primary_audio_key = f'question_{q_prefix}'
+                # Handle audio question (Listening or Speaking) — same multipart key candidates as online listening
+                suffix_cands = question_upload_suffix_candidates(question, i)
+                expected_keys = [f'question_{suf}' for suf in suffix_cands]
                 legacy_audio_key = f'question_{i}'
-                current_app.logger.info(f"Looking for audio file keys: {primary_audio_key} or {legacy_audio_key}")
+                current_app.logger.info(f"Looking for audio file keys (in order): {expected_keys}")
                 current_app.logger.info(f"Available files: {list(files.keys()) if files else 'No files'}")
 
-                audio_file = files.get(primary_audio_key) or files.get(legacy_audio_key)
+                audio_file = None
+                for k in expected_keys:
+                    if k in files:
+                        audio_file = files[k]
+                        break
+                if audio_file is None and legacy_audio_key in files:
+                    audio_file = files[legacy_audio_key]
                 if audio_file is None:
                     current_app.logger.error(
-                        f"Audio recording for question {i + 1} not found. Expected '{primary_audio_key}' "
-                        f"(or legacy '{legacy_audio_key}')"
+                        f"Audio recording for question {i + 1} not found. Tried: {expected_keys} and {legacy_audio_key}"
                     )
                     return jsonify({
                         'success': False,
                         'message': (
                             f'Audio recording for question {i + 1} is required. '
-                            f'Expected file field: {primary_audio_key}'
+                            f'Expected one of these form fields: {", ".join(expected_keys)}'
                         )
                     }), 400
 
@@ -6381,13 +6397,19 @@ def submit_online_listening_test():
         
         for i, question in enumerate(test.get('questions', [])):
             current_app.logger.info(f"Processing question {i+1}: {question.get('question_type')}")
-            q_prefix = question_submission_form_prefix(question, i)
-            primary_q_key = f'question_{q_prefix}'
+            suffix_cands = question_upload_suffix_candidates(question, i)
             legacy_q_key = f'question_{i}'
 
             if question.get('question_type') == 'mcq':
-                # Handle MCQ questions (prefer stable id keys from student UI; legacy index keys still accepted)
-                student_answer = data.get(primary_q_key, '') or data.get(legacy_q_key, '')
+                # Handle MCQ questions (same key order as student UI + legacy index)
+                student_answer = ''
+                for suf in suffix_cands:
+                    k = f'question_{suf}'
+                    if k in data and data.get(k) not in (None, ''):
+                        student_answer = data.get(k, '')
+                        break
+                if student_answer in (None, ''):
+                    student_answer = data.get(legacy_q_key, '')
                 correct_answer = question.get('correct_answer', '')
                 
                 current_app.logger.info(f"MCQ question {i}: student_answer='{student_answer}', correct_answer='{correct_answer}'")
@@ -6409,21 +6431,27 @@ def submit_online_listening_test():
                 })
                 
             else:
-                # Handle audio questions (Listening) — match by question id, not list index (questions may be shuffled in UI)
-                current_app.logger.info(f"Looking for audio file keys: {primary_q_key} or {legacy_q_key}")
+                # Handle audio questions (Listening) — try every suffix the SPA may send (question_id vs _id order)
+                expected_keys = [f'question_{suf}' for suf in suffix_cands]
+                current_app.logger.info(f"Looking for audio file keys (in order): {expected_keys}")
                 current_app.logger.info(f"Available files: {list(files.keys()) if files else 'No files'}")
 
-                audio_file = files.get(primary_q_key) or files.get(legacy_q_key)
+                audio_file = None
+                for k in expected_keys:
+                    if k in files:
+                        audio_file = files[k]
+                        break
+                if audio_file is None and legacy_q_key in files:
+                    audio_file = files[legacy_q_key]
                 if audio_file is None:
                     current_app.logger.error(
-                        f"Audio for question {i + 1} not found. Expected multipart key '{primary_q_key}' "
-                        f"(or legacy '{legacy_q_key}')"
+                        f"Audio for question {i + 1} not found. Tried keys: {expected_keys} and {legacy_q_key}"
                     )
                     return jsonify({
                         'success': False,
                         'message': (
                             f'Audio recording for question {i + 1} is required. '
-                            f'Expected file field: {primary_q_key}'
+                            f'Expected one of these form fields: {", ".join(expected_keys)}'
                         )
                     }), 400
                 current_app.logger.info(f"Found audio file for question {i}: {audio_file.filename}, size: {audio_file.content_length} bytes")
