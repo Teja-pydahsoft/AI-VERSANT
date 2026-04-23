@@ -7,7 +7,6 @@ import uuid
 import os
 from mongo import mongo_db
 from routes.test_management import require_superadmin, generate_unique_test_id, convert_objectids
-from config.aws_config import s3_client, S3_BUCKET_NAME
 from utils.audio_generator import generate_audio_from_text
 
 audio_test_bp = Blueprint('audio_test_management', __name__)
@@ -429,16 +428,19 @@ def get_audio_test(test_id):
         if test.get('module_id') not in audio_modules:
             return jsonify({'success': False, 'message': 'Not an audio test'}), 400
 
-        # Generate presigned URLs for audio files
+        # Generate presigned URLs for audio files (handles keys and full S3 URLs)
+        from config.aws_config import presigned_url_for_audio
+
         for question in test.get('questions', []):
             if 'audio_url' in question and question['audio_url']:
                 try:
-                    url = s3_client.generate_presigned_url(
-                        'get_object',
-                        Params={'Bucket': S3_BUCKET_NAME, 'Key': question['audio_url']},
-                        ExpiresIn=3600  # URL expires in 1 hour
-                    )
+                    url = presigned_url_for_audio(question['audio_url'], expires_in=3600)
                     question['audio_presigned_url'] = url
+                    if not url:
+                        current_app.logger.error(
+                            'Could not presign audio for question (check S3 key / credentials): %s',
+                            question.get('audio_url'),
+                        )
                 except Exception as e:
                     current_app.logger.error(f"Error generating presigned URL for {question['audio_url']}: {e}")
                     question['audio_presigned_url'] = None

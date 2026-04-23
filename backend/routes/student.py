@@ -9,6 +9,7 @@ from datetime import datetime
 import pytz
 from utils.async_processor import async_route, performance_monitor, submit_background_task, cached_async_result
 from utils.date_formatter import format_date_to_ist
+from config.aws_config import presigned_url_for_audio, S3_BUCKET_NAME
 
 # Helper function to recursively convert ObjectId fields to strings
 def convert_objectids_to_strings(obj):
@@ -39,6 +40,25 @@ def safe_object_id_conversion(user_id):
     except Exception as e:
         current_app.logger.error(f"Invalid user ID format: {user_id} - {e}")
         raise ValueError(f"Invalid user ID format: {user_id}")
+
+
+def _student_playable_audio_url(raw_audio_ref):
+    """
+    Browsers cannot send AWS auth headers on <audio src>; private buckets need presigned GET URLs.
+    Falls back to legacy public URL if presigning is unavailable.
+    """
+    if not raw_audio_ref:
+        return None
+    signed = presigned_url_for_audio(raw_audio_ref)
+    if signed:
+        return signed
+    ref = str(raw_audio_ref).strip()
+    if ref.startswith('http'):
+        return ref
+    if S3_BUCKET_NAME:
+        return f'https://{S3_BUCKET_NAME}.s3.amazonaws.com/{ref.lstrip("/")}'
+    return ref
+
 
 def get_db():
     """Get database connection"""
@@ -1674,65 +1694,13 @@ def get_single_test(test_id):
                     if has_audio:
                         # For listening module, hide the sentence text from students
                         if test.get('module_id') == 'LISTENING':
-                            # Convert S3 key to full URL if it's not already a full URL
-                            audio_url = q.get('audio_url')
-                            if audio_url and audio_url.startswith('audio/') and not audio_url.startswith('http'):
-                                from config.aws_config import S3_BUCKET_NAME
-                                audio_url = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/{audio_url}"
-                                current_app.logger.info(f"Converted S3 key to full URL for listening: {audio_url}")
-                            
-                            clean_q = {
-                                "question_id": str(q.get('_id', f"q_{idx+1}")),
-                                "question": "Listen to the audio and record your response",  # Hide actual sentence
-                                "question_type": "listening",
-                                "instructions": q.get('instructions', ''),
-                                "audio_url": audio_url,
-                                "has_audio": True,
-                                "audio_config": q.get('audio_config', {}),
-                                "module_id": "LISTENING",
-                                "sentence": q.get('sentence', ''),  # Keep for backend reference
-                                "hidden_sentence": q.get('sentence', '')  # Store original sentence
-                            }
-                            current_app.logger.info(f"Listening question processed with hidden sentence: {q.get('sentence', '')[:50]}...")
-                        else:
-                            # For other modules, show the sentence normally
-                            # Convert S3 key to full URL if it's not already a full URL
-                            audio_url = q.get('audio_url')
-                            if audio_url and audio_url.startswith('audio/') and not audio_url.startswith('http'):
-                                from config.aws_config import S3_BUCKET_NAME
-                                audio_url = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/{audio_url}"
-                                current_app.logger.info(f"Converted S3 key to full URL for other module: {audio_url}")
-                            
-                            clean_q = {
-                                "question_id": str(q.get('_id', f"q_{idx+1}")),
-                                "question": q.get('question') or q.get('sentence', ''),
-                                "question_type": q.get('question_type'),
-                                "instructions": q.get('instructions', ''),
-                                "audio_url": audio_url,
-                                "has_audio": True,
-                                "audio_config": q.get('audio_config', {}),
-                                "module_id": test.get('module_id'),
-                                "sentence": q.get('sentence', '')
-                            }
-                            current_app.logger.info(f"Audio question processed: {q.get('question_type')} with audio_url: {audio_url}")
-                    else:
-                        # For listening module, try to find audio in alternative fields
-                        if test.get('module_id') == 'LISTENING':
-                            # Check for audio in different possible field names
-                            audio_url = (q.get('audio_url') or q.get('audio') or 
-                                       q.get('audio_file') or q.get('file_url') or 
-                                       q.get('question_audio'))
-                            
+                            raw_audio = q.get('audio_url')
+                            audio_url = _student_playable_audio_url(raw_audio) if raw_audio else None
                             if audio_url:
-                                # Convert S3 key to full URL if it's not already a full URL
-                                if audio_url.startswith('audio/') and not audio_url.startswith('http'):
-                                    from config.aws_config import S3_BUCKET_NAME
-                                    audio_url = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/{audio_url}"
-                                    current_app.logger.info(f"Converted S3 key to full URL: {audio_url}")
-                                
+                                current_app.logger.info('Prepared student LISTENING audio URL (presigned when S3 allows)')
                                 clean_q = {
                                     "question_id": str(q.get('_id', f"q_{idx+1}")),
-                                    "question": "Listen to the audio and record your response",  # Hide actual sentence
+                                    "question": "Listen to the audio and record your response",
                                     "question_type": "listening",
                                     "instructions": q.get('instructions', ''),
                                     "audio_url": audio_url,
@@ -1741,9 +1709,90 @@ def get_single_test(test_id):
                                     "module_id": "LISTENING",
                                     "sentence": q.get('sentence', ''),
                                     "hidden_sentence": q.get('sentence', ''),
-                                    "audio_id": f"audio_{q.get('_id', idx)}_{hash(audio_url)}"  # Unique audio ID
                                 }
-                                current_app.logger.info(f"Listening question with audio found: {audio_url}")
+                                current_app.logger.info(f"Listening question processed with hidden sentence: {q.get('sentence', '')[:50]}...")
+                            else:
+                                current_app.logger.warning(
+                                    'LISTENING: could not build playable audio URL (check S3 credentials / object key). Using text fallback.'
+                                )
+                                clean_q = {
+                                    "question_id": str(q.get('_id', f"q_{idx+1}")),
+                                    "question": q.get('question') or q.get('sentence', ''),
+                                    "question_type": "text_fallback",
+                                    "instructions": (q.get('instructions', '') or '') + " (Audio unavailable — text mode)",
+                                    "original_type": q.get('question_type'),
+                                    "audio_status": "missing",
+                                    "module_id": "LISTENING",
+                                }
+                        else:
+                            # For other modules, show the sentence normally
+                            raw_audio = q.get('audio_url')
+                            audio_url = _student_playable_audio_url(raw_audio) if raw_audio else None
+                            if audio_url:
+                                current_app.logger.info('Prepared student audio URL (presigned when S3 allows)')
+                                clean_q = {
+                                    "question_id": str(q.get('_id', f"q_{idx+1}")),
+                                    "question": q.get('question') or q.get('sentence', ''),
+                                    "question_type": q.get('question_type'),
+                                    "instructions": q.get('instructions', ''),
+                                    "audio_url": audio_url,
+                                    "has_audio": True,
+                                    "audio_config": q.get('audio_config', {}),
+                                    "module_id": test.get('module_id'),
+                                    "sentence": q.get('sentence', ''),
+                                }
+                                current_app.logger.info(f"Audio question processed: {q.get('question_type')} with audio_url set")
+                            else:
+                                clean_q = {
+                                    "question_id": str(q.get('_id', f"q_{idx+1}")),
+                                    "question": q.get('question') or q.get('sentence', ''),
+                                    "question_type": "text_fallback",
+                                    "instructions": (q.get('instructions', '') or '') + " (Audio unavailable — text mode)",
+                                    "original_type": q.get('question_type'),
+                                    "audio_status": "missing",
+                                    "module_id": test.get('module_id'),
+                                }
+                    else:
+                        # For listening module, try to find audio in alternative fields
+                        if test.get('module_id') == 'LISTENING':
+                            # Check for audio in different possible field names
+                            raw_alt = (
+                                q.get('audio_url')
+                                or q.get('audio')
+                                or q.get('audio_file')
+                                or q.get('file_url')
+                                or q.get('question_audio')
+                            )
+
+                            if raw_alt:
+                                audio_url = _student_playable_audio_url(raw_alt)
+                                if audio_url:
+                                    current_app.logger.info('Prepared student LISTENING audio URL from alternate fields')
+                                    clean_q = {
+                                        "question_id": str(q.get('_id', f"q_{idx+1}")),
+                                        "question": "Listen to the audio and record your response",
+                                        "question_type": "listening",
+                                        "instructions": q.get('instructions', ''),
+                                        "audio_url": audio_url,
+                                        "has_audio": True,
+                                        "audio_config": q.get('audio_config', {}),
+                                        "module_id": "LISTENING",
+                                        "sentence": q.get('sentence', ''),
+                                        "hidden_sentence": q.get('sentence', ''),
+                                        "audio_id": f"audio_{q.get('_id', idx)}",
+                                    }
+                                    current_app.logger.info('Listening question with audio resolved for student')
+                                else:
+                                    clean_q = {
+                                        "question_id": str(q.get('_id', f"q_{idx+1}")),
+                                        "question": q.get('question') or q.get('sentence', ''),
+                                        "question_type": "text_fallback",
+                                        "instructions": (q.get('instructions', '') or '') + " (Audio unavailable — text mode)",
+                                        "original_type": q.get('question_type'),
+                                        "audio_status": "missing",
+                                        "module_id": "LISTENING",
+                                    }
+                                    current_app.logger.warning('LISTENING: alternate audio fields present but URL could not be signed')
                             else:
                                 # Fallback for listening questions without audio
                                 clean_q = {

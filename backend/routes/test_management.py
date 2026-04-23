@@ -35,7 +35,7 @@ from difflib import SequenceMatcher
 import json
 from mongo import mongo_db
 from config.constants import ROLES, MODULES, LEVELS, TEST_TYPES, GRAMMAR_CATEGORIES, CRT_CATEGORIES, QUESTION_TYPES, TEST_CATEGORIES, MODULE_CATEGORIES
-from config.aws_config import s3_client, S3_BUCKET_NAME, get_s3_client_safe
+from config.aws_config import s3_client, S3_BUCKET_NAME, get_s3_client_safe, presigned_url_for_audio
 from utils.audio_generator import generate_audio_from_text, calculate_similarity_score, transcribe_audio
 import functools
 import string
@@ -398,23 +398,21 @@ def get_single_test(test_id):
             # Fix corrupted audio URLs first
             test = fix_audio_urls_in_test(test)
             
-            # Generate presigned URLs for audio files
+            # Generate presigned URLs for audio files (keys or full S3 URLs)
             for question in test.get('questions', []):
                 if 'audio_url' in question and question['audio_url']:
                     try:
-                        current_s3_client = get_s3_client_safe()
-                        if current_s3_client is None:
-                            current_app.logger.error("S3 client not available for presigned URL generation")
-                            question['audio_presigned_url'] = None
-                            continue
-                        
-                        url = current_s3_client.generate_presigned_url(
-                            'get_object',
-                            Params={'Bucket': S3_BUCKET_NAME, 'Key': question['audio_url']},
-                            ExpiresIn=3600  # URL expires in 1 hour
-                        )
+                        url = presigned_url_for_audio(question['audio_url'], expires_in=3600)
                         question['audio_presigned_url'] = url
-                        current_app.logger.info(f"Generated presigned URL for question_id: {question.get('question_id')}")
+                        if url:
+                            current_app.logger.info(
+                                f"Generated presigned URL for question_id: {question.get('question_id')}"
+                            )
+                        else:
+                            current_app.logger.error(
+                                "S3 presign unavailable or failed for audio_url=%s",
+                                question.get('audio_url'),
+                            )
                     except Exception as e:
                         current_app.logger.error(f"Error generating presigned URL for {question['audio_url']}: {e}")
                         question['audio_presigned_url'] = None

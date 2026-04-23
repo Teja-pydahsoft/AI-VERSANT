@@ -148,4 +148,67 @@ def ensure_aws_initialized():
     if s3_client is None:
         print("🔄 AWS not initialized, attempting to initialize...")
         return init_aws()
-    return True 
+    return True
+
+
+def s3_object_key_from_audio_reference(audio_ref, bucket_name=None):
+    """
+    Normalize stored audio references to an S3 object key.
+    Accepts relative keys (audio/...), virtual-hosted URLs, and path-style S3 URLs.
+    """
+    if not audio_ref or not isinstance(audio_ref, str):
+        return None
+    audio_ref = audio_ref.strip()
+    if not audio_ref:
+        return None
+    bucket = bucket_name or S3_BUCKET_NAME
+    if not audio_ref.startswith('http'):
+        return audio_ref.lstrip('/')
+
+    from urllib.parse import urlparse, unquote
+
+    parsed = urlparse(audio_ref)
+    path = unquote((parsed.path or '').lstrip('/'))
+    if not path:
+        return None
+    host = (parsed.hostname or '').lower()
+    bucket_l = (bucket or '').lower()
+    if bucket_l and host.startswith(f'{bucket_l}.s3'):
+        return path
+    if 'amazonaws.com' in host and host.startswith('s3'):
+        parts = path.split('/', 1)
+        if len(parts) == 2 and bucket_l and parts[0].lower() == bucket_l:
+            return parts[1]
+    return path
+
+
+def presigned_url_for_audio(audio_ref, expires_in=None):
+    """
+    Time-limited GET URL for browser <audio> playback (private buckets).
+    Falls back to None if S3 is unavailable or signing fails.
+    """
+    import os
+
+    if expires_in is None:
+        try:
+            expires_in = int(os.getenv('AUDIO_PRESIGNED_URL_EXPIRES', '7200'))
+        except ValueError:
+            expires_in = 7200
+    expires_in = max(60, min(int(expires_in), 604800))
+
+    bucket = S3_BUCKET_NAME
+    key = s3_object_key_from_audio_reference(audio_ref, bucket)
+    if not key or not bucket:
+        return None
+    client = get_s3_client_safe()
+    if not client:
+        return None
+    try:
+        return client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket, 'Key': key},
+            ExpiresIn=expires_in,
+        )
+    except Exception as e:
+        print(f'presigned_url_for_audio error: {e}')
+        return None

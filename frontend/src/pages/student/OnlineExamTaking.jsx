@@ -1061,8 +1061,10 @@ const OnlineExamTaking = () => {
                   </motion.h3>
 
 
-                  {/* Audio playback for listening modules */}
-                  {(currentQuestion.question_type === 'audio' || currentQuestion.audio_url) && (
+                  {/* Audio playback for listening modules (presigned URL when API provides it) */}
+                  {(currentQuestion.question_type === 'audio' ||
+                    currentQuestion.audio_url ||
+                    currentQuestion.audio_presigned_url) && (
                     <motion.div
                       className="mb-8 text-center"
                       initial={{ opacity: 0, y: 10 }}
@@ -1072,7 +1074,7 @@ const OnlineExamTaking = () => {
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                         <p className="text-blue-700 font-medium mb-2 text-sm">Listen to the audio:</p>
                         <audio
-                          key={`audio-${currentQuestion.question_id}-${currentQuestionIndex}`}
+                          key={`audio-${currentQuestion.question_id}-${currentQuestionIndex}-${(currentQuestion.audio_presigned_url || currentQuestion.audio_url || '').slice(-24)}`}
                           controls
                           className="mx-auto w-full max-w-md"
                           onError={(e) => {
@@ -1099,9 +1101,18 @@ const OnlineExamTaking = () => {
                           }}
                           preload="auto"
                         >
-                          <source src={currentQuestion.audio_url} type="audio/mpeg" />
-                          <source src={currentQuestion.audio_url} type="audio/wav" />
-                          <source src={currentQuestion.audio_url} type="audio/ogg" />
+                          <source
+                            src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
+                            type="audio/mpeg"
+                          />
+                          <source
+                            src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
+                            type="audio/wav"
+                          />
+                          <source
+                            src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
+                            type="audio/ogg"
+                          />
                           Your browser does not support the audio element.
                         </audio>
                       </div>

@@ -1202,7 +1202,8 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
 
             <div className="text-center">
                 {/* Listening Module: Audio Question */}
-                {currentQuestion.question_type === 'listening' && currentQuestion.audio_url && (
+                {currentQuestion.question_type === 'listening' &&
+                  (currentQuestion.audio_url || currentQuestion.audio_presigned_url) && (
                     <div className="mb-6">
                         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-4 shadow-sm">
                             <div className="flex items-center space-x-2 mb-2">
@@ -1220,7 +1221,7 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                         </div>
                         
                         <audio 
-                            key={`audio-${currentQuestion.audio_id || questionId}-${currentQuestionIndex}`}
+                            key={`audio-${currentQuestion.audio_id || questionId}-${currentQuestionIndex}-${(currentQuestion.audio_presigned_url || currentQuestion.audio_url || '').slice(-24)}`}
                             controls 
                             className="mx-auto mb-4 w-full max-w-md"
                             onError={(e) => {
@@ -1250,9 +1251,18 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                             onLoad={() => {}}
                             preload="auto"
                         >
-                            <source src={currentQuestion.audio_url} type="audio/mpeg" />
-                            <source src={currentQuestion.audio_url} type="audio/wav" />
-                            <source src={currentQuestion.audio_url} type="audio/ogg" />
+                            <source
+                              src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
+                              type="audio/mpeg"
+                            />
+                            <source
+                              src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
+                              type="audio/wav"
+                            />
+                            <source
+                              src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
+                              type="audio/ogg"
+                            />
                             Your browser does not support the audio element.
                         </audio>
                         
@@ -1264,7 +1274,7 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                         
                         {/* Audio loading status */}
                         <div className="text-center mb-3">
-                            {currentQuestion.audio_url ? (
+                            {currentQuestion.audio_url || currentQuestion.audio_presigned_url ? (
                                 <div className="inline-flex items-center space-x-2 bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
                                     <span>🎵</span>
                                     <span>Audio Ready</span>
@@ -1293,9 +1303,14 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                 )}
                 
                 {/* Audio Module: Play audio if available (for other audio types) */}
-                {currentQuestion.question_type === 'audio' && currentQuestion.audio_url && currentQuestion.question_type !== 'listening' && (
+                {currentQuestion.question_type === 'audio' &&
+                  (currentQuestion.audio_url || currentQuestion.audio_presigned_url) &&
+                  currentQuestion.question_type !== 'listening' && (
                     <audio controls className="mx-auto mb-4">
-                        <source src={currentQuestion.audio_url} type="audio/mpeg" />
+                        <source
+                          src={currentQuestion.audio_presigned_url || currentQuestion.audio_url}
+                          type="audio/mpeg"
+                        />
                         Your browser does not support the audio element.
                     </audio>
                 )}
