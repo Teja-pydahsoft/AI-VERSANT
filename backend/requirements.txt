@@ -120,9 +120,6 @@ prometheus-flask-exporter>=0.23.0
 # API Documentation
 flasgger>=0.9.7.1
 
-
-
-pywebpush==1.14.0
 cryptography>=3.4.8
 
 # Python 3.13 Compatibility:

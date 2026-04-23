@@ -1,7 +1,11 @@
 import os
 import uuid
+import logging
+import shutil
 import boto3
 from config.aws_config import s3_client, S3_BUCKET_NAME, is_aws_configured, get_s3_client_safe
+
+logger = logging.getLogger(__name__)
 
 # Make audio processing packages optional
 try:
@@ -195,59 +199,81 @@ calculate_similarity_score = calculate_similarity
 def transcribe_audio(audio_file_path):
     """Transcribe audio file to text using speech recognition"""
     try:
+        ffmpeg_bin = shutil.which('ffmpeg')
+        if not ffmpeg_bin:
+            logger.error(
+                'transcribe_audio: ffmpeg not found on PATH (pid=%s, PATH=%s). '
+                'Install ffmpeg or set PATH for your WSGI service (e.g. systemd Environment=PATH=...:/usr/bin).',
+                os.getpid(),
+                os.environ.get('PATH', ''),
+            )
+        else:
+            logger.debug('transcribe_audio: using ffmpeg at %s', ffmpeg_bin)
+
         # Try to import speech_recognition, but make it optional
         try:
             import speech_recognition as sr
         except ImportError:
-            print("Warning: speech_recognition package not available. Audio transcription will not work.")
+            logger.warning('speech_recognition not installed; pip install SpeechRecognition')
             return ""
-        
+
         # Check if pydub is available for format conversion
         if not PYDUB_AVAILABLE:
-            print("Warning: pydub package not available. Audio format conversion will not work.")
+            logger.warning('pydub not installed; pip install pydub')
             return ""
-        
+
         recognizer = sr.Recognizer()
-        
+
         # Convert audio to WAV format if needed
         temp_wav_path = None
         try:
-            # Load audio with pydub to handle different formats
-            print(f"Loading audio file: {audio_file_path}")
+            logger.info('transcribe_audio: loading %s', audio_file_path)
             audio_segment = AudioSegment.from_file(audio_file_path)
-            print(f"Audio loaded successfully: {len(audio_segment)}ms, {audio_segment.frame_rate}Hz, {audio_segment.channels} channels")
-            
+            logger.info(
+                'transcribe_audio: loaded %sms, %sHz, %s ch',
+                len(audio_segment),
+                audio_segment.frame_rate,
+                audio_segment.channels,
+            )
+
             # Convert to WAV format with proper parameters
             temp_wav_path = f"temp_converted_{uuid.uuid4()}.wav"
-            print(f"Converting to WAV: {temp_wav_path}")
-            
+
             # Set proper audio parameters for speech recognition
             audio_segment = audio_segment.set_frame_rate(16000).set_channels(1)
             audio_segment.export(temp_wav_path, format="wav")
-            
-            print(f"WAV conversion completed: {os.path.getsize(temp_wav_path)} bytes")
-            
+
+            logger.info('transcribe_audio: wav %s bytes', os.path.getsize(temp_wav_path))
+
+            duration_sec = len(audio_segment) / 1000.0
+            # Do not use a full 0.5s noise sample on very short clips (browser recordings are often 2–4s)
+            noise_cal_sec = min(0.5, max(0.1, duration_sec * 0.25))
+
             # Use the converted WAV file for transcription
             with sr.AudioFile(temp_wav_path) as source:
-                # Adjust for ambient noise
-                recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                recognizer.adjust_for_ambient_noise(source, duration=noise_cal_sec)
                 audio = recognizer.record(source)
-                print(f"Audio recorded for transcription: {len(audio.frame_data)} bytes")
                 text = recognizer.recognize_google(audio)
-                print(f"Transcription successful: '{text}'")
+                logger.info('transcribe_audio: google ok, len=%s', len(text or ''))
                 return text
-                
+
+        except sr.UnknownValueError:
+            logger.warning('transcribe_audio: Google Speech could not understand audio (empty or unclear)')
+            return ""
+        except sr.RequestError as e:
+            logger.error('transcribe_audio: Google Speech API request failed: %s', e)
+            return ""
         except Exception as conversion_error:
-            print(f"Error converting audio format: {str(conversion_error)}")
+            logger.warning('transcribe_audio: convert path failed: %s', conversion_error, exc_info=True)
             # Fallback: try direct transcription if conversion fails
             try:
                 with sr.AudioFile(audio_file_path) as source:
-                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                    recognizer.adjust_for_ambient_noise(source, duration=0.2)
                     audio = recognizer.record(source)
                     text = recognizer.recognize_google(audio)
                     return text
             except Exception as fallback_error:
-                print(f"Fallback transcription also failed: {str(fallback_error)}")
+                logger.warning('transcribe_audio: fallback failed: %s', fallback_error, exc_info=True)
                 return ""
         finally:
             # Clean up temporary file
@@ -255,8 +281,8 @@ def transcribe_audio(audio_file_path):
                 try:
                     os.remove(temp_wav_path)
                 except Exception as cleanup_error:
-                    print(f"Warning: Failed to cleanup temporary file: {cleanup_error}")
-                    
+                    logger.warning('transcribe_audio: temp wav cleanup failed: %s', cleanup_error)
+
     except Exception as e:
-        print(f"Error transcribing audio: {str(e)}")
-        return "" 
+        logger.exception('transcribe_audio: unexpected error: %s', e)
+        return ""
