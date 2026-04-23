@@ -3267,25 +3267,43 @@ def assign_student_to_instance():
 @student_bp.route('/completed-exams', methods=['GET'])
 @jwt_required()
 def get_completed_exams():
-    """Get list of completed exam IDs for the student"""
+    """Get list of completed exam IDs for the student (Mongo _id and custom test_id strings)."""
     try:
         current_user_id = get_jwt_identity()
         user = mongo_db.users.find_one({'_id': ObjectId(current_user_id)})
         
         if not user or user.get('role') != 'student':
             return jsonify({'success': False, 'message': 'Access denied'}), 403
-        
-        # Get completed exam IDs from student_test_attempts
+
+        student = mongo_db.students.find_one({'user_id': ObjectId(current_user_id)})
+        if not student:
+            student = mongo_db.students.find_one({'_id': ObjectId(current_user_id)})
+        if not student:
+            return jsonify({'success': True, 'data': []}), 200
+
+        # Attempts store student document _id, not auth user_id
         completed_attempts = mongo_db.student_test_attempts.find({
-            'student_id': ObjectId(current_user_id),
+            'student_id': student['_id'],
             'status': 'completed'
         }, {'test_id': 1})
-        
-        completed_exam_ids = [str(attempt['test_id']) for attempt in completed_attempts]
-        
+
+        completed_exam_ids = set()
+        for attempt in completed_attempts:
+            tid = attempt.get('test_id')
+            if tid is None:
+                continue
+            completed_exam_ids.add(str(tid))
+            try:
+                oid = tid if isinstance(tid, ObjectId) else ObjectId(str(tid))
+                tdoc = mongo_db.tests.find_one({'_id': oid}, {'test_id': 1})
+                if tdoc and tdoc.get('test_id'):
+                    completed_exam_ids.add(str(tdoc['test_id']))
+            except Exception:
+                continue
+
         return jsonify({
             'success': True,
-            'data': completed_exam_ids
+            'data': list(completed_exam_ids)
         }), 200
         
     except Exception as e:

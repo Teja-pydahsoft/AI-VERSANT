@@ -6372,7 +6372,7 @@ def submit_online_listening_test():
             return jsonify({
                 'success': False,
                 'message': 'You have already completed this test. Duplicate submissions are not allowed.'
-            }), 400
+            }), 409
         
         # Process each question
         results = []

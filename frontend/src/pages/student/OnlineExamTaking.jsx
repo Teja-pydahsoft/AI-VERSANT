@@ -8,6 +8,19 @@ import { useNotification } from '../../contexts/NotificationContext';
 import TechnicalCodeEditor from '../../components/TechnicalCodeEditor';
 import { getPlayableAudioUrl, examQuestionAnswerKey } from '../../utils/audioPlayback';
 
+/** Server said this attempt is invalid because the test was already finished / submitted. */
+function isExamClosedByServerMessage(message) {
+  if (!message || typeof message !== 'string') return false;
+  const m = message.toLowerCase();
+  return (
+    m.includes('already completed') ||
+    m.includes('duplicate submissions') ||
+    m.includes('already attempted') ||
+    m.includes('only be attempted once') ||
+    m.includes('test already attempted')
+  );
+}
+
 const OnlineExamTaking = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -119,9 +132,10 @@ const OnlineExamTaking = () => {
         try {
           // Check completed exams first
           const completedExamsRes = await api.get('/student/completed-exams');
-          const completedExamIds = completedExamsRes.data.data || [];
+          const completedExamIds = (completedExamsRes.data.data || []).map(String);
+          const examIdNorm = String(examId);
 
-          if (completedExamIds.includes(examId)) {
+          if (completedExamIds.includes(examIdNorm)) {
             setAlreadyAttempted(true);
             return;
           }
@@ -636,7 +650,15 @@ const OnlineExamTaking = () => {
           success('Online listening exam submitted successfully!');
           navigate('/student/history');
         } else {
-          showError(res.data.message || 'Failed to submit your online listening exam.');
+          const msg = res.data.message || '';
+          if (isExamClosedByServerMessage(msg)) {
+            setExam(null);
+            setQuestions([]);
+            setAssignmentId(null);
+            setAlreadyAttempted(true);
+            return;
+          }
+          showError(msg || 'Failed to submit your online listening exam.');
         }
       } else if (assignmentId) {
         // Submit using random assignment endpoint
@@ -662,7 +684,15 @@ const OnlineExamTaking = () => {
           success('Exam submitted successfully!');
           navigate('/student/history');
         } else {
-          showError(res.data.message || 'Failed to submit your answers.');
+          const msg = res.data.message || '';
+          if (isExamClosedByServerMessage(msg)) {
+            setExam(null);
+            setQuestions([]);
+            setAssignmentId(null);
+            setAlreadyAttempted(true);
+            return;
+          }
+          showError(msg || 'Failed to submit your answers.');
         }
       } else {
         // Submit using regular test endpoint (for tests without random questions)
@@ -749,11 +779,28 @@ const OnlineExamTaking = () => {
           success('Exam submitted successfully!');
           navigate('/student/history');
         } else {
-          showError(res.data.message || 'Failed to submit your answers.');
+          const msg = res.data.message || '';
+          if (isExamClosedByServerMessage(msg)) {
+            setExam(null);
+            setQuestions([]);
+            setAssignmentId(null);
+            setAlreadyAttempted(true);
+            return;
+          }
+          showError(msg || 'Failed to submit your answers.');
         }
       }
     } catch (err) {
-      showError(err.response?.data?.message || 'Failed to submit your answers. Please try again.');
+      const status = err.response?.status;
+      const msg = err.response?.data?.message || '';
+      if (status === 409 || isExamClosedByServerMessage(msg)) {
+        setExam(null);
+        setQuestions([]);
+        setAssignmentId(null);
+        setAlreadyAttempted(true);
+        return;
+      }
+      showError(msg || 'Failed to submit your answers. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
