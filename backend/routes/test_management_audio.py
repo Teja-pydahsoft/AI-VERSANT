@@ -8,6 +8,7 @@ import os
 from mongo import mongo_db
 from routes.test_management import require_superadmin, generate_unique_test_id, convert_objectids
 from utils.audio_generator import generate_audio_from_text
+from utils.question_bank_text import normalize_question_bank_text, bank_text_key_from_doc
 
 audio_test_bp = Blueprint('audio_test_management', __name__)
 
@@ -52,25 +53,23 @@ def create_audio_test():
         for i, question in enumerate(questions):
             # Handle both question formats: from question bank ('question') and from manual upload ('question_text')
             # Also handle 'sentence' field for audio questions
-            question_text = (question.get('question_text') or
+            raw_display = (question.get('question_text') or
                            question.get('question') or
                            question.get('sentence') or
-                           '').strip().lower()
+                           '').strip()
+            question_key = normalize_question_bank_text(raw_display)
 
-            if not question_text:
+            if not question_key:
                 return jsonify({
                     'success': False,
                     'message': f'Question {i+1} is missing required text content. Please ensure each question has either a question_text, question, or sentence field.'
                 }), 400
 
-            if question_text in question_texts:
-                # Get the display text for error message
-                display_text = (question.get('question_text') or
-                              question.get('question') or
-                              question.get('sentence') or '')[:50]
+            if question_key in question_texts:
+                display_text = raw_display[:50]
                 duplicate_questions.append(f"Question {i+1}: '{display_text}...'")
             else:
-                question_texts.append(question_text)
+                question_texts.append(question_key)
         
         if duplicate_questions:
             return jsonify({
@@ -81,22 +80,18 @@ def create_audio_test():
         # Generate unique test ID
         test_id = generate_unique_test_id()
 
-        # Check for existing questions in database
+        # Check for existing questions in database (match on normalized question or sentence text)
         existing_questions = list(mongo_db.question_bank.find(
-            {'module_id': module_id, 'level_id': level_id, 'question_type': 'sentence'},
-            {'question': 1, '_id': 1, 'used_count': 1}
+            {'module_id': module_id, 'level_id': level_id, 'question_type': {'$in': ['sentence', 'speaking']}},
+            {'question': 1, 'sentence': 1, '_id': 1, 'used_count': 1}
         ))
-        # Safely build lookup maps; skip docs missing valid question text
-        existing_question_texts = {
-            q.get('question', '').strip().lower(): str(q['_id'])
-            for q in existing_questions
-            if isinstance(q.get('question'), str) and q.get('question').strip()
-        }
-        existing_question_objects = {
-            q.get('question', '').strip().lower(): q['_id']
-            for q in existing_questions
-            if isinstance(q.get('question'), str) and q.get('question').strip()
-        }
+        existing_question_texts = {}
+        existing_question_objects = {}
+        for q in existing_questions:
+            nk = bank_text_key_from_doc(q)
+            if nk:
+                existing_question_texts[nk] = str(q['_id'])
+                existing_question_objects[nk] = q['_id']
         
         # Process questions for audio - store in database and get ObjectIds
         processed_questions = []
@@ -125,15 +120,16 @@ def create_audio_test():
                     'message': f'Question {i+1} has empty or invalid text content. Please provide valid text for the question.'
                 }), 400
 
-            question_text_lower = question_text.strip().lower()
-            is_existing = question_text_lower in existing_question_texts
-            
+            nk = normalize_question_bank_text(question_text)
+            is_existing = nk in existing_question_texts
+
             # Prepare question document for database storage
             question_doc = {
                 'module_id': module_id,
                 'level_id': level_id,
                 'question_type': 'sentence',
                 'question': question_text,
+                'sentence': question_text,
                 'used_in_tests': [],
                 'used_count': 0,
                 'last_used': None,
@@ -143,7 +139,7 @@ def create_audio_test():
             
             if is_existing:
                 # Use existing question ObjectId
-                question_id = existing_question_objects.get(question_text_lower)
+                question_id = existing_question_objects.get(nk)
                 questions_to_update_usage.append(question_id)
             else:
                 # Store new question and get ObjectId
@@ -154,8 +150,7 @@ def create_audio_test():
         if new_questions_to_store:
             result = mongo_db.question_bank.insert_many(new_questions_to_store)
             for i, question_doc in enumerate(new_questions_to_store):
-                # question_doc['question'] is always set above, but guard anyway
-                question_text_value = (question_doc.get('question') or '').strip().lower()
+                question_text_value = normalize_question_bank_text(question_doc.get('question') or '')
                 if question_text_value:
                     stored_question_ids[question_text_value] = result.inserted_ids[i]
         
@@ -174,14 +169,14 @@ def create_audio_test():
                     'message': f'Question {i+1} is missing required text content. Please ensure each question has either a sentence, question_text, or question field.'
                 }), 400
 
-            question_text_lower = question_text.strip().lower()
-            is_existing = question_text_lower in existing_question_texts
+            nk = normalize_question_bank_text(question_text)
+            is_existing = nk in existing_question_texts
             
             # Get the correct ObjectId
             if is_existing:
-                question_id = existing_question_objects.get(question_text_lower)
+                question_id = existing_question_objects.get(nk)
             else:
-                question_id = stored_question_ids.get(question_text_lower)
+                question_id = stored_question_ids.get(nk)
             
             # Ensure question_text is not empty after all processing
             if not question_text or not question_text.strip():

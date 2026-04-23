@@ -7,7 +7,9 @@ import io
 import json
 import pandas as pd
 from mongo import mongo_db
+from config.aws_config import get_s3_client_safe, S3_BUCKET_NAME
 from config.constants import ROLES, MODULES, LEVELS, TEST_TYPES, WRITING_CONFIG
+from utils.question_bank_text import normalize_question_bank_text, bank_text_key_from_doc
 from datetime import datetime, timedelta
 from routes.test_management import require_superadmin
 from models import Test
@@ -1682,16 +1684,35 @@ def sentence_upload():
                 parsed_transcript_validation = json.loads(transcript_validation)
             except:
                 parsed_transcript_validation = {'enabled': True, 'tolerance': 0.8, 'checkMismatchedWords': True, 'allowPartialMatches': True}
-        
-        # Insert sentences into database
+
+        qtypes = ['speaking'] if module_id == 'SPEAKING' else ['sentence']
+        existing_docs = list(
+            mongo_db.question_bank.find(
+                {'module_id': module_id, 'level_id': level_id, 'question_type': {'$in': qtypes}},
+                {'question': 1, 'sentence': 1},
+            )
+        )
+        existing_keys = {bank_text_key_from_doc(d) for d in existing_docs if bank_text_key_from_doc(d)}
+        seen_in_upload = set()
+        skipped_duplicates = []
+
+        # Insert sentences into database (skip normalized duplicates vs bank + this upload)
         inserted_count = 0
-        for sentence in valid_sentences:
+        for si, sentence in enumerate(valid_sentences):
             try:
+                nk = normalize_question_bank_text(sentence)
+                if not nk:
+                    continue
+                if nk in existing_keys or nk in seen_in_upload:
+                    skipped_duplicates.append({'index': si + 1, 'sentence': sentence[:120]})
+                    continue
+
                 sentence_data = {
                     'module_id': module_id,
                     'level_id': level_id,
                     'level': level,
                     'sentence': sentence,
+                    'question': sentence,
                     'question_type': 'sentence',
                     'created_by': current_user_id,
                     'created_at': datetime.utcnow()
@@ -1715,9 +1736,19 @@ def sentence_upload():
                 
                 mongo_db.question_bank.insert_one(sentence_data)
                 inserted_count += 1
+                existing_keys.add(nk)
+                seen_in_upload.add(nk)
                 
             except Exception as e:
                 errors.append(f"Failed to insert sentence '{sentence[:50]}...': {str(e)}")
+
+        if inserted_count == 0 and skipped_duplicates and not errors:
+            return jsonify({
+                'success': False,
+                'message': 'All sentences were duplicates of existing question bank rows.',
+                'data': {'inserted_count': 0, 'skipped_duplicates': len(skipped_duplicates)},
+                'duplicate_details': skipped_duplicates[:50],
+            }), 400
         
         if errors:
             return jsonify({
@@ -1733,10 +1764,15 @@ def sentence_upload():
         
         return jsonify({
             'success': True,
-            'message': f'Successfully uploaded {inserted_count} sentences for {module_id} - {level}',
+            'message': (
+                f'Successfully uploaded {inserted_count} sentence(s) for {module_id} - {level}'
+                + (f', skipped {len(skipped_duplicates)} duplicate(s)' if skipped_duplicates else '')
+            ),
             'data': {
                 'inserted_count': inserted_count,
                 'total_count': len(valid_sentences),
+                'skipped_duplicates': len(skipped_duplicates),
+                'duplicate_details': skipped_duplicates[:50],
                 'module_id': module_id,
                 'level': level,
                 'audio_url': audio_url if module_id == 'LISTENING' else None,

@@ -49,6 +49,7 @@ import requests
 import pytz
 from routes.access_control import require_permission
 from models import Test
+from utils.question_bank_text import normalize_question_bank_text, bank_text_key_from_doc
 
 def safe_isoformat(date_obj):
     """Safely convert a date object to ISO format string, handling various types."""
@@ -1191,7 +1192,7 @@ def upload_module_questions():
             
         existing_questions = list(mongo_db.question_bank.find(
             query_filter,
-            {'question': 1, 'questionTitle': 1, '_id': 0}
+            {'question': 1, 'questionTitle': 1, 'sentence': 1, '_id': 0}
         ))
         
         # Create sets for duplicate checking based on question type
@@ -1199,8 +1200,9 @@ def upload_module_questions():
         existing_question_titles = set()
         
         for q in existing_questions:
-            if 'question' in q and q['question']:
-                existing_question_texts.add(q['question'].strip().lower())
+            key = bank_text_key_from_doc(q)
+            if key:
+                existing_question_texts.add(key)
             if 'questionTitle' in q and q['questionTitle']:
                 existing_question_titles.add(q['questionTitle'].strip().lower())
         
@@ -1212,8 +1214,16 @@ def upload_module_questions():
             # Basic validation based on module type
             is_valid = True
             validation_reason = ""
-            
-            if module_id == 'CRT_TECHNICAL' or level_id == 'CRT_TECHNICAL':
+
+            if module_id in ('LISTENING', 'SPEAKING'):
+                body = (q.get('sentence') or q.get('question') or '').strip()
+                if len(body) < 10:
+                    is_valid = False
+                    validation_reason = 'Sentence too short (minimum 10 characters)'
+                elif len(body) > 2000:
+                    is_valid = False
+                    validation_reason = 'Sentence too long'
+            elif module_id == 'CRT_TECHNICAL' or level_id == 'CRT_TECHNICAL':
                 # Get question type from question or payload, default to 'technical'
                 question_type = q.get('questionType', question_type_from_payload or 'technical')
                 if question_type == 'technical' or question_type == 'compiler':
@@ -1242,31 +1252,34 @@ def upload_module_questions():
                 })
                 continue
             
-            # Check for duplicates within the file first
+            # Check for duplicates within the file first (normalized; listening uses sentence/question)
+            norm_body = normalize_question_bank_text(
+                q.get('sentence') or q.get('question') or q.get('questionTitle') or ''
+            )
             question_text = q.get('question', '').strip().lower()
             question_title = q.get('questionTitle', '').strip().lower()
-            
-            if question_text in seen_questions_in_file or question_title in seen_titles_in_file:
+
+            dup_keys = {k for k in (norm_body, question_text) if k}
+            if dup_keys & seen_questions_in_file or question_title in seen_titles_in_file:
                 duplicate_questions.append({
                     'index': i + 1,
-                    'question': q.get('question', q.get('questionTitle', '')),
+                    'question': q.get('question', q.get('sentence', q.get('questionTitle', ''))),
                     'reason': 'Duplicate question within the same file'
                 })
                 continue
-            
+
             # Check for duplicates against database
-            if question_text in existing_question_texts or question_title in existing_question_titles:
+            if dup_keys & existing_question_texts or question_title in existing_question_titles:
                 duplicate_questions.append({
                     'index': i + 1,
-                    'question': q.get('question', q.get('questionTitle', '')),
+                    'question': q.get('question', q.get('sentence', q.get('questionTitle', ''))),
                     'reason': 'Question already exists in database'
                 })
                 continue
-            
+
             # Add to valid questions and mark as seen
             valid_questions.append(q)
-            if question_text:
-                seen_questions_in_file.add(question_text)
+            seen_questions_in_file.update(dup_keys)
             if question_title:
                 seen_titles_in_file.add(question_title)
         
@@ -1344,8 +1357,9 @@ def upload_module_questions():
                     continue
                     
             elif question_type in ['sentence', 'speaking']:
-                # Sentence/Speaking questions
+                # Sentence/Speaking questions — keep `question` in sync for lookups and tests
                 doc['sentence'] = q.get('question') or q.get('sentence', '')
+                doc['question'] = doc['sentence']
                 doc['audio_url'] = q.get('audio_url')
                 doc['audio_config'] = q.get('audio_config')
                 doc['transcript_validation'] = q.get('transcript_validation')
@@ -5386,18 +5400,37 @@ def upload_sentences():
         
         if not valid_sentences:
             return jsonify({'success': False, 'message': 'No valid sentences found in file'}), 400
-        
-        # Store sentences in database
+
+        # Dedupe against DB + within this file (same normalization as admin Data Management)
+        qtypes = ['sentence', 'speaking'] if module_type == 'SPEAKING' else ['sentence']
+        existing_docs = list(
+            mongo_db.question_bank.find(
+                {'module_id': module_id, 'level_id': level_id, 'question_type': {'$in': qtypes}},
+                {'question': 1, 'sentence': 1},
+            )
+        )
+        existing_keys = {bank_text_key_from_doc(d) for d in existing_docs if bank_text_key_from_doc(d)}
+        seen_in_upload = set()
         upload_session_id = str(uuid.uuid4())
         inserted_count = 0
-        
-        for s in valid_sentences:
+        skipped_duplicates = []
+
+        for idx, s in enumerate(valid_sentences):
+            raw = (s.get('sentence') or '').strip()
+            nk = normalize_question_bank_text(raw)
+            if not nk:
+                continue
+            if nk in existing_keys or nk in seen_in_upload:
+                skipped_duplicates.append({'index': idx + 1, 'sentence': raw[:120]})
+                continue
+
             doc = {
                 'module_id': module_id,
                 'level_id': level_id,
-                'question_type': 'sentence',
+                'question_type': 'speaking' if module_type == 'SPEAKING' else 'sentence',
                 'module_type': module_type,
-                'sentence': s['sentence'],
+                'sentence': raw,
+                'question': raw,
                 'level': s['level'],
                 'instructions': s.get('instructions', ''),
                 'audio_url': audio_url,
@@ -5408,16 +5441,30 @@ def upload_sentences():
                 'used_count': 0,
                 'last_used': None,
                 'created_at': datetime.utcnow(),
-                'upload_session_id': upload_session_id
+                'upload_session_id': upload_session_id,
             }
-            
+
             mongo_db.question_bank.insert_one(doc)
             inserted_count += 1
-        
+            existing_keys.add(nk)
+            seen_in_upload.add(nk)
+
+        if inserted_count == 0 and skipped_duplicates:
+            return jsonify({
+                'success': False,
+                'message': 'All sentences were duplicates of existing bank rows or this file.',
+                'count': 0,
+                'skipped_duplicates': len(skipped_duplicates),
+                'details': skipped_duplicates[:50],
+            }), 400
+
         return jsonify({
             'success': True,
-            'message': f'Successfully uploaded {inserted_count} sentences',
-            'count': inserted_count
+            'message': f'Successfully uploaded {inserted_count} sentence(s)'
+            + (f', skipped {len(skipped_duplicates)} duplicate(s)' if skipped_duplicates else ''),
+            'count': inserted_count,
+            'skipped_duplicates': len(skipped_duplicates),
+            'duplicate_details': skipped_duplicates[:50],
         }), 201
         
     except Exception as e:
