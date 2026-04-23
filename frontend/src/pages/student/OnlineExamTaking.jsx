@@ -6,7 +6,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import TechnicalCodeEditor from '../../components/TechnicalCodeEditor';
-import { getPlayableAudioUrl } from '../../utils/audioPlayback';
+import { getPlayableAudioUrl, examQuestionAnswerKey } from '../../utils/audioPlayback';
 
 const OnlineExamTaking = () => {
   const location = useLocation();
@@ -575,8 +575,8 @@ const OnlineExamTaking = () => {
         // Validate that all questions have audio recordings for listening modules
         const missingRecordings = [];
         questions.forEach((question, index) => {
-          const questionId = question.question_id || question._id;
-          if (!recordings[questionId]) {
+          const qKey = examQuestionAnswerKey(question, index);
+          if (!recordings[qKey]) {
             missingRecordings.push(index + 1);
           }
         });
@@ -592,31 +592,29 @@ const OnlineExamTaking = () => {
         const formData = new FormData();
         formData.append('test_id', examId);
 
-        // Process each question with correct indexing
+        // Process each question — audio/text keys use stable question id (order differs from DB after shuffle)
         questions.forEach((question, index) => {
-          const questionId = question.question_id || question._id;
+          const qKey = examQuestionAnswerKey(question, index);
 
-          // Add text answer if exists (using question ID format)
-          if (answers[questionId]) {
-            formData.append(`question_${questionId}`, answers[questionId]);
-            console.log(`Added text answer for question ${index}: ${questionId} = ${answers[questionId]}`);
+          if (answers[qKey]) {
+            formData.append(`question_${qKey}`, answers[qKey]);
+            console.log(`Added text answer for question ${index}: ${qKey} = ${answers[qKey]}`);
           }
 
-          // Add audio recording if exists (using question index format)
-          if (recordings[questionId]) {
+          if (recordings[qKey]) {
             let fileExtension = 'webm'; // default
-            if (recordings[questionId].type.includes('webm')) {
+            if (recordings[qKey].type.includes('webm')) {
               fileExtension = 'webm';
-            } else if (recordings[questionId].type.includes('mp4')) {
+            } else if (recordings[qKey].type.includes('mp4')) {
               fileExtension = 'mp4';
-            } else if (recordings[questionId].type.includes('wav')) {
+            } else if (recordings[qKey].type.includes('wav')) {
               fileExtension = 'wav';
             }
 
-            formData.append(`question_${index}`, recordings[questionId], `answer_${index}.${fileExtension}`);
-            console.log(`Added audio recording for question ${index}: ${questionId} -> ${recordings[questionId].size} bytes, type: ${recordings[questionId].type}`);
+            formData.append(`question_${qKey}`, recordings[qKey], `answer_${qKey}.${fileExtension}`);
+            console.log(`Added audio recording for question ${index}: ${qKey} -> ${recordings[qKey].size} bytes, type: ${recordings[qKey].type}`);
           } else {
-            console.log(`No recording found for question ${index}: ${questionId}`);
+            console.log(`No recording found for question ${index}: ${qKey}`);
           }
         });
 
@@ -872,7 +870,7 @@ const OnlineExamTaking = () => {
   if (questions.length === 0) return <div className="text-center p-8">This exam has no questions.</div>;
 
   const currentQuestion = questions[currentQuestionIndex];
-
+  const listeningAnswerKey = examQuestionAnswerKey(currentQuestion, currentQuestionIndex);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 fixed inset-0 overflow-auto">
@@ -1454,7 +1452,7 @@ const OnlineExamTaking = () => {
                         <div className="flex justify-center space-x-4 mb-6">
                           {!isRecording ? (
                             <motion.button
-                              onClick={() => startRecording(currentQuestion.question_id)}
+                              onClick={() => startRecording(listeningAnswerKey)}
                               whileHover={{ scale: 1.05 }}
                               whileTap={{ scale: 0.95 }}
                               className="px-6 py-3 bg-red-500 text-white rounded-2xl font-semibold hover:bg-red-600 transition-all duration-300 shadow-lg flex items-center"
@@ -1480,7 +1478,7 @@ const OnlineExamTaking = () => {
                         </div>
 
                         {/* Recording Status */}
-                        {isRecording && recordingQuestionId === currentQuestion.question_id && (
+                        {isRecording && recordingQuestionId === listeningAnswerKey && (
                           <motion.div
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
@@ -1494,14 +1492,14 @@ const OnlineExamTaking = () => {
                         )}
 
                         {/* Playback of recorded audio */}
-                        {audioURLs[currentQuestion.question_id] && (
+                        {audioURLs[listeningAnswerKey] && (
                           <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4"
                           >
                             <p className="text-green-700 font-semibold mb-2">Your Recording:</p>
-                            <audio controls className="w-full" src={audioURLs[currentQuestion.question_id]}>
+                            <audio controls className="w-full" src={audioURLs[listeningAnswerKey]}>
                               Your browser does not support the audio element.
                             </audio>
                           </motion.div>
@@ -1513,8 +1511,8 @@ const OnlineExamTaking = () => {
                             Type your response (optional):
                           </label>
                           <textarea
-                            value={answers[currentQuestion.question_id] || ''}
-                            onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                            value={answers[listeningAnswerKey] || ''}
+                            onChange={(e) => handleAnswerChange(listeningAnswerKey, e.target.value)}
                             className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                             rows={4}
                             placeholder="Type your response here..."
@@ -1549,7 +1547,7 @@ const OnlineExamTaking = () => {
                         <div className="flex justify-center space-x-4 mb-6">
                           {!isRecording ? (
                             <motion.button
-                              onClick={() => startRecording(currentQuestion.question_id)}
+                              onClick={() => startRecording(listeningAnswerKey)}
                               whileHover={{ scale: 1.05 }}
                               whileTap={{ scale: 0.95 }}
                               className="px-6 py-3 bg-red-500 text-white rounded-2xl font-semibold hover:bg-red-600 transition-all duration-300 shadow-lg flex items-center"
@@ -1575,7 +1573,7 @@ const OnlineExamTaking = () => {
                         </div>
 
                         {/* Recording Status */}
-                        {isRecording && recordingQuestionId === currentQuestion.question_id && (
+                        {isRecording && recordingQuestionId === listeningAnswerKey && (
                           <motion.div
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
@@ -1589,14 +1587,14 @@ const OnlineExamTaking = () => {
                         )}
 
                         {/* Playback of recorded audio */}
-                        {audioURLs[currentQuestion.question_id] && (
+                        {audioURLs[listeningAnswerKey] && (
                           <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4"
                           >
                             <p className="text-green-700 font-semibold mb-2">Your Recording:</p>
-                            <audio controls className="w-full" src={audioURLs[currentQuestion.question_id]}>
+                            <audio controls className="w-full" src={audioURLs[listeningAnswerKey]}>
                               Your browser does not support the audio element.
                             </audio>
                           </motion.div>
@@ -1608,8 +1606,8 @@ const OnlineExamTaking = () => {
                             Type your response (optional):
                           </label>
                           <textarea
-                            value={answers[currentQuestion.question_id] || ''}
-                            onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                            value={answers[listeningAnswerKey] || ''}
+                            onChange={(e) => handleAnswerChange(listeningAnswerKey, e.target.value)}
                             className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                             rows={4}
                             placeholder="Type your response here..."
@@ -1725,8 +1723,8 @@ const OnlineExamTaking = () => {
                       whileTap={{ scale: 0.9 }}
                       className={`w-12 h-12 rounded-2xl text-sm font-medium transition-all duration-300 shadow-lg relative ${index === currentQuestionIndex
                           ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-blue-200'
-                          : answers[questions[index]?.question_id] ||
-                            recordings[questions[index]?.question_id] ||
+                          : answers[examQuestionAnswerKey(questions[index], index)] ||
+                            recordings[examQuestionAnswerKey(questions[index], index)] ||
                             codeTestResults[questions[index]?.question_id || questions[index]?._id]
                             ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border-2 border-green-300 hover:shadow-green-200'
                             : 'bg-white text-slate-700 border-2 border-slate-200 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 hover:border-blue-300'
@@ -1734,7 +1732,7 @@ const OnlineExamTaking = () => {
                     >
                       {index + 1}
                       {/* Show microphone icon for recorded questions in listening modules */}
-                      {(exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING') && recordings[questions[index]?.question_id] && (
+                      {(exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING') && recordings[examQuestionAnswerKey(questions[index], index)] && (
                         <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
                           <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />

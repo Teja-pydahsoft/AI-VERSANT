@@ -10,7 +10,7 @@ import { BookOpen, BrainCircuit, ChevronLeft, Lock, Unlock, CheckCircle, XCircle
 import { io } from 'socket.io-client';
 import { useContext } from 'react';
 import { AuthContext } from '../../contexts/AuthContext';
-import { getPlayableAudioUrl } from '../../utils/audioPlayback';
+import { getPlayableAudioUrl, examQuestionAnswerKey } from '../../utils/audioPlayback';
 
 
 
@@ -966,13 +966,14 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
     const canSubmit = () => {
         return questions.every((question, index) => {
             const questionId = question.question_id || question._id;
-            
+            const qKey = examQuestionAnswerKey(question, index);
+
             if (question.question_type === 'mcq') {
                 // For MCQ questions, check if answer exists
                 return answers[questionId];
             } else if (question.question_type === 'listening' || question.question_type === 'speaking') {
                 // For audio questions, check if recording exists
-                return recordings[questionId];
+                return recordings[qKey];
             }
             
             return false;
@@ -998,17 +999,16 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                 }
             });
             
-            // Attach audio answers - use question index, not question ID
+            // Attach audio by stable question id (must match server grading after shuffle)
             questions.forEach((question, index) => {
-                const questionId = question.question_id || question._id;
-                if (recordings[questionId]) {
-                    // Use the correct file extension from the recording
-                    const fileExtension = recordings[questionId].type.includes('webm') ? 'webm' : 'mp3';
-                    const fileName = `answer_${index}_${questionId}.${fileExtension}`;
-                    formData.append(`question_${index}`, recordings[questionId], fileName);
-                    console.log(`Attaching audio for question ${index}: ${questionId} -> ${recordings[questionId].size} bytes -> ${fileName}`);
+                const qKey = examQuestionAnswerKey(question, index);
+                if (recordings[qKey]) {
+                    const fileExtension = recordings[qKey].type.includes('webm') ? 'webm' : 'mp3';
+                    const fileName = `answer_${qKey}.${fileExtension}`;
+                    formData.append(`question_${qKey}`, recordings[qKey], fileName);
+                    console.log(`Attaching audio for question ${index}: ${qKey} -> ${recordings[qKey].size} bytes -> ${fileName}`);
                 } else {
-                    console.log(`No recording found for question ${index}: ${questionId}`);
+                    console.log(`No recording found for question ${index}: ${qKey}`);
                 }
             });
             
@@ -1133,6 +1133,7 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
     
     // Check if question has required properties
     const questionId = currentQuestion.question_id || currentQuestion._id;
+    const answerKey = examQuestionAnswerKey(currentQuestion, currentQuestionIndex);
     if (!questionId || !currentQuestion.question_type) {
         return (
             <div className="text-center p-8">
@@ -1181,10 +1182,12 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                 {/* Progress indicator */}
                 <div className="flex justify-center space-x-1 mb-4">
                     {questions.map((_, index) => {
-                        const questionId = questions[index]?.question_id || questions[index]?._id;
-                        const isAnswered = questions[index]?.question_type === 'mcq' 
-                            ? answers[questionId] 
-                            : recordings[questionId];
+                        const q = questions[index];
+                        const qId = q?.question_id || q?._id;
+                        const qKey = examQuestionAnswerKey(q, index);
+                        const isAnswered = q?.question_type === 'mcq'
+                            ? answers[qId]
+                            : recordings[qKey];
                         const isCurrent = index === currentQuestionIndex;
                         
                         return (
@@ -1362,7 +1365,7 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                                 <p className="text-sm text-gray-600">Speak clearly after listening to the audio</p>
                                 
                                 {/* Recording Status Indicator */}
-                                {recordings[questionId] ? (
+                                {recordings[answerKey] ? (
                                     <div className="mt-2 inline-flex items-center space-x-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs">
                                         <span>✅</span>
                                         <span>Recording Saved!</span>
@@ -1376,19 +1379,19 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                             </div>
                             
                             {/* Show recorded audio if available */}
-                            {audioURLs[questionId] ? (
+                            {audioURLs[answerKey] ? (
                                 <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
                                     <div className="flex items-center space-x-2 mb-2">
                                         <span className="text-green-600">✅</span>
                                         <span className="font-medium text-green-800 text-sm">Your Recording</span>
                                     </div>
-                                    <audio controls src={audioURLs[questionId]} className="w-full" />
+                                    <audio controls src={audioURLs[answerKey]} className="w-full" />
                                 </div>
                             ) : null}
                             
                             {/* Recording Controls */}
                             <div className="flex flex-col items-center space-y-3">
-                                {isRecording && recordingQuestionId === questionId ? (
+                                {isRecording && recordingQuestionId === answerKey ? (
                                     <div className="text-center">
                                         <div className="flex items-center justify-center space-x-2 mb-3">
                                             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
@@ -1409,7 +1412,7 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                                     </div>
                                 ) : (
                                     <button 
-                                        onClick={() => startRecording(questionId)} 
+                                        onClick={() => startRecording(answerKey)} 
                                         className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold transition-all duration-200 shadow-md text-base"
                                     >
                                         🎤 Start Recording
@@ -1495,12 +1498,12 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                         </div>
                     )}
                     
-                    {isRecording && recordingQuestionId === questionId ? (
+                    {isRecording && recordingQuestionId === answerKey ? (
                         <button onClick={stopRecording} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
                             Stop Recording
                         </button>
                     ) : (
-                        <button onClick={() => startRecording(questionId)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        <button onClick={() => startRecording(answerKey)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
                             Record Answer
                         </button>
                     )}

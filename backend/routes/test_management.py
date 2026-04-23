@@ -133,6 +133,22 @@ def convert_objectids(obj):
     else:
         return obj
 
+
+def question_submission_form_prefix(question, index):
+    """
+    Stable multipart form field suffix for a question (question_<suffix>).
+    Must match the student UI so audio/text align when questions are shuffled vs stored order.
+    Legacy clients may still send question_<index> only.
+    """
+    oid = question.get('_id')
+    if oid is not None:
+        return str(oid)
+    ext = question.get('question_id')
+    if ext is not None and str(ext).strip():
+        return str(ext).strip()
+    return str(index)
+
+
 def generate_audio_from_text(text, accent='en-US', speed=1.0):
     """Generate audio from text using gTTS with custom accent and speed"""
     try:
@@ -2667,19 +2683,27 @@ def submit_practice_test():
                     })
             else:
                 current_app.logger.info(f"Non-MCQ/Compiler question {i}: type={question.get('question_type')}")
-                # Handle audio question (Listening or Speaking)
-                audio_key = f'question_{i}'
-                current_app.logger.info(f"Looking for audio file with key: {audio_key}")
-                current_app.logger.info(f"Available files: {list(files.keys())}")
-                
-                if audio_key not in files:
-                    current_app.logger.error(f"Audio recording for question {i+1} not found. Expected key: {audio_key}")
+                # Handle audio question (Listening or Speaking) — match by question id when client sends it
+                q_prefix = question_submission_form_prefix(question, i)
+                primary_audio_key = f'question_{q_prefix}'
+                legacy_audio_key = f'question_{i}'
+                current_app.logger.info(f"Looking for audio file keys: {primary_audio_key} or {legacy_audio_key}")
+                current_app.logger.info(f"Available files: {list(files.keys()) if files else 'No files'}")
+
+                audio_file = files.get(primary_audio_key) or files.get(legacy_audio_key)
+                if audio_file is None:
+                    current_app.logger.error(
+                        f"Audio recording for question {i + 1} not found. Expected '{primary_audio_key}' "
+                        f"(or legacy '{legacy_audio_key}')"
+                    )
                     return jsonify({
                         'success': False,
-                        'message': f'Audio recording for question {i+1} is required. Expected key: {audio_key}'
+                        'message': (
+                            f'Audio recording for question {i + 1} is required. '
+                            f'Expected file field: {primary_audio_key}'
+                        )
                     }), 400
-                
-                audio_file = files[audio_key]
+
                 current_app.logger.info(f"Found audio file for question {i}: {audio_file.filename}, size: {audio_file.content_length} bytes")
                 
                 # Save student audio to S3
@@ -2699,7 +2723,7 @@ def submit_practice_test():
                     file_extension = 'mp3'
                 
                 # Create unique audio key with question identifier
-                question_identifier = question.get('question_id', f'q_{i}')
+                question_identifier = str(question.get('_id') or question.get('question_id') or f'q_{i}')
                 student_audio_key = f"student_audio/{current_user_id}/{test_id}/{question_identifier}_{uuid.uuid4()}.{file_extension}"
                 
                 current_app.logger.info(f"Uploading audio for question {i}: {student_audio_key}")
@@ -6357,11 +6381,13 @@ def submit_online_listening_test():
         
         for i, question in enumerate(test.get('questions', [])):
             current_app.logger.info(f"Processing question {i+1}: {question.get('question_type')}")
-            
+            q_prefix = question_submission_form_prefix(question, i)
+            primary_q_key = f'question_{q_prefix}'
+            legacy_q_key = f'question_{i}'
+
             if question.get('question_type') == 'mcq':
-                # Handle MCQ questions
-                answer_key = f'question_{i}'
-                student_answer = data.get(answer_key, '')
+                # Handle MCQ questions (prefer stable id keys from student UI; legacy index keys still accepted)
+                student_answer = data.get(primary_q_key, '') or data.get(legacy_q_key, '')
                 correct_answer = question.get('correct_answer', '')
                 
                 current_app.logger.info(f"MCQ question {i}: student_answer='{student_answer}', correct_answer='{correct_answer}'")
@@ -6383,19 +6409,23 @@ def submit_online_listening_test():
                 })
                 
             else:
-                # Handle audio questions (Listening)
-                audio_key = f'question_{i}'
-                current_app.logger.info(f"Looking for audio file with key: {audio_key}")
-                current_app.logger.info(f"Available files: {list(files.keys())}")
-                
-                if audio_key not in files:
-                    current_app.logger.error(f"Audio recording for question {i+1} not found. Expected key: {audio_key}")
+                # Handle audio questions (Listening) — match by question id, not list index (questions may be shuffled in UI)
+                current_app.logger.info(f"Looking for audio file keys: {primary_q_key} or {legacy_q_key}")
+                current_app.logger.info(f"Available files: {list(files.keys()) if files else 'No files'}")
+
+                audio_file = files.get(primary_q_key) or files.get(legacy_q_key)
+                if audio_file is None:
+                    current_app.logger.error(
+                        f"Audio for question {i + 1} not found. Expected multipart key '{primary_q_key}' "
+                        f"(or legacy '{legacy_q_key}')"
+                    )
                     return jsonify({
                         'success': False,
-                        'message': f'Audio recording for question {i+1} is required. Expected key: {audio_key}'
+                        'message': (
+                            f'Audio recording for question {i + 1} is required. '
+                            f'Expected file field: {primary_q_key}'
+                        )
                     }), 400
-                
-                audio_file = files[audio_key]
                 current_app.logger.info(f"Found audio file for question {i}: {audio_file.filename}, size: {audio_file.content_length} bytes")
                 
                 # Save student audio to S3
@@ -6415,7 +6445,7 @@ def submit_online_listening_test():
                     file_extension = 'mp3'
                 
                 # Create unique audio key with question identifier
-                question_identifier = question.get('question_id', f'q_{i}')
+                question_identifier = str(question.get('_id') or question.get('question_id') or f'q_{i}')
                 student_audio_key = f"student_audio/online_tests/{current_user_id}/{test_custom_id}/{question_identifier}_{uuid.uuid4()}.{file_extension}"
                 
                 current_app.logger.info(f"Uploading audio for question {i}: {student_audio_key}")
@@ -6459,36 +6489,42 @@ def submit_online_listening_test():
                         os.remove(temp_audio_path)
                         current_app.logger.info(f"Cleaned up temporary file: {temp_audio_path}")
                 
-                # Get correct answer for comparison - for listening tests, use the original sentence
-                correct_answer = question.get('correct_answer', '') or question.get('question', '')
-                
-                # Calculate similarity score
+                # Reference text for listening/speaking (stored on bank question as sentence, etc.)
+                correct_answer = (
+                    (question.get('sentence') or '').strip()
+                    or (question.get('original_text') or '').strip()
+                    or (question.get('correct_answer') or '').strip()
+                    or (question.get('question') or '').strip()
+                )
+
+                # Calculate similarity score (0–100 scale)
                 try:
-                    from utils.audio_generator import calculate_similarity
                     current_app.logger.info(f"Calculating similarity for question {i}:")
                     current_app.logger.info(f"  Student text: '{student_text}'")
-                    current_app.logger.info(f"  Correct answer: '{correct_answer}'")
-                    
-                    similarity_score = calculate_similarity(student_text, correct_answer)
-                    is_correct = similarity_score >= 0.7  # 70% similarity threshold
+                    current_app.logger.info(f"  Reference text: '{correct_answer}'")
+
+                    similarity_score = calculate_similarity_score(correct_answer, student_text)
+                    is_correct = similarity_score >= 70
                     score = 1 if is_correct else 0
-                    
+
                     current_app.logger.info(f"  Similarity score: {similarity_score}%, is_correct: {is_correct}")
                 except Exception as e:
                     current_app.logger.error(f"Error calculating similarity for question {i}: {e}")
                     similarity_score = 0.0
                     is_correct = False
                     score = 0
-                
+
                 total_score += score
                 total_marks += 1
-                
+
                 results.append({
                     'question_index': i,
-                    'question_id': question.get('question_id'),
+                    'question_id': str(question.get('_id') or question.get('question_id') or ''),
                     'question': question.get('question'),
                     'question_type': 'audio',
                     'student_answer': student_text,
+                    'student_text': student_text,
+                    'original_text': correct_answer,
                     'correct_answer': correct_answer,
                     'is_correct': is_correct,
                     'score': score,

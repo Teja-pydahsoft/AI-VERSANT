@@ -4,6 +4,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useNotification } from '../../contexts/NotificationContext';
 import api from '../../services/api';
 import TechnicalCodeEditor from '../../components/TechnicalCodeEditor';
+import { examQuestionAnswerKey } from '../../utils/audioPlayback';
 
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
@@ -128,11 +129,10 @@ const PracticeModuleTaking = () => {
         }
       });
       
-      // Use question index format for audio recordings
       questions.forEach((question, index) => {
-        const questionId = question.question_id || question._id;
-        if (recordings[questionId]) {
-          formData.append(`question_${index}`, recordings[questionId], `answer_${index}.wav`);
+        const qKey = examQuestionAnswerKey(question, index);
+        if (recordings[qKey]) {
+          formData.append(`question_${qKey}`, recordings[qKey], `answer_${qKey}.wav`);
         }
       });
       const res = await api.post('/student/submit-practice-test', formData, {
