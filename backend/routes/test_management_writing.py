@@ -5,6 +5,11 @@ from datetime import datetime
 import pytz
 from mongo import mongo_db
 from routes.test_management import require_superadmin, generate_unique_test_id, convert_objectids
+from services.org_data_source import (
+    use_rds,
+    normalize_test_org_ids,
+    derive_rds_course_ids_from_batches,
+)
 
 writing_test_bp = Blueprint('writing_test_management', __name__)
 
@@ -22,14 +27,19 @@ def create_writing_test():
         campus_id = data.get('campus_id')
         course_ids = data.get('course_ids', [])
         batch_ids = data.get('batch_ids', [])
+        branch_names = data.get('branch_names', [])
         questions = data.get('questions', [])
         assigned_student_ids = data.get('assigned_student_ids', [])
         startDateTime = data.get('startDateTime')
         endDateTime = data.get('endDateTime')
         duration = data.get('duration')
 
+        if use_rds() and not course_ids and batch_ids:
+            course_ids = derive_rds_course_ids_from_batches(batch_ids)
+
+        has_audience = batch_ids and (branch_names or course_ids or use_rds())
         # Validate required fields
-        if not all([test_name, test_type, module_id, campus_id, course_ids, batch_ids]):
+        if not all([test_name, test_type, module_id, campus_id, has_audience, batch_ids]):
             return jsonify({'success': False, 'message': 'Missing required fields'}), 400
 
         # Validate writing module
@@ -157,11 +167,12 @@ def create_writing_test():
             'test_type': test_type.lower(),
             'module_id': module_id,
             'level_id': level_id,
-            'campus_ids': [ObjectId(campus_id)],
-            'course_ids': [ObjectId(cid) for cid in course_ids],
-            'batch_ids': [ObjectId(bid) for bid in batch_ids],
+            'campus_ids': normalize_test_org_ids([campus_id]),
+            'course_ids': normalize_test_org_ids(course_ids),
+            'batch_ids': normalize_test_org_ids(batch_ids),
+            'branch_names': branch_names or [],
             'questions': processed_questions,
-            'assigned_student_ids': [ObjectId(sid) for sid in assigned_student_ids],
+            'assigned_student_ids': normalize_test_org_ids(assigned_student_ids),
             'created_by': ObjectId(get_jwt_identity()),
             'created_at': datetime.now(pytz.utc),
             'status': 'active',
@@ -222,8 +233,8 @@ def create_writing_test():
             from utils.test_student_selector import get_students_by_batch_course_combination
             from utils.batch_processor import create_test_notification_batch_job
             
-            # Get students for this test
-            students = get_students_by_batch_course_combination(batch_ids, course_ids)
+            # Get students for this test (branch-aware for RDS)
+            students = get_students_by_batch_course_combination(batch_ids, course_ids, branch_names)
             
             if students:
                 # Format start date for notification

@@ -41,9 +41,10 @@ const CampusStudentManagement = () => {
     const [showLevelResultsPanel, setShowLevelResultsPanel] = useState(false);
     const [selectedLevelPracticeResults, setSelectedLevelPracticeResults] = useState([]);
     const [batches, setBatches] = useState([]);
+    const [branches, setBranches] = useState([]);
     const [courses, setCourses] = useState([]);
     const [selectedBatch, setSelectedBatch] = useState(null);
-    const [selectedCourse, setSelectedCourse] = useState(null);
+    const [selectedBranch, setSelectedBranch] = useState(null);
     const [accessStatus, setAccessStatus] = useState([]);
     const [showLevelsModal, setShowLevelsModal] = useState(false);
     const [levelsModalData, setLevelsModalData] = useState({ module: null, levels: [] });
@@ -106,61 +107,40 @@ const CampusStudentManagement = () => {
         }
     }, [user?.campus_id, user?.campus_name, user?.campus?.name]);
 
-    // Fetch courses for campus admin's campus
+    // Fetch branches and batches for campus admin's campus
     useEffect(() => {
-        const fetchCourses = async () => {
+        const loadFilters = async () => {
             if (!user?.campus_id || fetchCoursesRef.current) {
                 if (!user?.campus_id) {
-                    setCourses([]);
-                    setSelectedCourse(null);
+                    setBranches([]);
+                    setBatches([]);
+                    setSelectedBranch(null);
+                    setSelectedBatch(null);
                 }
                 return;
             }
-            
             fetchCoursesRef.current = true;
             try {
                 setLoadingFilters(true);
-                const res = await api.get(`/course-management/courses?campus_id=${user.campus_id}`);
-                setCourses(res.data.data || []);
-                setSelectedCourse(null); // Reset course selection
+                const [branchRes, batchRes] = await Promise.all([
+                    api.get('/batch-management/branches', { params: { campus_id: user.campus_id } }),
+                    api.get(`/batch-management/campus/${user.campus_id}/batches`),
+                ]);
+                setBranches(branchRes.data.data || []);
+                setBatches(batchRes.data.data || []);
+                setSelectedBranch(null);
+                setSelectedBatch(null);
             } catch (err) {
-                error('Failed to fetch courses.');
-                setCourses([]);
+                error('Failed to load branches or batches.');
+                setBranches([]);
+                setBatches([]);
             } finally {
                 setLoadingFilters(false);
                 fetchCoursesRef.current = false;
             }
         };
-        fetchCourses();
+        loadFilters();
     }, [user?.campus_id]);
-
-    // Fetch batches when course changes
-  useEffect(() => {
-        const fetchBatches = async () => {
-            if (!selectedCourse || fetchBatchesRef.current) {
-                if (!selectedCourse) {
-                    setBatches([]);
-                    setSelectedBatch(null);
-                }
-                return;
-            }
-            
-            fetchBatchesRef.current = true;
-            try {
-                setLoadingFilters(true);
-                const res = await api.get(`/batch-management/course/${selectedCourse}/batches`);
-                setBatches(res.data.data || []);
-                setSelectedBatch(null); // Reset batch selection
-            } catch (err) {
-                error('Failed to fetch batches.');
-                setBatches([]);
-            } finally {
-                setLoadingFilters(false);
-                fetchBatchesRef.current = false;
-            }
-        };
-        fetchBatches();
-    }, [selectedCourse]);
 
     const fetchStudents = useCallback(async (page = 1, search = '') => {
     try {
@@ -175,7 +155,7 @@ const CampusStudentManagement = () => {
         limit: '20',
                 ...(search && { search }),
                 ...(user?.campus_id && { campus_id: user.campus_id }),
-                ...(selectedCourse && { course_id: selectedCourse }),
+                ...(selectedBranch && { branch: selectedBranch }),
                 ...(selectedBatch && { batch_id: selectedBatch })
       });
       
@@ -205,16 +185,16 @@ const CampusStudentManagement = () => {
       setLoading(false);
       setLoadingMore(false);
     }
-    }, [user?.campus_id, selectedCourse, selectedBatch]);
+    }, [user?.campus_id, selectedBranch, selectedBatch]);
 
     useEffect(() => {
         fetchStudents(1, searchTerm);
-    }, [searchTerm, user?.campus_id, selectedCourse, selectedBatch]);
+    }, [searchTerm, user?.campus_id, selectedBranch, selectedBatch]);
 
     // Clear selection when filters change
     useEffect(() => {
         clearSelection();
-    }, [selectedCourse, selectedBatch]);
+    }, [selectedBranch, selectedBatch]);
     
     const handleDeleteStudent = async (studentId) => {
         if (window.confirm('Are you sure you want to delete this student? This action is permanent.')) {
@@ -330,7 +310,7 @@ const CampusStudentManagement = () => {
             const params = new URLSearchParams({
                 ...(searchTerm && { search: searchTerm }),
                 ...(user?.campus_id && { campus_id: user.campus_id }),
-                ...(selectedCourse && { course_id: selectedCourse }),
+                ...(selectedBranch && { branch: selectedBranch }),
                 ...(selectedBatch && { batch_id: selectedBatch })
             });
             
@@ -350,9 +330,8 @@ const CampusStudentManagement = () => {
                 const campus = campuses.find(c => c._id === user.campus_id);
                 if (campus) filename += `_${campus.name.replace(/\s+/g, '_')}`;
             }
-            if (selectedCourse) {
-                const course = courses.find(c => c.id === selectedCourse);
-                if (course) filename += `_${course.name.replace(/\s+/g, '_')}`;
+            if (selectedBranch) {
+                filename += `_${selectedBranch.replace(/\s+/g, '_')}`;
             }
             if (selectedBatch) {
                 const batch = batches.find(b => b.id === selectedBatch);
@@ -642,7 +621,7 @@ const CampusStudentManagement = () => {
             {!loading && (
                                         <span className="ml-2 text-blue-600 font-medium">
                                             ({totalStudents} students)
-                                            {(selectedCourse || selectedBatch) && (
+                                            {(selectedBranch || selectedBatch) && (
                                                 <span className="text-sm text-gray-500">
                                                     {' '}(filtered)
                                                 </span>
@@ -694,21 +673,22 @@ const CampusStudentManagement = () => {
                                     />
                                 </div>
 
-                                {/* Course Filter */}
+                                {/* Branch Filter */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Course</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Branch</label>
                                     <select
-                                        value={selectedCourse || ''}
-                                        onChange={(e) => setSelectedCourse(e.target.value || null)}
+                                        value={selectedBranch || ''}
+                                        onChange={(e) => setSelectedBranch(e.target.value || null)}
                                         disabled={!user?.campus_id || loadingFilters}
                                         className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                     >
                                         <option value="">
-                                            {loadingFilters && user?.campus_id ? 'Loading...' : 'All Courses'}
+                                            {loadingFilters && user?.campus_id ? 'Loading...' : 'All Branches'}
                                         </option>
-                                        {courses.map(course => (
-                                            <option key={course.id} value={course.id}>
-                                                {course.name}
+                                        {branches.map((branch) => (
+                                            <option key={branch.id || branch.name} value={branch.name}>
+                                                {branch.name}
+                                                {branch.student_count != null ? ` (${branch.student_count})` : ''}
                                             </option>
                                         ))}
                                     </select>
@@ -720,15 +700,15 @@ const CampusStudentManagement = () => {
                                     <select
                                         value={selectedBatch || ''}
                                         onChange={(e) => setSelectedBatch(e.target.value || null)}
-                                        disabled={!selectedCourse || loadingFilters}
+                                        disabled={!user?.campus_id || loadingFilters}
                                         className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                     >
                                         <option value="">
-                                            {loadingFilters && selectedCourse ? 'Loading...' : 'All Batches'}
+                                            {loadingFilters && user?.campus_id ? 'Loading...' : 'All Batches'}
                                         </option>
                                         {batches.map(batch => (
                                             <option key={batch.id} value={batch.id}>
-                                                {batch.name}
+                                                {batch.display_name || batch.name}
                                             </option>
                                         ))}
                                     </select>
@@ -762,10 +742,10 @@ const CampusStudentManagement = () => {
 
                             {/* Clear Filters Button and Download info */}
                             <div className="flex items-center justify-between">
-                                {(selectedCourse || selectedBatch) && (
+                                {(selectedBranch || selectedBatch) && (
                                     <button
                                         onClick={() => {
-                                            setSelectedCourse(null);
+                                            setSelectedBranch(null);
                                             setSelectedBatch(null);
                                         }}
                                         className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"

@@ -5,9 +5,10 @@ Handles selection of students for test notifications based on batch_ids and cour
 """
 
 import logging
-from typing import List, Dict, Set
+from typing import List, Dict, Optional, Set
 from bson import ObjectId
 from mongo import mongo_db
+from config.mysql_rds import MySQLRDSConfig
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -88,8 +89,61 @@ def get_students_for_test_notification(test_id: str, batch_ids: List[str],
         logger.error(f"❌ Error getting students for test notification: {e}")
         return []
 
-def get_students_by_batch_course_combination(batch_ids: List[str], 
-                                           course_ids: List[str] = None) -> List[Dict]:
+def get_rds_students_by_batch_branch_combination(
+    batch_ids: List[str],
+    branch_names: Optional[List[str]] = None,
+) -> List[Dict]:
+    """Get RDS students for test assignment filtered by batches and branches."""
+    from services.rds_org_service import rds_org, parse_batch_id
+
+    unique: Dict[str, Dict] = {}
+    branches = [b for b in (branch_names or []) if b]
+
+    for batch_id in batch_ids or []:
+        parsed = parse_batch_id(str(batch_id))
+        if not parsed:
+            continue
+        college_id, course_num, batch_year = parsed
+        branch_queries = branches if branches else [None]
+
+        for branch in branch_queries:
+            students, _ = rds_org.list_students(
+                page=1,
+                limit=50000,
+                college_id=college_id,
+                course_id_num=course_num,
+                batch_year=batch_year,
+                branch=branch,
+            )
+            for student in students:
+                sid = student.get('_id') or student.get('student_id')
+                if not sid or sid in unique:
+                    continue
+                unique[sid] = {
+                    'student_id': sid,
+                    'name': student.get('name', ''),
+                    'email': student.get('email', ''),
+                    'mobile_number': student.get('mobile_number', ''),
+                    'username': student.get('email', ''),
+                    'user_id': sid,
+                    'batch_id': student.get('batch_id', str(batch_id)),
+                    'course_id': student.get('course_id', ''),
+                    'campus_id': student.get('campus_id', ''),
+                    'branch': student.get('branch', ''),
+                    'roll_number': student.get('roll_number', ''),
+                    'course_name': student.get('course_name', ''),
+                }
+
+    return list(unique.values())
+
+
+def get_students_by_batch_course_combination(
+    batch_ids: List[str],
+    course_ids: List[str] = None,
+    branch_names: Optional[List[str]] = None,
+) -> List[Dict]:
+    if MySQLRDSConfig.use_rds_org_data():
+        return get_rds_students_by_batch_branch_combination(batch_ids, branch_names)
     """
     Get students based on batch and course combination
     This is a more flexible version that can handle various combinations

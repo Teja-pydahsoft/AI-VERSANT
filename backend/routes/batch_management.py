@@ -19,6 +19,8 @@ from utils.notification_queue import queue_student_credentials, queue_batch_noti
 from config.shared import bcrypt
 from socketio_instance import socketio
 from routes.access_control import require_permission
+from services.org_data_source import use_rds, read_only_response, resolve_campus_id, resolve_course_id
+from services.rds_org_service import rds_org, parse_batch_id
 
 batch_management_bp = Blueprint('batch_management', __name__)
 
@@ -60,6 +62,17 @@ def get_batches():
     try:
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
+
+        if use_rds():
+            college_id = None
+            course_num = None
+            course_id_param = request.args.get('course_id')
+            if course_id_param:
+                course_num = resolve_course_id(course_id_param)
+            if user.get('role') not in ['superadmin', 'sub_superadmin']:
+                college_id = resolve_campus_id(str(user.get('campus_id', '')))
+            batch_list = rds_org.list_batches(college_id=college_id, course_id_num=course_num)
+            return jsonify({'success': True, 'data': batch_list, 'source': 'rds', 'read_only': True}), 200
         
         # Super admin and sub_superadmin can see all batches
         if user.get('role') in ['superadmin', 'sub_superadmin']:
@@ -106,6 +119,9 @@ def get_batches():
 def create_batch_from_selection():
     """Create a new batch from selected campuses and courses"""
     try:
+        if use_rds():
+            return read_only_response()
+
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
@@ -170,6 +186,13 @@ def create_batch_from_selection():
 @jwt_required()
 def get_batches_for_course(course_id):
     try:
+        if use_rds():
+            course_num = resolve_course_id(course_id)
+            if course_num is None:
+                return jsonify({'success': False, 'message': 'Invalid course id'}), 400
+            batch_list = rds_org.list_batches(course_id_num=course_num)
+            return jsonify({'success': True, 'data': batch_list, 'source': 'rds'}), 200
+
         batches = list(mongo_db.batches.find({'course_ids': ObjectId(course_id)}))
         batch_list = []
         for batch in batches:
@@ -191,6 +214,13 @@ def get_batches_for_course(course_id):
 @jwt_required()
 def get_batches_for_campus(campus_id):
     try:
+        if use_rds():
+            college_id = resolve_campus_id(campus_id)
+            if college_id is None:
+                return jsonify({'success': False, 'message': 'Invalid campus id'}), 400
+            batch_list = rds_org.list_batches(college_id=college_id)
+            return jsonify({'success': True, 'data': batch_list, 'source': 'rds'}), 200
+
         batches = list(mongo_db.batches.find({'campus_ids': ObjectId(campus_id)}))
         batch_list = []
         for batch in batches:
@@ -406,9 +436,48 @@ def delete_batch(batch_id):
         current_app.logger.error(f"Error deleting batch: {e}")
         return jsonify({'success': False, 'message': f'An error occurred: {str(e)}'}), 500
 
+@batch_management_bp.route('/branches', methods=['GET'])
+@jwt_required()
+def get_branches():
+    """List branches for a campus (optional batch year / course scope)."""
+    try:
+        campus_id = request.args.get('campus_id', '')
+        batch_id_param = request.args.get('batch_id', '')
+        course_id = request.args.get('course_id', '')
+
+        if not use_rds():
+            return jsonify({'success': True, 'data': [], 'source': 'mongo'}), 200
+
+        college_id = resolve_campus_id(campus_id) if campus_id else None
+        if college_id is None:
+            return jsonify({'success': False, 'message': 'campus_id is required'}), 400
+
+        batch_year = None
+        course_num = resolve_course_id(course_id) if course_id else None
+        if batch_id_param:
+            parsed = parse_batch_id(batch_id_param)
+            if parsed:
+                college_id, parsed_course, batch_year = parsed
+                if parsed_course is not None:
+                    course_num = parsed_course
+
+        branches = rds_org.list_branches_for_college(
+            college_id,
+            batch_year=batch_year,
+            course_id_num=course_num,
+        )
+        return jsonify({'success': True, 'data': branches, 'source': 'rds'}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error fetching branches: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 @batch_management_bp.route('/campuses', methods=['GET'])
 @jwt_required()
 def get_campuses():
+    if use_rds():
+        data = [{'id': c['id'], 'name': c['name']} for c in rds_org.list_colleges()]
+        return jsonify({'success': True, 'data': data, 'source': 'rds'}), 200
     campuses = list(mongo_db.campuses.find())
     return jsonify({'success': True, 'data': [{'id': str(c['_id']), 'name': c['name']} for c in campuses]}), 200
 
@@ -419,6 +488,22 @@ def get_courses():
     if not campus_ids:
         return jsonify({'success': False, 'message': 'campus_ids required'}), 400
     try:
+        if use_rds():
+            courses_data = []
+            for cid in campus_ids:
+                college_id = resolve_campus_id(cid)
+                if college_id is None:
+                    continue
+                college = rds_org.get_college_by_id(college_id)
+                for course in rds_org.list_courses(college_id=college_id):
+                    courses_data.append({
+                        'id': course['id'],
+                        'name': course['name'],
+                        'campus_id': course['campus_id'],
+                        'campus_name': college['name'] if college else '',
+                    })
+            return jsonify({'success': True, 'data': courses_data, 'source': 'rds'}), 200
+
         campus_obj_ids = [ObjectId(cid) for cid in campus_ids]
         
         pipeline = [
@@ -595,6 +680,9 @@ def validate_student_upload():
 @performance_monitor(threshold=5.0)
 def upload_students_to_batch():
     try:
+        if use_rds():
+            return read_only_response()
+
         # Accept file upload and form data
         file = request.files.get('file')
         batch_id = request.form.get('batch_id')
@@ -1106,6 +1194,41 @@ def upload_students_to_batch():
 def get_batch_students(batch_id):
     """Get all students and detailed info for a specific batch."""
     try:
+        if use_rds():
+            parsed = parse_batch_id(batch_id)
+            if not parsed:
+                return jsonify({'success': False, 'message': 'Invalid batch id'}), 400
+            college_id, course_num, batch_year = parsed
+            branch_filter = request.args.get('branch', '').strip() or None
+            batch_meta = rds_org.get_batch_by_composite(college_id, batch_year, course_id_num=course_num)
+            students, _ = rds_org.list_students(
+                page=1,
+                limit=5000,
+                college_id=college_id,
+                course_id_num=course_num,
+                batch_year=batch_year,
+                branch=branch_filter,
+            )
+            college = rds_org.get_college_by_id(college_id)
+            course_names = [c['name'] for c in (batch_meta or {}).get('courses', [])]
+            batch_info = {
+                'id': batch_id,
+                'name': (batch_meta or {}).get('display_name') or batch_year,
+                'batch_year': batch_year,
+                'campus_name': college['name'] if college else '',
+                'course_name': ', '.join(course_names) if course_names else '',
+                'courses': (batch_meta or {}).get('courses', []),
+                'branches': (batch_meta or {}).get('branches', []),
+                'course_ids': (batch_meta or {}).get('course_ids', []),
+            }
+            return jsonify({
+                'success': True,
+                'data': students,
+                'batch_info': batch_info,
+                'source': 'rds',
+                'read_only': True,
+            }), 200
+
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
@@ -1170,6 +1293,45 @@ def get_filtered_students():
         campus_id = request.args.get('campus_id', '')
         course_id = request.args.get('course_id', '')
         batch_id = request.args.get('batch_id', '')
+        branch = request.args.get('branch', '').strip() or None
+
+        if use_rds():
+            college_id = resolve_campus_id(campus_id) if campus_id else None
+            course_num = resolve_course_id(course_id) if course_id else None
+            batch_year = None
+            if batch_id:
+                parsed = parse_batch_id(batch_id)
+                if parsed:
+                    parsed_college, parsed_course, parsed_year = parsed
+                    college_id = parsed_college if parsed_college is not None else college_id
+                    batch_year = parsed_year or batch_year
+                    if parsed_course is not None:
+                        course_num = parsed_course
+            if user.get('role') not in ['superadmin', 'sub_superadmin']:
+                user_college = resolve_campus_id(str(user.get('campus_id', '')))
+                if user_college:
+                    college_id = user_college
+            students, total = rds_org.list_students(
+                page=page,
+                limit=limit,
+                search=search,
+                college_id=college_id,
+                course_id_num=course_num,
+                batch_year=batch_year,
+                branch=branch,
+            )
+            return jsonify({
+                'success': True,
+                'data': students,
+                'pagination': {
+                    'page': page,
+                    'limit': limit,
+                    'total': total,
+                    'has_more': (page * limit) < total,
+                },
+                'source': 'rds',
+                'read_only': True,
+            }), 200
         
         # Build query
         query = {'role': 'student'}

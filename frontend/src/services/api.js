@@ -385,8 +385,8 @@ export const createTestFromBank = async (testData) => {
 export const getAllTests = async () => api.get('/test-management/tests');
 
 // Returns { count, students: [ ... ] }
-export const getStudentCount = async ({ campus, batches, courses }) =>
-  api.post('/test-management/student-count', { campus, batches, courses });
+export const getStudentCount = async ({ campus, batches, branches, courses }) =>
+  api.post('/test-management/student-count', { campus, batches, branches, courses });
 
 export const getStudentAccessStatus = async (studentId) => {
   return api.get(`/batch-management/student/${studentId}/access-status`);

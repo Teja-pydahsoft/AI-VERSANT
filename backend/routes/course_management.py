@@ -8,6 +8,8 @@ from config.constants import ROLES
 from config.shared import bcrypt
 from routes.access_control import require_permission
 from utils.email_service import send_email, render_template
+from services.org_data_source import use_rds, read_only_response, resolve_campus_id, resolve_course_id
+from services.rds_org_service import rds_org
 
 course_management_bp = Blueprint('course_management', __name__)
 
@@ -19,6 +21,13 @@ def get_courses():
     try:
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
+
+        if use_rds():
+            college_id = None
+            if user.get('role') not in ['superadmin', 'sub_superadmin']:
+                college_id = resolve_campus_id(str(user.get('campus_id', '')))
+            course_list = rds_org.list_courses(college_id=college_id)
+            return jsonify({'success': True, 'data': course_list, 'source': 'rds', 'read_only': True}), 200
         
         # Super admin and sub_superadmin can see all courses
         if user.get('role') in ['superadmin', 'sub_superadmin']:
@@ -59,6 +68,16 @@ def get_courses_filtered():
         campus_id = request.args.get('campus_id')
         if not campus_id:
             return jsonify({'success': False, 'message': 'campus_id parameter is required'}), 400
+
+        if use_rds():
+            college_id = resolve_campus_id(campus_id)
+            if college_id is None:
+                return jsonify({'success': False, 'message': 'Invalid campus id'}), 400
+            course_list = [
+                {'id': c['id'], 'name': c['name'], 'campus_id': c['campus_id']}
+                for c in rds_org.list_courses(college_id=college_id)
+            ]
+            return jsonify({'success': True, 'data': course_list, 'source': 'rds'}), 200
         
         # Fetch courses for the specific campus
         courses = list(mongo_db.courses.find({'campus_id': ObjectId(campus_id)}))
@@ -100,6 +119,16 @@ def get_courses_by_batch(batch_id):
 @jwt_required()
 def get_courses_by_campus(campus_id):
     try:
+        if use_rds():
+            college_id = resolve_campus_id(campus_id)
+            if college_id is None:
+                return jsonify({'success': False, 'message': 'Invalid campus id'}), 400
+            course_list = [
+                {'id': c['id'], 'name': c['name']}
+                for c in rds_org.list_courses(college_id=college_id)
+            ]
+            return jsonify({'success': True, 'data': course_list, 'source': 'rds'}), 200
+
         courses = list(mongo_db.courses.find({'campus_id': ObjectId(campus_id)}))
         course_list = [
             {
@@ -118,6 +147,9 @@ def get_courses_by_campus(campus_id):
 def create_course(campus_id):
     """Create a new course - SUPER ADMIN AND CAMPUS ADMIN ONLY"""
     try:
+        if use_rds():
+            return read_only_response()
+
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
@@ -165,6 +197,9 @@ def create_course(campus_id):
 @jwt_required()
 def update_course(course_id):
     try:
+        if use_rds():
+            return read_only_response()
+
         data = request.get_json()
         
         # Update course name
@@ -179,6 +214,9 @@ def update_course(course_id):
 @jwt_required()
 def delete_course(course_id):
     try:
+        if use_rds():
+            return read_only_response()
+
         result = mongo_db.delete_course(course_id)
         if result.deleted_count == 0:
             return jsonify({'success': False, 'message': 'No course deleted'}), 404
@@ -191,6 +229,24 @@ def delete_course(course_id):
 def get_course_batches(course_id):
     """Get all batches for a specific course."""
     try:
+        if use_rds():
+            course_num = resolve_course_id(course_id)
+            if course_num is None:
+                return jsonify({'success': False, 'message': 'Invalid course id'}), 400
+            batches = rds_org.list_batches(course_id_num=course_num)
+            data = [
+                {
+                    'id': b['id'],
+                    'name': b.get('display_name') or b['name'],
+                    'display_name': b.get('display_name') or b['name'],
+                    'batch_year': b.get('batch_year'),
+                    'student_count': b.get('student_count', 0),
+                    'branches': b.get('branches', []),
+                }
+                for b in batches
+            ]
+            return jsonify({'success': True, 'data': data, 'source': 'rds'}), 200
+
         batches = mongo_db.get_batches_by_course(course_id)
         return jsonify({'success': True, 'data': batches}), 200
     except Exception as e:

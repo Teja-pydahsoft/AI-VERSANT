@@ -4,6 +4,10 @@ from bson import ObjectId
 from mongo import mongo_db
 from config.shared import bcrypt
 from routes.access_control import require_permission
+from services.org_data_source import (
+    use_rds, read_only_response, resolve_user_college_id, resolve_user_course_id, org_meta,
+)
+from services.rds_org_service import rds_org, parse_course_id
 
 campus_admin_bp = Blueprint('campus_admin', __name__)
 
@@ -29,9 +33,13 @@ def dashboard():
                 'message': 'Campus not assigned'
             }), 400
         
-        # Get campus statistics
-        total_students = mongo_db.students.count_documents({'campus_id': campus_id})
-        total_courses = mongo_db.courses.count_documents({'campus_id': campus_id})
+        college_id = resolve_user_college_id(user)
+        if use_rds() and college_id is not None:
+            total_students = rds_org.count_students_for_college(college_id)
+            total_courses = rds_org.count_courses_for_college(college_id)
+        else:
+            total_students = mongo_db.students.count_documents({'campus_id': campus_id})
+            total_courses = mongo_db.courses.count_documents({'campus_id': campus_id})
         total_tests = mongo_db.tests.count_documents({'campus_id': campus_id})
         
         dashboard_data = {
@@ -46,7 +54,8 @@ def dashboard():
         return jsonify({
             'success': True,
             'message': 'Dashboard data retrieved successfully',
-            'data': dashboard_data
+            'data': dashboard_data,
+            **org_meta(),
         }), 200
         
     except Exception as e:
@@ -72,15 +81,40 @@ def get_campus_students():
         if not campus_id:
             return jsonify({'success': False, 'message': 'Campus not assigned'}), 400
 
-        # Get pagination parameters
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 20))
         search = request.args.get('search', '').strip()
-        
-        # Calculate skip value
-        skip = (page - 1) * limit
 
-        # Build match stage with search
+        college_id = resolve_user_college_id(user)
+        if use_rds() and college_id is not None:
+            students, total_count = rds_org.list_students(
+                page=page, limit=limit, search=search, college_id=college_id,
+            )
+            student_list = [
+                {
+                    'id': s['student_id'],
+                    'name': s['name'],
+                    'email': s['email'],
+                    'roll_number': s['roll_number'],
+                    'course': {'id': s.get('course_id'), 'name': s.get('course_name')} if s.get('course_id') else None,
+                    'created_at': s.get('created_at'),
+                }
+                for s in students
+            ]
+            return jsonify({
+                'success': True,
+                'data': student_list,
+                'pagination': {
+                    'page': page,
+                    'limit': limit,
+                    'total': total_count,
+                    'pages': (total_count + limit - 1) // limit if limit else 0,
+                    'has_more': (page * limit) < total_count,
+                },
+                **org_meta(),
+            }), 200
+
+        skip = (page - 1) * limit
         match_stage = {'campus_id': ObjectId(campus_id)}
         if search:
             match_stage['$or'] = [
@@ -181,6 +215,21 @@ def get_batches():
             return jsonify({'success': False, 'message': 'Access denied'}), 403
         
         batch_list = []
+
+        if use_rds():
+            college_id = resolve_user_college_id(user)
+            course_num = resolve_user_course_id(user) if user.get('role') == 'course_admin' else None
+            if college_id is None and user.get('role') == 'campus_admin':
+                return jsonify({'success': False, 'message': 'Campus not mapped to master database'}), 400
+            for b in rds_org.list_batches(college_id=college_id, course_id_num=course_num):
+                batch_list.append({
+                    'id': b['id'],
+                    'name': b['name'],
+                    'courses': b.get('courses', []),
+                    'campuses': b.get('campuses', []),
+                    'student_count': b.get('student_count', 0),
+                })
+            return jsonify({'success': True, 'data': batch_list, **org_meta()}), 200
         
         if user.get('role') == 'campus_admin':
             # Campus admin: get batches for their campus
@@ -234,6 +283,8 @@ def get_batches():
 def create_batch():
     """Create a new batch for the campus admin's campus"""
     try:
+        if use_rds():
+            return read_only_response()
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
@@ -266,6 +317,8 @@ def create_batch():
 @jwt_required()
 def edit_batch(batch_id):
     """Edit a batch (only if it belongs to the campus admin's campus)"""
+    if use_rds():
+        return read_only_response()
     current_user_id = get_jwt_identity()
     user = mongo_db.find_user_by_id(current_user_id)
     if not user or user.get('role') != 'campus_admin':
@@ -285,6 +338,8 @@ def edit_batch(batch_id):
 @jwt_required()
 def delete_batch(batch_id):
     """Delete a batch (only if it belongs to the campus admin's campus)"""
+    if use_rds():
+        return read_only_response()
     current_user_id = get_jwt_identity()
     user = mongo_db.find_user_by_id(current_user_id)
     if not user or user.get('role') not in ['campus_admin', 'course_admin']:
@@ -309,6 +364,18 @@ def get_courses():
             return jsonify({'success': False, 'message': 'Access denied'}), 403
         
         course_list = []
+
+        if use_rds():
+            college_id = resolve_user_college_id(user)
+            course_num = resolve_user_course_id(user) if user.get('role') == 'course_admin' else None
+            if user.get('role') == 'course_admin' and course_num is not None:
+                course = rds_org.get_course_by_id(course_num)
+                if course:
+                    course_list.append({'id': course['id'], 'name': course['name']})
+            elif college_id is not None:
+                for c in rds_org.list_courses(college_id=college_id):
+                    course_list.append({'id': c['id'], 'name': c['name']})
+            return jsonify({'success': True, 'data': course_list, **org_meta()}), 200
         
         if user.get('role') == 'campus_admin':
             # Campus admin: get courses for their campus
@@ -352,6 +419,8 @@ def get_courses():
 def create_course():
     """Create a new course for the campus admin's campus"""
     try:
+        if use_rds():
+            return read_only_response()
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         

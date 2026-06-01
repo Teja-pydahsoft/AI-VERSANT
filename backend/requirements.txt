@@ -14,6 +14,7 @@ Flask-CORS>=4.0.1
 # Database
 Flask-PyMongo>=2.3.0
 pymongo[srv]>=4.8.0
+pymysql>=1.1.0
 
 # Data processing and Excel export
 pandas>=2.1.4

@@ -27,10 +27,28 @@ gc.set_threshold(700, 10, 10)  # Optimize garbage collection
 os.environ['PYTHONUNBUFFERED'] = '1'
 os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 
-load_dotenv()
+# Load .env from project root (d:\AI-VERSANT\.env) then backend/.env overrides
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.dirname(_backend_dir)
+load_dotenv(os.path.join(_project_root, '.env'))
+load_dotenv(os.path.join(_backend_dir, '.env'))
 
 def create_app():
     app = Flask(__name__)
+
+    try:
+        from config.mysql_rds import MySQLRDSConfig
+        if MySQLRDSConfig.use_rds_org_data():
+            app.logger.info(
+                'Organization data source: AWS RDS MySQL (%s/%s) [read-only=%s]',
+                MySQLRDSConfig.HOST,
+                MySQLRDSConfig.DATABASE,
+                MySQLRDSConfig.READ_ONLY,
+            )
+        else:
+            app.logger.info('Organization data source: MongoDB (RDS disabled or not configured)')
+    except Exception as exc:
+        app.logger.warning('Could not initialize RDS org data config: %s', exc)
 
     # Configuration
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', ' CRT Application jwt_secret_key_2024_secure_and_unique')
@@ -299,6 +317,16 @@ def create_app():
             
             # Get connection health status
             connection_health = get_connection_health()
+
+            rds_health = {'status': 'disabled'}
+            try:
+                from config.mysql_rds import MySQLRDSConfig
+                from utils.mysql_rds_manager import mysql_rds
+                if MySQLRDSConfig.is_configured():
+                    rds_health = mysql_rds.health_check()
+                    rds_health['org_data_source'] = 'rds' if MySQLRDSConfig.use_rds_org_data() else 'mongo'
+            except Exception as rds_exc:
+                rds_health = {'status': 'unhealthy', 'message': str(rds_exc)}
             
             total_time = time.time() - start_time
             
@@ -314,6 +342,7 @@ def create_app():
                     'available_memory': f"{memory.available // (1024*1024)}MB"
                 },
                 'connection_health': connection_health,
+                'rds_mysql': rds_health,
                 'ssl_status': 'stable',
                 'timeout_status': 'OK' if total_time < 10.0 else 'SLOW'
             }), 200

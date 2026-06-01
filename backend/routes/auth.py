@@ -155,13 +155,18 @@ def login():
         
         print(f"🔍 Looking up user: {username}", file=sys.stderr)
         
-        # Find user by username
+        # Find user by username, email, mobile, or RDS pin/admission number
         user = mongo_db.find_user_by_username(username)
-        # If not found, try by email
         if not user:
             user = mongo_db.users.find_one({'email': username})
         if not user:
             user = mongo_db.users.find_one({'mobile_number': username})
+        if not user:
+            try:
+                from services.student_mapping_service import resolve_login_user
+                user = resolve_login_user(username)
+            except Exception as rds_exc:
+                print(f"⚠️ RDS login resolution failed: {rds_exc}", file=sys.stderr)
         
         if not user:
             print(f"❌ User not found: {username}", file=sys.stderr)

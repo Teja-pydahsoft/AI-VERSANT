@@ -465,14 +465,17 @@ def get_single_test(test_id):
 def get_test_data():
     """Get campuses, courses, and batches for dropdowns"""
     try:
-        # Get campuses
-        campuses = list(mongo_db.campuses.find({}, {'name': 1, '_id': 1}))
-        
-        # Get courses
-        courses = list(mongo_db.courses.find({}, {'name': 1, '_id': 1}))
-        
-        # Get batches
-        batches = list(mongo_db.batches.find({}, {'name': 1, '_id': 1}))
+        from services.org_data_source import use_rds, org_meta
+        from services.rds_org_service import rds_org
+
+        if use_rds():
+            campuses = [{'_id': c['id'], 'id': c['id'], 'name': c['name']} for c in rds_org.list_colleges()]
+            courses = [{'_id': c['id'], 'id': c['id'], 'name': c['name']} for c in rds_org.list_courses()]
+            batches = [{'_id': b['id'], 'id': b['id'], 'name': b['name']} for b in rds_org.list_batches()]
+        else:
+            campuses = list(mongo_db.campuses.find({}, {'name': 1, '_id': 1}))
+            courses = list(mongo_db.courses.find({}, {'name': 1, '_id': 1}))
+            batches = list(mongo_db.batches.find({}, {'name': 1, '_id': 1}))
         
         # Use the imported constants directly
         try:
@@ -650,6 +653,11 @@ def get_all_tests():
                     'module_id': 1,
                     'level_id': 1,
                     'subcategory': 1,
+                    'campus_id': 1,
+                    'campus_ids': 1,
+                    'batch_ids': 1,
+                    'course_ids': 1,
+                    'branch_names': 1,
                     'campus_names': '$campus_info.name',
                     'batches': '$batch_info.name',
                     'courses': '$course_info.name',
@@ -660,6 +668,8 @@ def get_all_tests():
         ])
 
         tests = list(mongo_db.tests.aggregate(pipeline))
+        from services.org_data_source import build_org_name_maps, apply_test_audience_labels
+        org_name_maps = build_org_name_maps(tests)
 
         tests_data = []
         for test in tests:
@@ -670,10 +680,7 @@ def get_all_tests():
             test['created_at'] = safe_isoformat(test.get('created_at')) if test.get('created_at') else None
             test['endDateTime'] = safe_isoformat(test.get('endDateTime')) if test.get('endDateTime') else None
             
-            # Format campus, batch, and course names properly
-            test['campus'] = ', '.join(test.get('campus_names', [])) if test.get('campus_names') else 'N/A'
-            test['batch'] = ', '.join(test.get('batches', [])) if test.get('batches') else 'N/A'
-            test['course'] = ', '.join(test.get('courses', [])) if test.get('courses') else 'N/A'
+            apply_test_audience_labels(test, org_name_maps)
             
             # Format level properly
             if test.get('level_id'):
@@ -855,10 +862,40 @@ def get_student_count():
         campus_id = data.get('campus')
         batch_ids = data.get('batches', [])
         course_ids = data.get('courses', [])
+        branch_names = data.get('branches', [])
         
         current_app.logger.info(f"Campus ID: {campus_id}")
         current_app.logger.info(f"Batch IDs: {batch_ids}")
         current_app.logger.info(f"Course IDs: {course_ids}")
+        current_app.logger.info(f"Branch names: {branch_names}")
+        
+        if not campus_id and not batch_ids:
+            return jsonify({'success': False, 'message': 'Campus ID or batch selection is required'}), 400
+
+        from services.org_data_source import use_rds
+        if use_rds() and batch_ids:
+            from utils.test_student_selector import get_rds_students_by_batch_branch_combination
+
+            rds_students = get_rds_students_by_batch_branch_combination(batch_ids, branch_names)
+            final_student_list = [
+                {
+                    'id': s['student_id'],
+                    'name': s.get('name', ''),
+                    'email': s.get('email', ''),
+                    'roll_number': s.get('roll_number', ''),
+                    'course_name': s.get('course_name', ''),
+                    'branch': s.get('branch', ''),
+                    'source': 'rds',
+                }
+                for s in rds_students
+            ]
+            current_app.logger.info(f"RDS student count: {len(final_student_list)}")
+            return jsonify({
+                'success': True,
+                'count': len(final_student_list),
+                'students': final_student_list,
+                'source': 'rds',
+            }), 200
         
         if not campus_id:
             return jsonify({'success': False, 'message': 'Campus ID is required'}), 400
@@ -1013,8 +1050,9 @@ def notify_students(test_id):
         # Get batch_ids and course_ids from test (same approach as test creation)
         batch_ids = test.get('batch_ids', [])
         course_ids = test.get('course_ids', [])
+        branch_names = test.get('branch_names', [])
         
-        current_app.logger.info(f"Test {test_id} assigned to batches: {batch_ids}, courses: {course_ids}")
+        current_app.logger.info(f"Test {test_id} assigned to batches: {batch_ids}, courses: {course_ids}, branches: {branch_names}")
         
         if not batch_ids and not course_ids:
             return jsonify({'success': False, 'message': 'No batches or courses assigned to this test.'}), 400
@@ -1024,7 +1062,11 @@ def notify_students(test_id):
             from utils.test_student_selector import get_students_by_batch_course_combination
             
             # Get students for this test using the same method as test creation
-            students = get_students_by_batch_course_combination(batch_ids, course_ids)
+            students = get_students_by_batch_course_combination(
+                [str(bid) for bid in batch_ids],
+                [str(cid) for cid in course_ids] if course_ids else None,
+                branch_names or None,
+            )
             
             current_app.logger.info(f"Found {len(students)} students for test {test_id}")
             
@@ -3250,6 +3292,183 @@ def transcribe_audio_endpoint():
 
 # ==================== CRT TOPICS ENDPOINTS ====================
 
+_CRT_MODULE_IDS = ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']
+
+
+def _normalize_org_id(value):
+    if isinstance(value, ObjectId):
+        return str(value)
+    return str(value) if value is not None else ''
+
+
+def _parse_crt_topic_filters():
+    """Parse batch/course/branch filter query params for CRT topic usage."""
+    batch_ids_filter = request.args.get('batch_ids', '').strip()
+    course_ids_filter = request.args.get('course_ids', '').strip()
+    branch_names_filter = request.args.get('branch_names', '').strip()
+
+    filter_batch_ids = []
+    if batch_ids_filter:
+        for bid in [b.strip() for b in batch_ids_filter.split(',') if b.strip()]:
+            try:
+                filter_batch_ids.append(ObjectId(bid))
+            except Exception:
+                filter_batch_ids.append(bid)
+
+    filter_course_ids = []
+    if course_ids_filter:
+        for cid in [c.strip() for c in course_ids_filter.split(',') if c.strip()]:
+            try:
+                filter_course_ids.append(ObjectId(cid))
+            except Exception:
+                filter_course_ids.append(cid)
+
+    filter_branch_names = []
+    if branch_names_filter:
+        branch_values = [v.strip() for v in branch_names_filter.split(',') if v.strip()]
+        looks_like_course_ids = bool(branch_values) and all(
+            re.match(r'^[0-9a-fA-F]{24}$', v) for v in branch_values
+        )
+        if looks_like_course_ids:
+            try:
+                filter_course_ids = [ObjectId(v) for v in branch_values]
+            except Exception as exc:
+                current_app.logger.warning(f'Invalid branch_names->course_ids filter: {exc}')
+        else:
+            filter_branch_names = branch_values
+
+    return filter_batch_ids, filter_course_ids, filter_branch_names
+
+
+def _crt_topic_base_stats():
+    """Fast global question counts per CRT topic (single aggregation)."""
+    stats = {}
+    pipeline = [
+        {
+            '$match': {
+                'topic_id': {'$exists': True, '$ne': None},
+                'module_id': {'$in': _CRT_MODULE_IDS},
+            }
+        },
+        {
+            '$group': {
+                '_id': '$topic_id',
+                'total_questions': {'$sum': 1},
+                'used_questions': {
+                    '$sum': {'$cond': [{'$gt': [{'$ifNull': ['$used_count', 0]}, 0]}, 1, 0]}
+                },
+            }
+        },
+    ]
+    for row in mongo_db.question_bank.aggregate(pipeline):
+        stats[str(row['_id'])] = {
+            'total_questions': int(row['total_questions']),
+            'used_questions': int(row['used_questions']),
+        }
+    return stats
+
+
+def _crt_topic_audience_filtered_stats(filter_batch_ids, filter_course_ids, filter_branch_names):
+    """
+    Audience-filtered used question counts per topic.
+    Loads tests once instead of per-topic full collection scans.
+    """
+    filter_batch_set = {_normalize_org_id(v) for v in filter_batch_ids}
+    filter_course_set = {_normalize_org_id(v) for v in filter_course_ids}
+    filter_branch_set = {str(v) for v in filter_branch_names}
+
+    topic_questions = list(mongo_db.question_bank.find(
+        {'topic_id': {'$exists': True, '$ne': None}, 'module_id': {'$in': _CRT_MODULE_IDS}},
+        {'topic_id': 1, 'used_in_tests': 1},
+    ))
+    if not topic_questions:
+        return {}
+
+    question_ids_set = {q['_id'] for q in topic_questions}
+    question_topic_map = {q['_id']: q.get('topic_id') for q in topic_questions}
+
+    test_ids = set()
+    for question in topic_questions:
+        for test_ref in question.get('used_in_tests') or []:
+            if isinstance(test_ref, ObjectId):
+                test_ids.add(test_ref)
+            elif isinstance(test_ref, str):
+                try:
+                    test_ids.add(ObjectId(test_ref))
+                except Exception:
+                    pass
+
+    if not test_ids:
+        return {str(q['topic_id']): 0 for q in topic_questions if q.get('topic_id')}
+
+    tests_using_topic = list(mongo_db.tests.find(
+        {'_id': {'$in': list(test_ids)}},
+        {'batch_ids': 1, 'course_ids': 1, 'branch_names': 1, 'questions': 1},
+    ))
+
+    used_by_topic = {}
+
+    for test in tests_using_topic:
+        test_batches = test.get('batch_ids') or []
+        test_courses = test.get('course_ids') or []
+        test_branch_names = test.get('branch_names') or []
+        if not test_batches or not test_courses:
+            continue
+
+        test_batch_ids = [_normalize_org_id(bid) for bid in test_batches]
+        test_course_ids = [_normalize_org_id(cid) for cid in test_courses]
+
+        topic_question_ids_in_test = []
+        for tq in test.get('questions') or []:
+            tq_id = tq.get('_id') if isinstance(tq, dict) else tq
+            if isinstance(tq_id, str):
+                try:
+                    tq_id = ObjectId(tq_id)
+                except Exception:
+                    continue
+            if tq_id in question_ids_set:
+                topic_question_ids_in_test.append(tq_id)
+
+        if not topic_question_ids_in_test:
+            continue
+
+        for batch_id in test_batch_ids:
+            if filter_batch_set and batch_id not in filter_batch_set:
+                continue
+            for course_id in test_course_ids:
+                if filter_course_set and course_id not in filter_course_set:
+                    continue
+                if filter_branch_set:
+                    if not set(map(str, test_branch_names)) & filter_branch_set:
+                        continue
+                for tq_id in topic_question_ids_in_test:
+                    topic_id = question_topic_map.get(tq_id)
+                    if topic_id:
+                        key = str(topic_id)
+                        used_by_topic.setdefault(key, set()).add(tq_id)
+
+    return {topic_id: len(ids) for topic_id, ids in used_by_topic.items()}
+
+
+def _attach_crt_topic_stats(topics, stats, filtered_used=None):
+    for topic in topics:
+        topic_id = str(topic['_id'])
+        base = stats.get(topic_id, {'total_questions': 0, 'used_questions': 0})
+        total_questions = base['total_questions']
+        used_questions = (
+            filtered_used.get(topic_id, 0)
+            if filtered_used is not None
+            else base['used_questions']
+        )
+        completion_percentage = (used_questions / total_questions * 100) if total_questions > 0 else 0
+        topic['_id'] = topic_id
+        topic['total_questions'] = total_questions
+        topic['used_questions'] = used_questions
+        topic['completion_percentage'] = round(completion_percentage, 1)
+        topic['created_at'] = safe_isoformat(topic.get('created_at')) if topic.get('created_at') else None
+    return topics
+
+
 @test_management_bp.route('/crt-topics', methods=['GET'])
 @jwt_required()
 @require_superadmin
@@ -3258,178 +3477,55 @@ def get_crt_topics():
     Get all CRT topics with completion statistics
     
     Query parameters:
-    - batch_ids: comma-separated list of batch IDs to filter usage by
+    - module_id: optional CRT module filter (CRT_APTITUDE, CRT_REASONING, CRT_TECHNICAL)
+    - audience_filtered: true = apply batch/course/branch usage filters (slow); default false
+    - batch_ids: comma-separated list of batch IDs to filter usage by (only when audience_filtered=true)
     - course_ids: comma-separated list of course IDs to filter usage by
+    - branch_names: comma-separated list of branch names to filter usage by (for RDS tests). 
+      For legacy/Mongo tests, if branch_names look like ObjectId hex strings, they are treated as course_ids.
     """
     try:
-        # Get filter parameters from query string
-        batch_ids_filter = request.args.get('batch_ids', '').strip()
-        course_ids_filter = request.args.get('course_ids', '').strip()
-        
-        filter_batch_ids = []
-        if batch_ids_filter:
-            try:
-                filter_batch_ids = [ObjectId(bid.strip()) for bid in batch_ids_filter.split(',') if bid.strip()]
-                current_app.logger.info(f"CRT Topics API - Filtering by {len(filter_batch_ids)} batch_ids")
-            except Exception as e:
-                current_app.logger.warning(f"Invalid batch_ids filter: {e}")
-        
-        filter_course_ids = []
-        if course_ids_filter:
-            try:
-                filter_course_ids = [ObjectId(cid.strip()) for cid in course_ids_filter.split(',') if cid.strip()]
-                current_app.logger.info(f"CRT Topics API - Filtering by {len(filter_course_ids)} course_ids")
-            except Exception as e:
-                current_app.logger.warning(f"Invalid course_ids filter: {e}")
-        
-        # Log filter status
-        if filter_batch_ids or filter_course_ids:
-            current_app.logger.info(f"CRT Topics API - Applying filters: batch_ids={len(filter_batch_ids)}, course_ids={len(filter_course_ids)}")
+        module_id = request.args.get('module_id', '').strip()
+        audience_filtered = request.args.get('audience_filtered', 'false').lower() in ('1', 'true', 'yes')
+
+        topic_query = {}
+        if module_id:
+            topic_query['module_id'] = module_id
+
+        filter_batch_ids, filter_course_ids, filter_branch_names = _parse_crt_topic_filters()
+        has_audience_filters = bool(filter_batch_ids or filter_course_ids or filter_branch_names)
+
+        if audience_filtered and has_audience_filters:
+            current_app.logger.info(
+                'CRT Topics API - audience_filtered usage: batch_ids=%s course_ids=%s branch_names=%s',
+                len(filter_batch_ids), len(filter_course_ids), len(filter_branch_names),
+            )
         else:
-            current_app.logger.info("CRT Topics API - No filters provided, using global usage")
-        
-        topics = list(mongo_db.crt_topics.find({}).sort('created_at', -1))
-        
-        for topic in topics:
-            topic_id = topic['_id']
-            
-            # Count total questions for this topic
-            total_questions = mongo_db.question_bank.count_documents({
-                'topic_id': topic_id,
-                'module_id': {'$in': ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']}
-            })
-            
-            # Calculate used_questions based on filters
-            if filter_batch_ids or filter_course_ids:
-                # If filters are provided, calculate usage only for tests that match the filters
-                # Get all questions in this topic
-                topic_questions = list(mongo_db.question_bank.find({
-                    'topic_id': topic_id,
-                    'module_id': {'$in': ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']}
-                }))
-                
-                if not topic_questions:
-                    used_questions = 0
-                else:
-                    question_ids = [q['_id'] for q in topic_questions]
-                    question_ids_set = set(question_ids)
-                    
-                    # Get all test IDs that use these questions
-                    test_ids_from_questions = set()
-                    for question in topic_questions:
-                        used_in_tests = question.get('used_in_tests', [])
-                        for test_ref in used_in_tests:
-                            if isinstance(test_ref, ObjectId):
-                                test_ids_from_questions.add(test_ref)
-                            elif isinstance(test_ref, str):
-                                try:
-                                    test_ids_from_questions.add(ObjectId(test_ref))
-                                except Exception:
-                                    pass
-                    
-                    # Fetch tests that use these questions
-                    tests_using_topic = []
-                    if test_ids_from_questions:
-                        tests_using_topic = list(mongo_db.tests.find({'_id': {'$in': list(test_ids_from_questions)}}))
-                    
-                    # If no tests found via used_in_tests, fall back to checking all tests (less efficient but comprehensive)
-                    if not tests_using_topic:
-                        all_tests = list(mongo_db.tests.find({}))
-                        tests_using_topic = all_tests
-                    
-                    # Filter tests by batch_ids and course_ids and collect used question IDs
-                    # Track usage per batch+course combination (like topic-usage endpoint does)
-                    filtered_used_question_ids = set()
-                    
-                    for test in tests_using_topic:
-                        test_batches = test.get('batch_ids', [])
-                        test_courses = test.get('course_ids', [])
-                        
-                        if not test_batches or not test_courses:
-                            continue
-                        
-                        # Normalize test batch_ids and course_ids to ObjectIds for comparison
-                        test_batch_obj_ids = []
-                        for bid in test_batches:
-                            if isinstance(bid, ObjectId):
-                                test_batch_obj_ids.append(bid)
-                            elif isinstance(bid, str):
-                                try:
-                                    test_batch_obj_ids.append(ObjectId(bid))
-                                except Exception:
-                                    pass
-                        
-                        test_course_obj_ids = []
-                        for cid in test_courses:
-                            if isinstance(cid, ObjectId):
-                                test_course_obj_ids.append(cid)
-                            elif isinstance(cid, str):
-                                try:
-                                    test_course_obj_ids.append(ObjectId(cid))
-                                except Exception:
-                                    pass
-                        
-                        # Get questions from this test that belong to our topic
-                        test_questions = test.get('questions', [])
-                        if not test_questions:
-                            continue
-                        
-                        topic_questions_in_test = []
-                        for tq in test_questions:
-                            tq_id = tq.get('_id') if isinstance(tq, dict) else tq
-                            if isinstance(tq_id, str):
-                                try:
-                                    tq_id = ObjectId(tq_id)
-                                except Exception:
-                                    continue
-                            
-                            if tq_id in question_ids_set:
-                                topic_questions_in_test.append(tq_id)
-                        
-                        if not topic_questions_in_test:
-                            continue
-                        
-                        # Track usage per batch+course combination
-                        # Only count questions for batch+course combinations that match our filters
-                        # This matches the logic from topic-usage endpoint
-                        for batch_id in test_batch_obj_ids:
-                            # Check if this batch matches our filter
-                            # If filter_batch_ids is provided, batch must be in the filter
-                            # If filter_batch_ids is empty, match all batches
-                            if filter_batch_ids and batch_id not in filter_batch_ids:
-                                continue  # Skip this batch if it doesn't match
-                            
-                            for course_id in test_course_obj_ids:
-                                # Check if this course matches our filter
-                                # If filter_course_ids is provided, course must be in the filter
-                                # If filter_course_ids is empty, match all courses
-                                if filter_course_ids and course_id not in filter_course_ids:
-                                    continue  # Skip this course if it doesn't match
-                                
-                                # Both batch and course match (or filters are empty)
-                                # Add all topic questions from this test for this specific batch+course combination
-                                for tq_id in topic_questions_in_test:
-                                    filtered_used_question_ids.add(tq_id)
-                    
-                    used_questions = len(filtered_used_question_ids)
-                    current_app.logger.info(f"Topic {topic.get('topic_name', 'unknown')} - Filtered usage: {used_questions}/{total_questions} questions")
-            else:
-                # No filters - use global count
-                used_questions = mongo_db.question_bank.count_documents({
-                    'topic_id': topic_id,
-                    'module_id': {'$in': ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']},
-                    'used_count': {'$gt': 0}
-                })
-            
-            # Calculate completion percentage
-            completion_percentage = (used_questions / total_questions * 100) if total_questions > 0 else 0
-            
-            topic['_id'] = str(topic['_id'])
-            topic['total_questions'] = total_questions
-            topic['used_questions'] = used_questions
-            topic['completion_percentage'] = round(completion_percentage, 1)
-            topic['created_at'] = safe_isoformat(topic['created_at']) if topic['created_at'] else None
-        
+            if has_audience_filters and not audience_filtered:
+                current_app.logger.debug(
+                    'CRT Topics API - ignoring audience filters (audience_filtered=false); using global usage'
+                )
+            filter_batch_ids, filter_course_ids, filter_branch_names = [], [], []
+
+        topics = list(mongo_db.crt_topics.find(topic_query).sort('created_at', -1))
+        base_stats = _crt_topic_base_stats()
+
+        filtered_used = None
+        if audience_filtered and has_audience_filters:
+            filtered_used = _crt_topic_audience_filtered_stats(
+                filter_batch_ids, filter_course_ids, filter_branch_names
+            )
+            for topic in topics:
+                tid = str(topic['_id'])
+                total = base_stats.get(tid, {}).get('total_questions', 0)
+                used = filtered_used.get(tid, 0)
+                current_app.logger.info(
+                    'Topic %s - Filtered usage: %s/%s questions',
+                    topic.get('topic_name', 'unknown'), used, total,
+                )
+
+        topics = _attach_crt_topic_stats(topics, base_stats, filtered_used=filtered_used)
+
         return jsonify({
             'success': True,
             'data': topics
@@ -4112,25 +4208,44 @@ def get_topic_usage_details(topic_id):
     Query parameters:
     - batch_ids: comma-separated list of batch IDs to filter by
     - course_ids: comma-separated list of course IDs to filter by
+    - branch_names: comma-separated list of branch names to filter by (for RDS tests). 
+      For legacy/Mongo tests, if branch_names look like ObjectId hex strings, they are treated as course_ids.
     """
     try:
         # Get filter parameters from query string
         batch_ids_filter = request.args.get('batch_ids', '').strip()
         course_ids_filter = request.args.get('course_ids', '').strip()
+        branch_names_filter = request.args.get('branch_names', '').strip()
         
         filter_batch_ids = []
         if batch_ids_filter:
-            try:
-                filter_batch_ids = [ObjectId(bid.strip()) for bid in batch_ids_filter.split(',') if bid.strip()]
-            except Exception as e:
-                current_app.logger.warning(f"Invalid batch_ids filter: {e}")
+            for bid in [b.strip() for b in batch_ids_filter.split(',') if b.strip()]:
+                try:
+                    filter_batch_ids.append(ObjectId(bid))
+                except Exception:
+                    # RDS uses stable string ids like rds_b_{...}_{year}
+                    filter_batch_ids.append(bid)
         
         filter_course_ids = []
         if course_ids_filter:
-            try:
-                filter_course_ids = [ObjectId(cid.strip()) for cid in course_ids_filter.split(',') if cid.strip()]
-            except Exception as e:
-                current_app.logger.warning(f"Invalid course_ids filter: {e}")
+            for cid in [c.strip() for c in course_ids_filter.split(',') if c.strip()]:
+                try:
+                    filter_course_ids.append(ObjectId(cid))
+                except Exception:
+                    # RDS uses stable string ids like rds_co_{id}
+                    filter_course_ids.append(cid)
+
+        filter_branch_names = []
+        if branch_names_filter:
+            branch_values = [v.strip() for v in branch_names_filter.split(',') if v.strip()]
+            looks_like_course_ids = bool(branch_values) and all(re.match(r'^[0-9a-fA-F]{24}$', v) for v in branch_values)
+            if looks_like_course_ids:
+                try:
+                    filter_course_ids = [ObjectId(v) for v in branch_values]
+                except Exception as e:
+                    current_app.logger.warning(f"Invalid branch_names->course_ids filter: {e}")
+            else:
+                filter_branch_names = branch_values
         try:
             topic_obj_id = ObjectId(topic_id)
         except Exception:
@@ -4235,6 +4350,12 @@ def get_topic_usage_details(topic_id):
             campuses = test.get('campus_ids') or []
             batches = test.get('batch_ids') or []
             courses = test.get('course_ids') or []
+            test_branch_names = test.get('branch_names', []) or []
+
+            if filter_branch_names:
+                # Test must include at least one selected branch
+                if not set(map(str, test_branch_names)) & set(map(str, filter_branch_names)):
+                    continue
             
             # Track usage per batch-course combination
             for batch_id in batches:
@@ -4275,15 +4396,12 @@ def get_topic_usage_details(topic_id):
         # Convert batch_course_usage to list format with percentages
         # Filter by batch_ids and course_ids if provided
         batch_course_usage_list = []
+        filter_batch_id_str_set = set(map(str, filter_batch_ids)) if filter_batch_ids else set()
+        filter_course_id_str_set = set(map(str, filter_course_ids)) if filter_course_ids else set()
         for batch_id, courses_dict in batch_course_usage.items():
             # Filter by batch_ids if provided
-            if filter_batch_ids:
-                try:
-                    batch_obj_id = ObjectId(batch_id)
-                    if batch_obj_id not in filter_batch_ids:
-                        continue
-                except Exception:
-                    continue
+            if filter_batch_id_str_set and batch_id not in filter_batch_id_str_set:
+                continue
             
             # Get batch details
             try:
@@ -4294,13 +4412,8 @@ def get_topic_usage_details(topic_id):
             
             for course_id, usage_data in courses_dict.items():
                 # Filter by course_ids if provided
-                if filter_course_ids:
-                    try:
-                        course_obj_id = ObjectId(course_id)
-                        if course_obj_id not in filter_course_ids:
-                            continue
-                    except Exception:
-                        continue
+                if filter_course_id_str_set and course_id not in filter_course_id_str_set:
+                    continue
                 
                 # Get course details
                 try:
@@ -4329,12 +4442,11 @@ def get_topic_usage_details(topic_id):
         if filter_batch_ids or filter_course_ids:
             filtered_usage_tests = []
             for test in usage_tests:
-                test_batch_ids = [ObjectId(bid) for bid in test.get('batch_ids', []) if bid]
-                test_course_ids = [ObjectId(cid) for cid in test.get('course_ids', []) if cid]
-                
                 # Check if test matches filters
-                matches_batch = not filter_batch_ids or any(bid in filter_batch_ids for bid in test_batch_ids)
-                matches_course = not filter_course_ids or any(cid in filter_course_ids for cid in test_course_ids)
+                test_batch_ids_str = set([str(bid) for bid in test.get('batch_ids', []) if bid])
+                test_course_ids_str = set([str(cid) for cid in test.get('course_ids', []) if cid])
+                matches_batch = not filter_batch_id_str_set or any(bid in filter_batch_id_str_set for bid in test_batch_ids_str)
+                matches_course = not filter_course_id_str_set or any(cid in filter_course_id_str_set for cid in test_course_ids_str)
                 
                 if matches_batch and matches_course:
                     filtered_usage_tests.append(test)

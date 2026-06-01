@@ -58,9 +58,9 @@ const CampusBatchManagement = () => {
   const [isDeletingStudents, setIsDeletingStudents] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
-  // Course filtering states
-  const [availableCourses, setAvailableCourses] = useState([]);
-  const [selectedCourseFilter, setSelectedCourseFilter] = useState('');
+  // Branch filtering states
+  const [availableBranches, setAvailableBranches] = useState([]);
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState('');
   const [filteredStudents, setFilteredStudents] = useState([]);
   
   // Email/SMS sending states
@@ -261,17 +261,27 @@ const CampusBatchManagement = () => {
         setFilteredStudents(response.data.data); // Initialize filtered students
         setSelectedStudents([]); // Clear any previous selections
         
-        // Extract unique courses from students
-        const uniqueCourses = [...new Set(response.data.data.map(student => student.course_name).filter(Boolean))];
-        setAvailableCourses(uniqueCourses);
-        setSelectedCourseFilter(''); // Reset course filter
-        
-        // Find and set the selected batch
+        setSelectedBranchFilter('');
         const batch = batches.find(b => b.id === batchId);
         if (batch) {
           setSelectedBatch(batch);
+          setAvailableBranches(batch.branches || []);
+        } else {
+          setAvailableBranches([]);
         }
-        
+        const campusId = batch?.campuses?.[0]?.id || batch?.campus_ids?.[0] || user?.campus_id;
+        if (campusId) {
+          try {
+            const branchRes = await api.get('/batch-management/branches', {
+              params: { campus_id: campusId, batch_id: batchId },
+            });
+            if (branchRes.data.success && branchRes.data.data?.length) {
+              setAvailableBranches(branchRes.data.data);
+            }
+          } catch (err) {
+            console.warn('Could not load branches for batch', err);
+          }
+        }
         setShowBatchDetails(true);
       }
     } catch (error) {
@@ -280,25 +290,20 @@ const CampusBatchManagement = () => {
     }
   };
 
-  // Course filtering functions
-  const handleCourseFilterChange = (courseName) => {
-    setSelectedCourseFilter(courseName);
-    
-    if (courseName === '') {
-      // Show all students
+  const handleBranchFilterChange = (branchName) => {
+    setSelectedBranchFilter(branchName);
+    if (branchName === '') {
       setFilteredStudents(batchStudents);
     } else {
-      // Filter by course
-      const filtered = batchStudents.filter(student => student.course_name === courseName);
-      setFilteredStudents(filtered);
+      setFilteredStudents(
+        batchStudents.filter((student) => (student.branch || 'General') === branchName)
+      );
     }
-    
-    // Clear selected students when filtering
     setSelectedStudents([]);
   };
 
-  const clearCourseFilter = () => {
-    setSelectedCourseFilter('');
+  const clearBranchFilter = () => {
+    setSelectedBranchFilter('');
     setFilteredStudents(batchStudents);
     setSelectedStudents([]);
   };
@@ -662,7 +667,7 @@ const CampusBatchManagement = () => {
       
       const response = await api.post(`/batch-management/batch/${selectedBatch.id}/send-emails`, {
         student_ids: studentIds,
-        course_filter: selectedCourseFilter || null
+        branch_filter: selectedBranchFilter || null
       });
       
       setEmailProgress(prev => ({ ...prev, percentage: 75, message: 'Processing email responses...' }));
@@ -747,7 +752,7 @@ const CampusBatchManagement = () => {
       
       const response = await api.post(`/batch-management/batch/${selectedBatch.id}/send-sms`, {
         student_ids: studentIds,
-        course_filter: selectedCourseFilter || null
+        branch_filter: selectedBranchFilter || null
       });
       
       setSmsProgress(prev => ({ ...prev, percentage: 75, message: 'Processing SMS responses...' }));
@@ -814,7 +819,7 @@ const CampusBatchManagement = () => {
       'Roll Number': student.roll_number || '',
       'Email': student.email || '',
       'Mobile': student.mobile_number || '',
-      'Course': student.course_name || '',
+      'Branch': student.branch || 'General',
       'Campus': student.campus_name || ''
     }));
 
@@ -823,7 +828,7 @@ const CampusBatchManagement = () => {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `batch_students_${selectedBatch?.name || 'export'}_${selectedCourseFilter ? selectedCourseFilter.replace(/\s+/g, '_') : 'all_courses'}.csv`);
+    link.setAttribute('download', `batch_students_${selectedBatch?.name || 'export'}_${selectedBranchFilter ? selectedBranchFilter.replace(/\s+/g, '_') : 'all_branches'}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -843,7 +848,7 @@ const CampusBatchManagement = () => {
       'Roll Number': student.roll_number || '',
       'Email': student.email || '',
       'Mobile': student.mobile_number || '',
-      'Course': student.course_name || '',
+      'Branch': student.branch || 'General',
       'Campus': student.campus_name || ''
     }));
 
@@ -852,7 +857,7 @@ const CampusBatchManagement = () => {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `batch_students_${selectedBatch?.name || 'export'}_${selectedCourseFilter ? selectedCourseFilter.replace(/\s+/g, '_') : 'all_courses'}.xlsx`);
+    link.setAttribute('download', `batch_students_${selectedBatch?.name || 'export'}_${selectedBranchFilter ? selectedBranchFilter.replace(/\s+/g, '_') : 'all_branches'}.xlsx`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -915,9 +920,11 @@ const CampusBatchManagement = () => {
             >
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    {batch.name}
-                  </h3>
+                  <div className="min-w-0 flex-1 pr-2">
+                    <h3 className="text-lg font-semibold text-gray-800 truncate">
+                      {batch.display_name || batch.name}
+                    </h3>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => fetchBatchStudents(batch.id)}
@@ -950,6 +957,21 @@ const CampusBatchManagement = () => {
                   <p className="text-sm text-gray-600">
                     <span className="font-medium">Students:</span> {batch.student_count || 0}
                   </p>
+                  {batch.branches?.length > 0 && (
+                    <div className="text-sm text-gray-600">
+                      <span className="font-medium">Branches:</span>
+                      <div className="mt-1 flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                        {batch.branches.map((branch) => (
+                          <span
+                            key={branch.name}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-800 border border-blue-100"
+                          >
+                            {branch.name} ({branch.student_count})
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2">
@@ -1333,9 +1355,9 @@ const CampusBatchManagement = () => {
                       </h2>
                       <p className="text-gray-600 mt-1">
                         {batchStudents.length} student{batchStudents.length !== 1 ? 's' : ''} in this batch
-                        {selectedCourseFilter && (
+                        {selectedBranchFilter && (
                           <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                            Filtered by: {selectedCourseFilter}
+                            Branch: {selectedBranchFilter}
                           </span>
                         )}
                       </p>
@@ -1368,26 +1390,30 @@ const CampusBatchManagement = () => {
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
                       <BookOpen className="h-5 w-5 text-blue-600" />
-                      <span className="text-sm font-semibold text-gray-700">Filter by Course:</span>
+                      <span className="text-sm font-semibold text-gray-700">Filter by Branch:</span>
                     </div>
                     <select
-                      value={selectedCourseFilter}
-                      onChange={(e) => handleCourseFilterChange(e.target.value)}
-                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
+                      value={selectedBranchFilter}
+                      onChange={(e) => handleBranchFilterChange(e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white min-w-[200px]"
                     >
-                      <option value="">All Courses ({batchStudents.length})</option>
-                      {availableCourses.map((course, index) => {
-                        const courseCount = batchStudents.filter(s => s.course_name === course).length;
+                      <option value="">All Branches ({batchStudents.length})</option>
+                      {availableBranches.map((branch) => {
+                        const branchName = branch.name || branch;
+                        const branchCount = batchStudents.filter(
+                          (s) => (s.branch || 'General') === branchName
+                        ).length;
+                        const count = branch.student_count ?? branchCount;
                         return (
-                          <option key={index} value={course}>
-                            {course} ({courseCount})
+                          <option key={branchName} value={branchName}>
+                            {branchName} ({count})
                           </option>
                         );
                       })}
                     </select>
-                    {selectedCourseFilter && (
+                    {selectedBranchFilter && (
                       <button
-                        onClick={clearCourseFilter}
+                        onClick={clearBranchFilter}
                         className="px-3 py-2 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-all duration-200 flex items-center gap-1"
                       >
                         <X className="h-4 w-4" />
@@ -1468,7 +1494,7 @@ const CampusBatchManagement = () => {
                             <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 uppercase tracking-wider">
                               <div className="flex items-center gap-2">
                                 <BookOpen className="h-4 w-4 text-green-600" />
-                                Course
+                                Branch
                               </div>
                             </th>
                           </tr>
@@ -1504,8 +1530,13 @@ const CampusBatchManagement = () => {
                                     </span>
                                   </div>
                                   <div className="ml-4">
-                                    <div className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                                      {student.name}
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                                        {student.name}
+                                      </div>
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-800 border border-purple-200">
+                                        {student.branch || 'General'}
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -1541,13 +1572,9 @@ const CampusBatchManagement = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm text-gray-900">
-                                  {student.course_name ? (
-                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-                                      {student.course_name}
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-400 italic">N/A</span>
-                                  )}
+                                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                                    {student.branch || 'General'}
+                                  </span>
                                 </div>
                               </td>
                             </motion.tr>
@@ -1566,17 +1593,17 @@ const CampusBatchManagement = () => {
                       <Users className="h-12 w-12 text-gray-400" />
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {selectedCourseFilter ? 'No Students Found for Selected Course' : 'No Students Found'}
+                      {selectedBranchFilter ? 'No Students Found for Selected Branch' : 'No Students Found'}
                     </h3>
                     <p className="text-gray-600 mb-4">
-                      {selectedCourseFilter 
-                        ? `No students found for "${selectedCourseFilter}". Try selecting a different course or clear the filter.`
+                      {selectedBranchFilter 
+                        ? `No students found for branch "${selectedBranchFilter}". Try a different branch or clear the filter.`
                         : 'This batch doesn\'t have any students yet.'
                       }
                     </p>
-                    {selectedCourseFilter && (
+                    {selectedBranchFilter && (
                       <button
-                        onClick={clearCourseFilter}
+                        onClick={clearBranchFilter}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                       >
                         Clear Filter

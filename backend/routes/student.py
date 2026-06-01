@@ -273,66 +273,16 @@ def get_student_profile():
     try:
         current_user_id = get_jwt_identity()
         user_object_id = ObjectId(current_user_id)
-
-        pipeline = [
-            {'$match': {'_id': user_object_id}},
-            {
-                '$lookup': {
-                    'from': 'students',
-                    'localField': '_id',
-                    'foreignField': 'user_id',
-                    'as': 'student_details'
-                }
-            },
-            {
-                '$lookup': {
-                    'from': 'campuses',
-                    'localField': 'campus_id',
-                    'foreignField': '_id',
-                    'as': 'campus_details'
-                }
-            },
-            {
-                '$lookup': {
-                    'from': 'courses',
-                    'localField': 'course_id',
-                    'foreignField': '_id',
-                    'as': 'course_details'
-                }
-            },
-            {
-                '$lookup': {
-                    'from': 'batches',
-                    'localField': 'batch_id',
-                    'foreignField': '_id',
-                    'as': 'batch_details'
-                }
-            },
-            {'$unwind': {'path': '$student_details', 'preserveNullAndEmptyArrays': True}},
-            {'$unwind': {'path': '$campus_details', 'preserveNullAndEmptyArrays': True}},
-            {'$unwind': {'path': '$course_details', 'preserveNullAndEmptyArrays': True}},
-            {'$unwind': {'path': '$batch_details', 'preserveNullAndEmptyArrays': True}},
-            {
-                '$project': {
-                    '_id': 0,
-                    'name': '$name',
-                    'email': '$email',
-                    'role': '$role',
-                    'mobile_number': '$mobile_number',
-                    'roll_number': '$student_details.roll_number',
-                    'campus': '$campus_details.name',
-                    'course': '$course_details.name',
-                    'batch': '$batch_details.name'
-                }
-            }
-        ]
-
-        profile_data = list(mongo_db.users.aggregate(pipeline))
-
-        if not profile_data:
+        user = mongo_db.users.find_one({'_id': user_object_id})
+        if not user:
             return jsonify({'success': False, 'message': 'Student profile not found.'}), 404
 
-        return jsonify({'success': True, 'data': profile_data[0]}), 200
+        student = mongo_db.students.find_one({'user_id': user_object_id})
+
+        from services.student_mapping_service import enrich_student_profile
+        profile = enrich_student_profile(user, student)
+
+        return jsonify({'success': True, 'data': profile}), 200
 
     except Exception as e:
         logging.error(f"Error fetching student profile for user_id {get_jwt_identity()}: {e}", exc_info=True)

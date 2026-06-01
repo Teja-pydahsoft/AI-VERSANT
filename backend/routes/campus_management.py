@@ -7,6 +7,8 @@ from mongo import mongo_db
 from config.constants import ROLES
 from config.shared import bcrypt
 from routes.access_control import require_permission
+from services.org_data_source import use_rds, read_only_response, resolve_campus_id
+from services.rds_org_service import rds_org
 
 campus_management_bp = Blueprint('campus_management', __name__)
 
@@ -18,6 +20,16 @@ def get_campuses():
     try:
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
+
+        if use_rds():
+            campus_list = rds_org.list_colleges()
+            if user.get('role') not in ['superadmin', 'sub_superadmin']:
+                user_campus = resolve_campus_id(str(user.get('campus_id', '')))
+                if user_campus:
+                    campus_list = [c for c in campus_list if resolve_campus_id(c['id']) == user_campus]
+                else:
+                    campus_list = []
+            return jsonify({'success': True, 'data': campus_list, 'source': 'rds', 'read_only': True}), 200
         
         # Super admin and sub_superadmin can see all campuses
         if user.get('role') in ['superadmin', 'sub_superadmin']:
@@ -47,6 +59,13 @@ def get_campuses():
 def get_campuses_simple():
     """Get all campuses (simple format for batch creation)"""
     try:
+        if use_rds():
+            campus_list = [
+                {'id': c['id'], 'name': c['name']}
+                for c in rds_org.list_colleges()
+            ]
+            return jsonify({'success': True, 'data': campus_list, 'source': 'rds'}), 200
+
         campuses = list(mongo_db.campuses.find())
         campus_list = [
             {
@@ -65,6 +84,9 @@ def get_campuses_simple():
 def create_campus():
     """Create a new campus - SUPER ADMIN ONLY"""
     try:
+        if use_rds():
+            return read_only_response()
+
         current_user_id = get_jwt_identity()
         user = mongo_db.find_user_by_id(current_user_id)
         
@@ -104,6 +126,9 @@ def create_campus():
 def update_campus(campus_id):
     """Update a campus name"""
     try:
+        if use_rds():
+            return read_only_response()
+
         data = request.get_json()
         
         # Update campus name
@@ -119,6 +144,19 @@ def update_campus(campus_id):
 def get_campus_details(campus_id):
     """Get details for a campus including course and student counts."""
     try:
+        if use_rds():
+            college_id = resolve_campus_id(campus_id)
+            if college_id is None:
+                return jsonify({'success': False, 'message': 'Invalid campus id'}), 400
+            return jsonify({
+                'success': True,
+                'data': {
+                    'course_count': rds_org.count_courses_for_college(college_id),
+                    'student_count': rds_org.count_students_for_college(college_id),
+                },
+                'source': 'rds',
+            }), 200
+
         campus_object_id = ObjectId(campus_id)
         
         # Count courses associated with the campus
@@ -142,6 +180,9 @@ def get_campus_details(campus_id):
 def delete_campus(campus_id):
     """Delete a campus and all associated data"""
     try:
+        if use_rds():
+            return read_only_response()
+
         result = mongo_db.delete_campus(campus_id)
         if not result.get('success'):
             return jsonify({'success': False, 'message': result.get('message', 'Failed to delete campus')}), 404
@@ -158,6 +199,13 @@ def delete_campus(campus_id):
 def get_campus_courses(campus_id):
     """Get all courses for a specific campus."""
     try:
+        if use_rds():
+            college_id = resolve_campus_id(campus_id)
+            if college_id is None:
+                return jsonify({'success': False, 'message': 'Invalid campus id'}), 400
+            courses = rds_org.list_courses(college_id=college_id)
+            return jsonify({'success': True, 'data': courses, 'source': 'rds'}), 200
+
         courses = mongo_db.get_courses_by_campus(campus_id)
         return jsonify({'success': True, 'data': courses}), 200
     except Exception as e:

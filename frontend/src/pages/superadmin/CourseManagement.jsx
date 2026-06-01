@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNotification } from '../../contexts/NotificationContext';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
+import { useRdsOrgSource } from '../../hooks/useRdsOrgSource';
 import { Book, PlusCircle, Search, Trash2, Edit, X, User, Mail, Key, Building, ChevronDown, ChevronUp, Briefcase, Users } from 'lucide-react';
 
 const CourseManagement = () => {
@@ -25,6 +26,7 @@ const CourseManagement = () => {
     const [loadingBatches, setLoadingBatches] = useState(false);
 
     const { success, error } = useNotification();
+    const { isRdsReadOnly, applyFromResponse } = useRdsOrgSource();
 
     const fetchData = async () => {
         try {
@@ -33,6 +35,8 @@ const CourseManagement = () => {
                 api.get('/course-management/'),
                 api.get('/campus-management/')
             ]);
+            applyFromResponse(coursesRes);
+            applyFromResponse(campusesRes);
             setCourses(coursesRes.data.data);
             setCampuses(campusesRes.data.data);
         } catch (err) {
@@ -148,9 +152,21 @@ const CourseManagement = () => {
                         <div className="flex justify-between items-center mb-8">
                             <div>
                                 <h1 className="text-3xl font-bold text-black">Course Management</h1>
-                                <p className="mt-2 text-black">Manage all academic courses across campuses.</p>
+                                <p className="mt-2 text-black">
+                                    {isRdsReadOnly
+                                        ? 'Courses from master student database (view only).'
+                                        : 'Manage all academic courses across campuses.'}
+                                </p>
                             </div>
-                            <button onClick={() => openModal()} className="flex items-center gap-2 bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 transition">
+                            <button
+                                onClick={() => openModal()}
+                                disabled={isRdsReadOnly}
+                                className={`flex items-center gap-2 font-semibold px-4 py-2 rounded-lg shadow-md transition ${
+                                    isRdsReadOnly
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                                }`}
+                            >
                                 <PlusCircle size={20} />
                                 Add Course
                             </button>
@@ -194,8 +210,8 @@ const CourseManagement = () => {
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{course.campus?.name || 'N/A'}</td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                            <button onClick={(e) => { e.stopPropagation(); openModal(course); }} className="text-blue-600 hover:text-blue-800 mr-4"><Edit size={18} /></button>
-                                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(course.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18}/></button>
+                                                            <button onClick={(e) => { e.stopPropagation(); openModal(course); }} disabled={isRdsReadOnly} className={isRdsReadOnly ? 'text-gray-400 cursor-not-allowed mr-4' : 'text-blue-600 hover:text-blue-800 mr-4'}><Edit size={18} /></button>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(course.id); }} disabled={isRdsReadOnly} className={isRdsReadOnly ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-800'}><Trash2 size={18}/></button>
                                                         </td>
                                                     </tr>
                                                     <AnimatePresence>

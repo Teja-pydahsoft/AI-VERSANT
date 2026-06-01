@@ -5,6 +5,12 @@ from datetime import datetime
 import pytz
 from mongo import mongo_db
 from routes.test_management import require_superadmin, generate_unique_test_id, convert_objectids
+from services.org_data_source import (
+    use_rds,
+    normalize_test_org_id,
+    normalize_test_org_ids,
+    derive_rds_course_ids_from_batches,
+)
 
 mcq_test_bp = Blueprint('mcq_test_management', __name__)
 
@@ -23,14 +29,19 @@ def create_mcq_test():
         campus_id = data.get('campus_id')
         course_ids = data.get('course_ids', [])
         batch_ids = data.get('batch_ids', [])
+        branch_names = data.get('branch_names', [])
         questions = data.get('questions', [])
         assigned_student_ids = data.get('assigned_student_ids', [])
         startDateTime = data.get('startDateTime')
         endDateTime = data.get('endDateTime')
         duration = data.get('duration')
 
+        if use_rds() and not course_ids and batch_ids:
+            course_ids = derive_rds_course_ids_from_batches(batch_ids)
+
+        has_audience = batch_ids and (branch_names or course_ids or use_rds())
         # Validate required fields
-        if not all([test_name, test_type, module_id, campus_id, course_ids, batch_ids]):
+        if not all([test_name, test_type, module_id, campus_id, has_audience, batch_ids]):
             return jsonify({'success': False, 'message': 'Missing required fields'}), 400
 
         # Validate MCQ modules (including CRT Aptitude and Reasoning)
@@ -73,11 +84,12 @@ def create_mcq_test():
             'module_id': module_id,
             'level_id': level_id,
             'subcategory': subcategory,
-            'campus_ids': [ObjectId(campus_id)],
-            'course_ids': [ObjectId(cid) for cid in course_ids],
-            'batch_ids': [ObjectId(bid) for bid in batch_ids],
+            'campus_ids': normalize_test_org_ids([campus_id]),
+            'course_ids': normalize_test_org_ids(course_ids),
+            'batch_ids': normalize_test_org_ids(batch_ids),
+            'branch_names': branch_names or [],
             'questions': questions,
-            'assigned_student_ids': [ObjectId(sid) for sid in assigned_student_ids],
+            'assigned_student_ids': normalize_test_org_ids(assigned_student_ids),
             'created_by': ObjectId(get_jwt_identity()),
             'created_at': datetime.now(pytz.utc),
             'status': 'active',

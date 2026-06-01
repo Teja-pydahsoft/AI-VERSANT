@@ -107,8 +107,30 @@ def dashboard():
             admin_query['campus_id'] = user.get('campus_id')
         total_admins = mongo_db.users.count_documents(admin_query)
         
-        total_courses = mongo_db.courses.count_documents(course_query)
-        total_batches = mongo_db.batches.count_documents(batch_query)
+        from services.org_data_source import use_rds, org_meta
+        from services.rds_org_service import rds_org
+
+        if use_rds():
+            if user_role == 'campus_admin':
+                from services.org_data_source import resolve_user_college_id
+                college_id = resolve_user_college_id(user)
+                total_courses = rds_org.count_courses_for_college(college_id) if college_id else 0
+                total_batches = len(rds_org.list_batches(college_id=college_id)) if college_id else 0
+                total_students = rds_org.count_students_for_college(college_id) if college_id else 0
+            elif user_role == 'course_admin':
+                from services.org_data_source import resolve_user_course_id, resolve_user_college_id
+                course_num = resolve_user_course_id(user)
+                college_id = resolve_user_college_id(user)
+                total_courses = 1 if course_num else 0
+                total_batches = len(rds_org.list_batches(course_id_num=course_num)) if course_num else 0
+                total_students = rds_org.count_students_for_course(course_num, college_id=college_id) if course_num else 0
+            else:
+                total_courses = len(rds_org.list_courses())
+                total_batches = len(rds_org.list_batches())
+                total_students = rds_org.count_all_students()
+        else:
+            total_courses = mongo_db.courses.count_documents(course_query)
+            total_batches = mongo_db.batches.count_documents(batch_query)
 
         dashboard_data = {
             'statistics': {
@@ -121,11 +143,14 @@ def dashboard():
             }
         }
         
-        return jsonify({
+        response_payload = {
             'success': True,
             'message': 'Dashboard data retrieved successfully',
-            'data': dashboard_data
-        }), 200
+            'data': dashboard_data,
+        }
+        if use_rds():
+            response_payload.update(org_meta())
+        return jsonify(response_payload), 200
         
     except Exception as e:
         current_app.logger.error(f"Failed to get dashboard data: {str(e)}")
@@ -5771,4 +5796,41 @@ def get_superadmin_practice_attempt_details(attempt_id):
         
     except Exception as e:
         current_app.logger.error(f"Error fetching superadmin practice attempt details: {e}")
-        return jsonify({'success': False, 'message': 'Failed to fetch attempt details'}), 500 
+        return jsonify({'success': False, 'message': 'Failed to fetch attempt details'}), 500
+
+
+@superadmin_bp.route('/sync-rds-students', methods=['POST'])
+@jwt_required()
+@require_superadmin
+def sync_rds_students():
+    """
+    Link MongoDB students to RDS records by pin_no / roll_number.
+    Optionally provision Mongo accounts for RDS students without a match.
+    """
+    try:
+        from config.mysql_rds import MySQLRDSConfig
+        from services.student_mapping_service import sync_all_students
+
+        if not MySQLRDSConfig.is_configured():
+            return jsonify({'success': False, 'message': 'RDS is not configured'}), 400
+
+        data = request.get_json(silent=True) or {}
+        dry_run = bool(data.get('dry_run', False))
+        provision_missing = bool(data.get('provision_missing', False))
+        update_profile = data.get('update_profile', True)
+
+        stats = sync_all_students(
+            dry_run=dry_run,
+            provision_missing=provision_missing,
+            update_profile=update_profile,
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'RDS student sync completed' if not dry_run else 'RDS student sync dry run completed',
+            'data': stats,
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error syncing RDS students: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': f'Failed to sync RDS students: {str(e)}'}), 500 

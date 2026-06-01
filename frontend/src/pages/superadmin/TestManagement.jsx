@@ -27,6 +27,26 @@ import TestQuestionUpload from './TestQuestionUpload';
 import WritingUpload from './WritingUpload';
 import TechnicalTestQuestionType from './TechnicalTestQuestionType';
 
+const campusIdFromBatch = (batchId) => {
+  if (typeof batchId === 'string' && batchId.startsWith('rds_b_')) {
+    const parts = batchId.slice('rds_b_'.length).split('_');
+    if (parts.length >= 1) return `rds_c_${parts[0]}`;
+  }
+  return null;
+};
+
+const resolveCampusIdForBranches = (selectedCampusId, batchIds, user) => {
+  if (typeof selectedCampusId === 'string' && selectedCampusId.startsWith('rds_c_')) {
+    return selectedCampusId;
+  }
+  for (const bid of batchIds || []) {
+    const fromBatch = campusIdFromBatch(bid);
+    if (fromBatch) return fromBatch;
+  }
+  if (user?.campus_id) return user.campus_id;
+  return selectedCampusId;
+};
+
 // Config for modules and levels
 const MODULE_CONFIG = {
   GRAMMAR: {
@@ -726,6 +746,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                     </select>
                   </th>
                   <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px] hidden md:table-cell">Courses</th>
+                  <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px] hidden lg:table-cell">Branches</th>
                   <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-16">Q</th>
                   <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[80px] hidden xl:table-cell">
                     <span className="block mb-1">Status</span>
@@ -750,8 +771,9 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                     <td className="px-2 py-3 text-sm text-gray-500 capitalize break-words hidden xl:table-cell">{test.module_id || 'N/A'}</td>
                     <td className="px-2 py-3 text-sm text-gray-500 capitalize break-words hidden 2xl:table-cell">{test.level || 'N/A'}</td>
                     <td className="px-2 py-3 text-sm text-gray-500 break-words hidden xl:table-cell">{test.campus || 'N/A'}</td>
-                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden lg:table-cell">{test.batches}</td>
-                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden md:table-cell">{test.courses}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden lg:table-cell">{test.batches || 'N/A'}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden md:table-cell">{test.courses || 'N/A'}</td>
+                    <td className="px-2 py-3 text-sm text-gray-500 break-words hidden lg:table-cell">{test.branches || 'N/A'}</td>
                     <td className="px-2 py-3 text-sm text-gray-500 text-center">
                       {test.question_count}
                     </td>
@@ -805,6 +827,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
                               `Campuses: ${test.campus || 'N/A'}`,
                               `Batches: ${test.batches || 'N/A'}`,
                               `Courses: ${test.courses || 'N/A'}`,
+                              `Branches: ${test.branches || 'N/A'}`,
                               `Questions: ${test.question_count || 0}`,
                               `Start: ${test.created_at || 'N/A'}`,
                               `End: ${test.endDateTime || 'N/A'}`,
@@ -1113,6 +1136,7 @@ const TestCreationWizard = ({ onTestCreated, setView, uploadedQuestions, setUplo
     passing_score: 70,
     selectedCampuses: [],
     selectedBatches: [],
+    selectedBranches: [],
     selectedCourses: [],
     topic_id: '',
     selectedTopic: '',
@@ -1759,6 +1783,7 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
   const [testName, setTestName] = useState(testData.test_name || '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [topicsLoading, setTopicsLoading] = useState(false);
   const [levels, setLevels] = useState([]);
   const [grammarCategories, setGrammarCategories] = useState([]);
   const [crtTopics, setCrtTopics] = useState([]);
@@ -1859,62 +1884,28 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
     }
   };
 
-  // Fetch topics for the selected CRT module
+  // Fetch topics for the selected CRT module (lightweight — no audience filters on this step)
   useEffect(() => {
     const fetchTopics = async () => {
       if (!module || !module.startsWith('CRT_')) {
-        setCrtTopics([]);
         return;
       }
-      
+
+      setTopicsLoading(true);
       try {
-        // Build query parameters with selected batches and courses
-        const params = new URLSearchParams();
-        
-        // Extract batch IDs - handle both object format {value, label} and direct ID format
-        if (testData.batches && Array.isArray(testData.batches) && testData.batches.length > 0) {
-          const batchIds = testData.batches
-            .map(b => {
-              if (typeof b === 'string') return b;
-              if (typeof b === 'object') return b.value || b._id || b.id || null;
-              return null;
-            })
-            .filter(Boolean)
-            .join(',');
-          if (batchIds) params.append('batch_ids', batchIds);
-        }
-        
-        // Extract course IDs - handle both object format {value, label} and direct ID format
-        if (testData.courses && Array.isArray(testData.courses) && testData.courses.length > 0) {
-          const courseIds = testData.courses
-            .map(c => {
-              if (typeof c === 'string') return c;
-              if (typeof c === 'object') return c.value || c._id || c.id || null;
-              return null;
-            })
-            .filter(Boolean)
-            .join(',');
-          if (courseIds) params.append('course_ids', courseIds);
-        }
-        
-        const url = `/test-management/crt-topics${params.toString() ? '?' + params.toString() : ''}`;
-        const response = await api.get(url);
+        const params = new URLSearchParams({ module_id: module });
+        const response = await api.get(`/test-management/crt-topics?${params.toString()}`);
         if (response.data.success) {
-          const filteredTopics = response.data.data.filter(topic => topic.module_id === module);
-          setCrtTopics(filteredTopics);
+          setCrtTopics(response.data.data || []);
         }
       } catch (error) {
         console.error('Error fetching topics:', error);
+      } finally {
+        setTopicsLoading(false);
       }
     };
     fetchTopics();
-  }, [
-    module, 
-    testData.batches?.length || 0,
-    testData.courses?.length || 0,
-    testData.batches?.map(b => b?.value || b?._id || b).join(',') || '',
-    testData.courses?.map(c => c?.value || c?._id || c).join(',') || ''
-  ]);
+  }, [module]);
 
   // Get topics for the selected CRT module
   const getTopicsForModule = () => {
@@ -1945,9 +1936,9 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
         const batchIds = testData.batches.map(b => b.value || b._id || b).filter(Boolean).join(',');
         if (batchIds) params.append('batch_ids', batchIds);
       }
-      if (testData.courses && testData.courses.length > 0) {
-        const courseIds = testData.courses.map(c => c.value || c._id || c).filter(Boolean).join(',');
-        if (courseIds) params.append('course_ids', courseIds);
+      if (testData.branches && testData.branches.length > 0) {
+        const branchNames = testData.branches.map(b => b.value || b.label || b.name || b).filter(Boolean).join(',');
+        if (branchNames) params.append('branch_names', branchNames);
       }
       
       const url = `/test-management/topic-usage/${topicId}${params.toString() ? '?' + params.toString() : ''}`;
@@ -1978,48 +1969,38 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
     setSubcategory(e.target.value);
   };
 
-  // Check if test name already exists
+  // Check if test name already exists (on blur or before submit — not on every keystroke)
   const checkTestName = async (name) => {
     if (!name.trim()) {
       setNameExists(false);
       setNameAvailable(false);
-      return;
+      return false;
     }
 
     setIsCheckingName(true);
     try {
       const response = await api.post('/test-management/check-test-name', { name: name.trim() });
-      if (response.data.exists) {
-        setNameExists(true);
-        setNameAvailable(false);
-      } else {
-        setNameExists(false);
-        setNameAvailable(true);
-      }
+      const exists = Boolean(response.data.exists);
+      setNameExists(exists);
+      setNameAvailable(!exists);
+      return exists;
     } catch (error) {
       console.error('Error checking test name:', error);
       setNameExists(false);
       setNameAvailable(false);
+      return false;
     } finally {
       setIsCheckingName(false);
     }
   };
 
-  // Debounced test name check
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (testName.trim()) {
-        checkTestName(testName);
-      } else {
-        setNameExists(false);
-        setNameAvailable(false);
-      }
-    }, 500);
+  const handleTestNameBlur = () => {
+    if (testName.trim()) {
+      checkTestName(testName);
+    }
+  };
 
-    return () => clearTimeout(timeoutId);
-  }, [testName]);
-
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!module) {
       setError('Please select a module.');
       return;
@@ -2038,7 +2019,12 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
       return;
     }
 
-    if (nameExists) {
+    let nameTaken = nameExists;
+    if (!nameAvailable && !nameExists) {
+      nameTaken = await checkTestName(testName);
+    }
+
+    if (nameTaken) {
       setError('This test name already exists. Please choose a different name.');
       return;
     }
@@ -2153,7 +2139,12 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
             <div className="relative">
               <input
                 value={testName}
-                onChange={e => setTestName(e.target.value)}
+                onChange={e => {
+                  setTestName(e.target.value);
+                  setNameExists(false);
+                  setNameAvailable(false);
+                }}
+                onBlur={handleTestNameBlur}
                 className={`w-full p-4 border-2 rounded-xl focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 ${nameExists ? 'border-red-500 bg-red-50' :
                   nameAvailable ? 'border-green-500 bg-green-50' :
                     'border-gray-200 hover:border-blue-300'
@@ -2191,7 +2182,7 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
           {module && module.startsWith('CRT_') && (
             <div>
               <label className="block text-base font-semibold text-gray-800 mb-2">Topic (Optional)</label>
-              {loading ? (
+              {loading || topicsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="flex flex-col items-center space-y-3">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
@@ -2203,7 +2194,7 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
                   value={selectedTopic}
                   onChange={handleTopicChange}
                   className="w-full p-4 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 bg-white hover:border-blue-300"
-                  disabled={loading}
+                  disabled={topicsLoading}
                 >
                   <option value="">Select Topic (Optional)</option>
                   {getTopicsForModule().map(topic => (
@@ -2213,7 +2204,7 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
                   ))}
                 </select>
               )}
-              {getTopicsForModule().length === 0 && !loading && (
+              {getTopicsForModule().length === 0 && !loading && !topicsLoading && (
                 <p className="text-sm text-gray-500 mt-1">No topics available for this module. Questions will be selected from all available questions.</p>
               )}
               {selectedTopic && (() => {
@@ -2259,10 +2250,10 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
                       <div className="mt-3 p-2 bg-green-50 rounded border border-green-200">
                         <p className="text-xs text-green-700">
                           <strong>Selected Audience:</strong> {testData.batches.map(b => b.label || b.name).join(', ')}
-                          {testData.courses && testData.courses.length > 0 && ` | ${testData.courses.map(c => c.label || c.name).join(', ')}`}
+                          {testData.branches && testData.branches.length > 0 && ` | ${testData.branches.map(b => b.label || b.name || b.value).join(', ')}`}
                         </p>
                         <p className="text-xs text-green-600 mt-1">
-                          Usage details will be filtered by the selected batches and courses.
+                          Usage details will be filtered by the selected batches and branches.
                         </p>
                       </div>
                     )}
@@ -2329,7 +2320,7 @@ const Step3TestName = ({ nextStep, prevStep, updateTestData, testData }) => {
                     <div className="mt-2 p-2 bg-green-50 rounded border border-green-200">
                       <p className="text-xs text-green-700">
                         <strong>Filtered by:</strong> {testData.batches.map(b => b.label || b.name).join(', ')}
-                        {testData.courses && testData.courses.length > 0 && ` | ${testData.courses.map(c => c.label || c.name).join(', ')}`}
+                        {testData.branches && testData.branches.length > 0 && ` | ${testData.branches.map(b => b.label || b.name || b.value).join(', ')}`}
                       </p>
                     </div>
                   )}
@@ -2458,7 +2449,7 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
     defaultValues: {
       campus_id: testData.campus?.value || '',
       batch_ids: testData.batches?.map(b => b.value) || [],
-      course_ids: testData.courses?.map(c => c.value) || [],
+      branch_names: testData.branches?.map(b => b.value) || [],
     }
   })
   const { error } = useNotification()
@@ -2466,27 +2457,17 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
 
   const [campuses, setCampuses] = useState([])
   const [batches, setBatches] = useState([])
-  const [courses, setCourses] = useState([])
+  const [branches, setBranches] = useState([])
+  const [isRdsSource, setIsRdsSource] = useState(false)
 
   const [loadingStates, setLoadingStates] = useState({
     campuses: true,
     batches: false,
-    courses: false,
+    branches: false,
   })
 
   const selectedCampusId = watch('campus_id')
   const selectedBatchIds = watch('batch_ids')
-
-  // Get the appropriate API endpoint based on user role
-  const getCampusEndpoint = () => {
-    if (user?.role === 'campus_admin') {
-      return '/campus-admin/courses' // This will return courses for the campus admin's campus
-    } else if (user?.role === 'course_admin') {
-      return '/course-admin/batches' // This will return batches for the course admin's course
-    } else {
-      return '/campus-management/' // Super admin can see all campuses
-    }
-  }
 
   // Fetch Campuses on mount
   useEffect(() => {
@@ -2495,16 +2476,16 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
       try {
         let res;
         if (user?.role === 'campus_admin') {
-          // For campus admin, get courses (which implies campus)
           res = await api.get('/campus-admin/courses')
-        setCampuses(res.data.data.map(c => ({ label: c.name, value: c.id })))
+          if (res.data.source === 'rds') setIsRdsSource(true)
+          setCampuses(res.data.data.map(c => ({ label: c.name, value: c.id })))
         } else if (user?.role === 'course_admin') {
-          // For course admin, get batches (which implies course)
           res = await api.get('/course-admin/batches')
+          if (res.data.source === 'rds') setIsRdsSource(true)
           setCampuses(res.data.data.map(b => ({ label: b.name, value: b.id })))
         } else {
-          // For super admin, get all campuses
           res = await api.get('/campus-management/')
+          if (res.data.source === 'rds') setIsRdsSource(true)
           setCampuses(res.data.data.map(c => ({ label: c.name, value: c.id })))
         }
       } catch (err) {
@@ -2519,20 +2500,25 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
   // Fetch Batches when Campus changes
   useEffect(() => {
     const fetchBatches = async (campusId) => {
-      setLoadingStates(prev => ({ ...prev, batches: true, courses: false }))
+      setLoadingStates(prev => ({ ...prev, batches: true, branches: false }))
       try {
         let res;
         if (user?.role === 'campus_admin') {
-          // For campus admin, get batches for their campus
           res = await api.get('/campus-admin/batches')
-        setBatches(res.data.data.map(b => ({ label: b.name, value: b.id })))
+          if (res.data.source === 'rds') setIsRdsSource(true)
+          setBatches(res.data.data.map(b => ({
+            label: b.display_name || b.name,
+            value: b.id,
+          })))
         } else if (user?.role === 'course_admin') {
-          // For course admin, batches are already loaded in the "campus" dropdown
-          setBatches([]) // No additional batches to fetch
+          setBatches([])
         } else {
-          // For super admin, get batches for the selected campus
           res = await api.get(`/batch-management/campus/${campusId}/batches`)
-          setBatches(res.data.data.map(b => ({ label: b.name, value: b.id })))
+          if (res.data.source === 'rds') setIsRdsSource(true)
+          setBatches(res.data.data.map(b => ({
+            label: b.display_name || b.name,
+            value: b.id,
+          })))
         }
       } catch (err) {
         error("Failed to fetch batches")
@@ -2542,70 +2528,94 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
       }
     }
 
-    if (selectedCampusId) {
+    if (user?.role === 'campus_admin' || user?.role === 'course_admin') {
+      fetchBatches(selectedCampusId)
+    } else if (selectedCampusId) {
       setValue('batch_ids', [])
-      setValue('course_ids', [])
-      setCourses([])
+      setValue('branch_names', [])
+      setBranches([])
       fetchBatches(selectedCampusId)
     } else {
       setBatches([])
       setValue('batch_ids', [])
-      setValue('course_ids', [])
-      setCourses([])
+      setValue('branch_names', [])
+      setBranches([])
     }
   }, [selectedCampusId, setValue, error, user])
 
-  // Fetch Courses when Batches change
+  // Fetch Branches when Batches change (RDS) or Courses fallback (Mongo)
   useEffect(() => {
-    const fetchCoursesForBatches = async (batchIds) => {
+    const fetchBranchesForBatches = async (batchIds) => {
       if (!batchIds || batchIds.length === 0) {
-        setCourses([])
-        setValue('course_ids', [])
+        setBranches([])
+        setValue('branch_names', [])
         return
       }
-      setLoadingStates(prev => ({ ...prev, courses: true }))
+      setLoadingStates(prev => ({ ...prev, branches: true }))
       try {
-        let allCourses = [];
-        if (user?.role === 'campus_admin') {
-          // For campus admin, get courses for their campus
+        const campusIdForBranches = resolveCampusIdForBranches(selectedCampusId, batchIds, user)
+
+        if (isRdsSource || batchIds.some(id => String(id).startsWith('rds_b_'))) {
+          const branchPromises = batchIds.map(batchId =>
+            api.get('/batch-management/branches', {
+              params: { campus_id: campusIdForBranches, batch_id: batchId },
+            })
+          )
+          const branchResults = await Promise.all(branchPromises)
+          const merged = new Map()
+          branchResults.forEach(res => {
+            if (res.data.source === 'rds') setIsRdsSource(true)
+            ;(res.data.data || []).forEach(branch => {
+              const name = branch.name
+              if (!name) return
+              const existing = merged.get(name)
+              if (existing) {
+                existing.count += branch.student_count || 0
+              } else {
+                merged.set(name, { name, count: branch.student_count || 0 })
+              }
+            })
+          })
+          setBranches(
+            Array.from(merged.values())
+              .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+              .map(b => ({
+                label: `${b.name} (${b.count})`,
+                value: b.name,
+              }))
+          )
+        } else if (user?.role === 'campus_admin') {
           const res = await api.get('/campus-admin/courses')
-          allCourses = res.data.data
-        } else if (user?.role === 'course_admin') {
-          // For course admin, they only have one course, so no need to fetch
-          allCourses = []
+          const uniqueCourses = [...new Map((res.data.data || []).map(item => [item.id, item])).values()]
+          setBranches(uniqueCourses.map(c => ({ label: c.name, value: c.id })))
         } else {
-          // For super admin, get courses for the selected batches
-        const coursePromises = batchIds.map(batchId =>
-          api.get(`/course-management/batch/${batchId}/courses`)
-        )
-        const courseResults = await Promise.all(coursePromises)
-          allCourses = courseResults.flatMap(res => res.data.data)
+          const coursePromises = batchIds.map(batchId =>
+            api.get(`/course-management/batch/${batchId}/courses`)
+          )
+          const courseResults = await Promise.all(coursePromises)
+          const allCourses = courseResults.flatMap(res => res.data.data || [])
+          const uniqueCourses = [...new Map(allCourses.map(item => [item.id, item])).values()]
+          setBranches(uniqueCourses.map(c => ({ label: c.name, value: c.id })))
         }
-        
-        const uniqueCourses = [...new Map(allCourses.map(item => [item.id, item])).values()]
-        setCourses(uniqueCourses.map(c => ({ label: c.name, value: c.id })))
       } catch (err) {
-        error("Failed to fetch courses")
-        setCourses([])
+        error("Failed to fetch branches")
+        setBranches([])
       } finally {
-        setLoadingStates(prev => ({ ...prev, courses: false }))
+        setLoadingStates(prev => ({ ...prev, branches: false }))
       }
     }
 
-    fetchCoursesForBatches(selectedBatchIds)
-  }, [selectedBatchIds, setValue, user?.id])
+    fetchBranchesForBatches(selectedBatchIds)
+  }, [selectedBatchIds, selectedCampusId, setValue, user, isRdsSource])
 
   const onSubmit = (data) => {
-    // Validate that we have the required selections based on user role
     if (user?.role === 'course_admin') {
-      // For course admin, they only need to select batches (which are already loaded)
       if (!data.campus_id) {
         error("Please select a batch");
         return;
       }
     } else if (user?.role === 'campus_admin') {
-      // For campus admin, they need to select batches and courses
-      if (!data.campus_id) {
+      if (!isRdsSource && !data.campus_id) {
         error("Please select a course");
         return;
       }
@@ -2613,41 +2623,44 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
         error("Please select at least one batch");
         return;
       }
+      if (!data.branch_names || data.branch_names.length === 0) {
+        error("Please select at least one branch");
+        return;
+      }
     } else {
-      // For super admin, they need to select campus, batches, and courses
-    if (!data.campus_id) {
-      error("Please select a campus");
-      return;
-    }
-    if (!data.batch_ids || data.batch_ids.length === 0) {
-      error("Please select at least one batch");
-      return;
-    }
-    if (!data.course_ids || data.course_ids.length === 0) {
-      error("Please select at least one course");
-      return;
+      if (!data.campus_id) {
+        error("Please select a campus");
+        return;
+      }
+      if (!data.batch_ids || data.batch_ids.length === 0) {
+        error("Please select at least one batch");
+        return;
+      }
+      if (!data.branch_names || data.branch_names.length === 0) {
+        error("Please select at least one branch");
+        return;
       }
     }
 
-    const selectedCampus = campuses.find(c => c.value === data.campus_id);
-    const selectedBatches = batches.filter(b => data.batch_ids.includes(b.value));
-    const selectedCourses = courses.filter(c => data.course_ids.includes(c.value));
-
-    console.log('Step4AudienceSelection - Selected data:', {
-      campus: selectedCampus,
-      batches: selectedBatches,
-      courses: selectedCourses,
-    });
+    const selectedCampus = campuses.find(c => c.value === data.campus_id) || testData.campus;
+    const selectedBatches = user?.role === 'course_admin'
+      ? campuses.filter(b => b.value === data.campus_id)
+      : batches.filter(b => data.batch_ids.includes(b.value));
+    const selectedBranches = branches.filter(b => data.branch_names.includes(b.value));
 
     updateTestData({
       campus: selectedCampus,
       batches: selectedBatches,
-      courses: selectedCourses,
+      branches: selectedBranches,
+      courses: [],
     });
-    // Go to module and level selection (step 4)
-    // Note: This component is now used in step 3, so we go to step 4
     setStep(4);
   }
+
+  const showBranchColumn = user?.role !== 'course_admin';
+  const branchLabel = isRdsSource || selectedBatchIds?.some(id => String(id).startsWith('rds_b_'))
+    ? 'Branches'
+    : 'Courses';
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
@@ -2660,22 +2673,28 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Column 1: Campus/Course/Batch based on role */}
           <div className="space-y-4">
             <h3 className="font-semibold text-lg text-gray-800">
-              {user?.role === 'course_admin' ? '1. Select Batch' : 
-               user?.role === 'campus_admin' ? '1. Select Course' : 
+              {user?.role === 'course_admin' ? '1. Select Batch' :
+               user?.role === 'campus_admin' && !isRdsSource ? '1. Select Course' :
+               user?.role === 'campus_admin' ? '1. Campus' :
                '1. Select Campus'}
             </h3>
-            {loadingStates.campuses ? <LoadingSpinner /> : (
+            {user?.role === 'campus_admin' && isRdsSource ? (
+              <p className="text-sm text-gray-600 p-2 bg-gray-50 rounded border border-gray-200">
+                Your campus batches are loaded from the master student database.
+              </p>
+            ) : loadingStates.campuses ? <LoadingSpinner /> : (
               <>
                 <select
-                  {...register('campus_id', { required: 'Please make a selection' })}
+                  {...register('campus_id', {
+                    required: user?.role === 'course_admin' || !isRdsSource ? 'Please make a selection' : false,
+                  })}
                   className="w-full p-2 border border-gray-200 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 transition"
                 >
                   <option value="" disabled>
-                    {user?.role === 'course_admin' ? 'Choose a batch' : 
-                     user?.role === 'campus_admin' ? 'Choose a course' : 
+                    {user?.role === 'course_admin' ? 'Choose a batch' :
+                     user?.role === 'campus_admin' && !isRdsSource ? 'Choose a course' :
                      'Choose a campus'}
                   </option>
                   {campuses.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -2685,9 +2704,8 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
             )}
           </div>
 
-          {/* Column 2: Batches (only for campus admin and super admin) */}
           {user?.role !== 'course_admin' && (
-          <div className={clsx("space-y-4", { 'opacity-50': !selectedCampusId })}>
+          <div className={clsx("space-y-4", { 'opacity-50': !isRdsSource && user?.role !== 'campus_admin' && !selectedCampusId })}>
             <h3 className="font-semibold text-lg text-gray-800">2. Select Batches</h3>
             {loadingStates.batches ? <LoadingSpinner /> : (
               batches.length > 0 ? (
@@ -2715,8 +2733,7 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
                   )}
                 />
                 ) : <p className="text-sm text-gray-500 italic">
-                  {selectedCampusId ? 'No batches found.' : 
-                   user?.role === 'campus_admin' ? 'Select a course to see batches.' :
+                  {selectedCampusId || user?.role === 'campus_admin' ? 'No batches found.' :
                    'Select a campus to see batches.'}
                 </p>
             )}
@@ -2724,28 +2741,27 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
           </div>
           )}
 
-          {/* Column 3: Courses (only for super admin) */}
-          {user?.role === 'superadmin' && (
+          {showBranchColumn && (
           <div className={clsx("space-y-4", { 'opacity-50': !selectedBatchIds || selectedBatchIds.length === 0 })}>
-            <h3 className="font-semibold text-lg text-gray-800">3. Select Courses</h3>
-            {loadingStates.courses ? <LoadingSpinner /> : (
-              courses.length > 0 ? (
+            <h3 className="font-semibold text-lg text-gray-800">3. Select {branchLabel}</h3>
+            {loadingStates.branches ? <LoadingSpinner /> : (
+              branches.length > 0 ? (
                 <Controller
-                  name="course_ids"
+                  name="branch_names"
                   control={control}
-                  rules={{ required: 'Please select at least one course.' }}
+                  rules={{ required: `Please select at least one ${branchLabel.toLowerCase().slice(0, -1)}.` }}
                   render={({ field }) => (
                     <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-2 border-gray-200">
-                      {courses.map(course => (
+                      {branches.map(branch => (
                         <CheckboxCard
-                          key={course.value}
-                          id={`course-${course.value}`}
-                          label={course.label}
-                          checked={field.value.includes(course.value)}
+                          key={branch.value}
+                          id={`branch-${branch.value}`}
+                          label={branch.label}
+                          checked={field.value.includes(branch.value)}
                           onChange={(isChecked) => {
                             const newValue = isChecked
-                              ? [...field.value, course.value]
-                              : field.value.filter(id => id !== course.value);
+                              ? [...field.value, branch.value]
+                              : field.value.filter(name => name !== branch.value);
                             field.onChange(newValue);
                           }}
                         />
@@ -2753,9 +2769,9 @@ const Step4AudienceSelection = ({ nextStep, prevStep, updateTestData, testData, 
                     </div>
                   )}
                 />
-              ) : <p className="text-sm text-gray-500 italic">{selectedBatchIds?.length > 0 ? 'No courses found.' : 'Select one or more batches to see courses.'}</p>
+              ) : <p className="text-sm text-gray-500 italic">{selectedBatchIds?.length > 0 ? `No ${branchLabel.toLowerCase()} found.` : 'Select one or more batches to see branches.'}</p>
             )}
-            {errors.course_ids && <p className="text-red-500 text-xs mt-1">{errors.course_ids.message}</p>}
+            {errors.branch_names && <p className="text-red-500 text-xs mt-1">{errors.branch_names.message}</p>}
           </div>
           )}
         </div>
@@ -2868,29 +2884,17 @@ const Step5TopicSelection = ({ nextStep, prevStep, updateTestData, testData }) =
   const [showTopicUsageModal, setShowTopicUsageModal] = useState(false);
   const { error: showError } = useNotification();
 
-  // Fetch topics for the selected CRT module
+  // Fetch topics for the selected CRT module (lightweight list for dropdown)
   useEffect(() => {
     const fetchTopics = async () => {
       if (!testData.module?.startsWith('CRT_')) return;
-      
+
       setLoading(true);
       try {
-        // Build query parameters with selected batches and courses
-        const params = new URLSearchParams();
-        if (testData.batches && testData.batches.length > 0) {
-          const batchIds = testData.batches.map(b => b.value || b._id || b).filter(Boolean).join(',');
-          if (batchIds) params.append('batch_ids', batchIds);
-        }
-        if (testData.courses && testData.courses.length > 0) {
-          const courseIds = testData.courses.map(c => c.value || c._id || c).filter(Boolean).join(',');
-          if (courseIds) params.append('course_ids', courseIds);
-        }
-        
-        const url = `/test-management/crt-topics${params.toString() ? '?' + params.toString() : ''}`;
-        const response = await api.get(url);
+        const params = new URLSearchParams({ module_id: testData.module });
+        const response = await api.get(`/test-management/crt-topics?${params.toString()}`);
         if (response.data.success) {
-          const filteredTopics = response.data.data.filter(topic => topic.module_id === testData.module);
-          setCrtTopics(filteredTopics);
+          setCrtTopics(response.data.data || []);
         }
       } catch (error) {
         console.error('Error fetching topics:', error);
@@ -2900,7 +2904,7 @@ const Step5TopicSelection = ({ nextStep, prevStep, updateTestData, testData }) =
       }
     };
     fetchTopics();
-  }, [testData.module, testData.batches, testData.courses]);
+  }, [testData.module]);
 
   // Get topics for the selected CRT module
   const getTopicsForModule = () => {
@@ -2925,9 +2929,9 @@ const Step5TopicSelection = ({ nextStep, prevStep, updateTestData, testData }) =
         const batchIds = testData.batches.map(b => b.value || b._id || b).filter(Boolean).join(',');
         if (batchIds) params.append('batch_ids', batchIds);
       }
-      if (testData.courses && testData.courses.length > 0) {
-        const courseIds = testData.courses.map(c => c.value || c._id || c).filter(Boolean).join(',');
-        if (courseIds) params.append('course_ids', courseIds);
+      if (testData.branches && testData.branches.length > 0) {
+        const branchNames = testData.branches.map(b => b.value || b.label || b.name || b).filter(Boolean).join(',');
+        if (branchNames) params.append('branch_names', branchNames);
       }
       
       const url = `/test-management/topic-usage/${topicId}${params.toString() ? '?' + params.toString() : ''}`;
@@ -3044,8 +3048,8 @@ const Step5TopicSelection = ({ nextStep, prevStep, updateTestData, testData }) =
                   <p className="text-sm text-green-800 font-semibold mb-2">Selected Audience:</p>
                   <div className="text-sm text-green-700 space-y-1">
                     <p><strong>Batches:</strong> {testData.batches.map(b => b.label || b.name).join(', ')}</p>
-                    {testData.courses && testData.courses.length > 0 && (
-                      <p><strong>Courses:</strong> {testData.courses.map(c => c.label || c.name).join(', ')}</p>
+                    {testData.branches && testData.branches.length > 0 && (
+                      <p><strong>Branches:</strong> {testData.branches.map(b => b.label || b.name || b.value).join(', ')}</p>
                     )}
                   </div>
                   <p className="text-xs text-green-600 mt-2">
@@ -3113,7 +3117,7 @@ const Step5TopicSelection = ({ nextStep, prevStep, updateTestData, testData }) =
                     <div className="mt-2 p-2 bg-green-50 rounded border border-green-200">
                       <p className="text-xs text-green-700">
                         <strong>Filtered by:</strong> {testData.batches.map(b => b.label || b.name).join(', ')}
-                        {testData.courses && testData.courses.length > 0 && ` | ${testData.courses.map(c => c.label || c.name).join(', ')}`}
+                        {testData.branches && testData.branches.length > 0 && ` | ${testData.branches.map(b => b.label || b.name || b.value).join(', ')}`}
                       </p>
                     </div>
                   )}
@@ -5129,13 +5133,23 @@ Sum Two Numbers,Write a program that reads two integers and prints their sum,pyt
 const Step6ConfirmAndGenerate = ({ prevStep, testData, onTestCreated, uploadedQuestions }) => {
   const [studentCount, setStudentCount] = useState(null);
   const [studentList, setStudentList] = useState([]);
+  const { user } = useAuth();
+  const audienceValues = testData.branches?.map(b => b.value) || [];
+  const isRdsAudience = testData.batches?.some(b => String(b.value).startsWith('rds_b_'));
+  const resolvedCampusId = testData.campus?.value || resolveCampusIdForBranches(
+    testData.campus?.value,
+    testData.batches?.map(b => b.value),
+    user
+  );
+
   useEffect(() => {
     const fetchStudentCount = async () => {
       try {
         const res = await getStudentCount({
-          campus: testData.campus?.value,
+          campus: resolvedCampusId,
           batches: testData.batches?.map(b => b.value),
-          courses: testData.courses?.map(c => c.value),
+          branches: isRdsAudience ? audienceValues : undefined,
+          courses: !isRdsAudience ? audienceValues : undefined,
         });
         setStudentCount(res.data.count);
         setStudentList(res.data.students || []);
@@ -5146,7 +5160,7 @@ const Step6ConfirmAndGenerate = ({ prevStep, testData, onTestCreated, uploadedQu
       }
     };
     fetchStudentCount();
-  }, [testData.campus, testData.batches, testData.courses]);
+  }, [resolvedCampusId, testData.batches, testData.branches, isRdsAudience, audienceValues.join(',')]);
 
   const { success, error } = useNotification()
   const [loading, setLoading] = useState(false)
@@ -5203,8 +5217,9 @@ const Step6ConfirmAndGenerate = ({ prevStep, testData, onTestCreated, uploadedQu
         test_name: testData.test_name,
         test_type: testData.test_type?.toLowerCase(),
         module_id: testData.module,
-        campus_id: testData.campus?.value,
-        course_ids: testData.courses.map(c => c.value),
+        campus_id: resolvedCampusId,
+        branch_names: isRdsAudience ? audienceValues : [],
+        course_ids: !isRdsAudience ? audienceValues : [],
         batch_ids: testData.batches.map(b => b.value),
         questions: processedQuestions,
         audio_config: isMcqModule ? {} : { accent: data.accent, speed: data.speed },
@@ -5292,7 +5307,7 @@ const Step6ConfirmAndGenerate = ({ prevStep, testData, onTestCreated, uploadedQu
             ) : null}
             <div><strong className="text-gray-500 block">Campus:</strong><p className="text-gray-800">{testData.campus?.label}</p></div>
             <div><strong className="text-gray-500 block">Batches:</strong><p className="text-gray-800">{testData.batches?.map(b => b.label).join(', ')}</p></div>
-            <div><strong className="text-gray-500 block">Courses:</strong><p className="text-gray-800">{testData.courses?.map(c => c.label).join(', ')}</p></div>
+            <div><strong className="text-gray-500 block">Branches:</strong><p className="text-gray-800">{testData.branches?.map(b => b.label || b.value).join(', ')}</p></div>
             {isOnline && (
               <>
                 <div><strong className="text-gray-500 block">Start Date & Time:</strong><p className="text-gray-800">{formatDateTime(testData.startDateTime)}</p></div>
@@ -5316,14 +5331,14 @@ const Step6ConfirmAndGenerate = ({ prevStep, testData, onTestCreated, uploadedQu
                     </p>
                     <ul className="text-xs text-gray-600 text-left space-y-1">
                       <li>• Students not uploaded to the selected batches</li>
-                      <li>• Students not assigned to the selected courses</li>
-                      <li>• Incorrect batch-course combinations</li>
+                      <li>• Students not assigned to the selected branches</li>
+                      <li>• Incorrect batch-branch combinations</li>
                     </ul>
                     <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
                       <p className="text-xs text-blue-800">
                         <strong>Selected:</strong> Campus: {testData.campus?.label},
                         Batches: {testData.batches?.map(b => b.label).join(', ')},
-                        Courses: {testData.courses?.map(c => c.label).join(', ')}
+                        Branches: {testData.branches?.map(b => b.label || b.value).join(', ')}
                       </p>
                     </div>
                   </div>
@@ -5341,6 +5356,7 @@ const Step6ConfirmAndGenerate = ({ prevStep, testData, onTestCreated, uploadedQu
                         <th className="px-4 py-2 text-left font-semibold text-gray-700 border-b">Name</th>
                         <th className="px-4 py-2 text-left font-semibold text-gray-700 border-b">Email</th>
                         <th className="px-4 py-2 text-center font-semibold text-gray-700 border-b">Roll Number</th>
+                        <th className="px-4 py-2 text-center font-semibold text-gray-700 border-b">Branch</th>
                         <th className="px-4 py-2 text-center font-semibold text-gray-700 border-b">Course</th>
                       </tr>
                     </thead>
@@ -5350,6 +5366,15 @@ const Step6ConfirmAndGenerate = ({ prevStep, testData, onTestCreated, uploadedQu
                           <td className="px-4 py-2 text-gray-900 border-b align-middle">{s.name}</td>
                           <td className="px-4 py-2 text-gray-900 border-b align-middle">{s.email}</td>
                           <td className="px-4 py-2 text-gray-900 border-b align-middle text-center">{s.roll_number || '-'}</td>
+                          <td className="px-4 py-2 text-gray-600 border-b align-middle text-center">
+                            {s.branch ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                                {s.branch}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-gray-600 border-b align-middle text-center">
                             {s.course_name && s.course_name !== 'Unknown Course' ? (
                               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">

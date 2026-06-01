@@ -81,6 +81,9 @@ class MongoDB:
             self.students.create_index("campus_id")
             self.students.create_index("course_id")
             self.students.create_index("batch_id")
+            self.students.create_index("rds_student_id", sparse=True)
+            self.students.create_index("pin_no", sparse=True)
+            self.students.create_index("admission_number", sparse=True)
             
             # Tests collection indexes
             self.tests.create_index("module_id")

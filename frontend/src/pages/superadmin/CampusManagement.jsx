@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNotification } from '../../contexts/NotificationContext';
 import PermissionWrapper from '../../components/common/PermissionWrapper';
 import { useModulePermission } from '../../hooks/useModulePermission';
+import { useRdsOrgSource } from '../../hooks/useRdsOrgSource';
 
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
@@ -28,11 +29,13 @@ const CampusManagement = () => {
 
     const { success, error, info } = useNotification();
     const { canCreate, canEdit, canDelete, isReadOnly } = useModulePermission('campus_management');
+    const { isRdsReadOnly, applyFromResponse } = useRdsOrgSource();
 
     const fetchCampuses = async () => {
         try {
             setLoading(true);
             const res = await api.get('/campus-management/');
+            applyFromResponse(res);
             setCampuses(res.data.data);
         } catch (err) {
             error('Failed to fetch campuses.');
@@ -132,17 +135,21 @@ const CampusManagement = () => {
                         <div className="flex justify-between items-center mb-8">
                             <div>
                                 <h1 className="text-3xl font-bold text-gray-900">Campus Management</h1>
-                                <p className="mt-2 text-gray-600">Oversee all institutional campuses.</p>
+                                <p className="mt-2 text-gray-600">
+                                    {isRdsReadOnly
+                                        ? 'Colleges from master student database (view only).'
+                                        : 'Oversee all institutional campuses.'}
+                                </p>
                             </div>
                             <button 
                                 onClick={() => openModal()} 
-                                disabled={!canCreate}
+                                disabled={!canCreate || isRdsReadOnly}
                                 className={`flex items-center gap-2 font-semibold px-4 py-2 rounded-lg shadow-md transition ${
-                                    canCreate 
+                                    canCreate && !isRdsReadOnly
                                         ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
                                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                 }`}
-                                title={!canCreate ? 'You do not have permission to create campuses' : 'Add Campus'}
+                                title={isRdsReadOnly ? 'Colleges are managed in the master student database' : (!canCreate ? 'You do not have permission to create campuses' : 'Add Campus')}
                             >
                                 <PlusCircle size={20} />
                                 Add Campus
@@ -187,20 +194,20 @@ const CampusManagement = () => {
                                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                             <button 
                                                                 onClick={(e) => { e.stopPropagation(); openModal(campus); }} 
-                                                                disabled={!canEdit}
+                                                                disabled={!canEdit || isRdsReadOnly}
                                                                 className={`mr-4 ${
-                                                                    canEdit 
+                                                                    canEdit && !isRdsReadOnly
                                                                         ? 'text-indigo-600 hover:text-indigo-900' 
                                                                         : 'text-gray-400 cursor-not-allowed'
                                                                 }`}
-                                                                title={!canEdit ? 'You do not have permission to edit campuses' : 'Edit Campus'}
+                                                                title={isRdsReadOnly ? 'Colleges are managed in the master student database' : (!canEdit ? 'You do not have permission to edit campuses' : 'Edit Campus')}
                                                             >
                                                                 <Edit size={18} />
                                                             </button>
                                                             <button 
                                                                 onClick={(e) => { e.stopPropagation(); handleDelete(campus.id); }} 
-                                                                disabled={!canDelete}
-                                                                className={canDelete 
+                                                                disabled={!canDelete || isRdsReadOnly}
+                                                                className={canDelete && !isRdsReadOnly
                                                                     ? 'text-red-600 hover:text-red-900' 
                                                                     : 'text-gray-400 cursor-not-allowed'
                                                                 }
