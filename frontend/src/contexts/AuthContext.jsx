@@ -170,6 +170,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     refreshToken,
     refreshUser,
+    setUser,          // exposed so SSOLogin can update auth state directly
     isAuthenticated: !!user,
   }
 

@@ -10,9 +10,9 @@
  * to the normal login page.
  */
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useContext } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../../contexts/AuthContext'
+import { AuthContext } from '../../contexts/AuthContext'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import axios from 'axios'
 
@@ -21,7 +21,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 const SSOLogin = () => {
   const [searchParams] = useSearchParams()
   const navigate        = useNavigate()
-  const { login: _login } = useAuth()   // we bypass the normal login() and set state manually
+  const { setUser }     = useContext(AuthContext)   // set React auth state directly
   const [error, setError]   = useState(null)
   const [status, setStatus] = useState('Verifying your session…')
   const attempted = useRef(false)       // guard against StrictMode double-invoke
@@ -55,16 +55,21 @@ const SSOLogin = () => {
 
         const { access_token, refresh_token, user } = body.data
 
-        // Store tokens exactly the same way normal login does
+        // 1. Persist tokens to localStorage (same as normal login)
         localStorage.setItem('access_token',  access_token)
         localStorage.setItem('refresh_token', refresh_token)
         localStorage.setItem('user',          JSON.stringify(user))
 
+        // 2. Update AuthContext React state immediately so ProtectedRoute
+        //    sees isAuthenticated=true before navigate() fires.
+        //    Without this, ProtectedRoute bounces back to /login because
+        //    the React state is still null even though localStorage is set.
+        setUser(user)
+
         setStatus('Login successful! Redirecting to dashboard…')
 
-        // Give the AuthContext a moment to hydrate from localStorage,
-        // then send the student to their dashboard
-        setTimeout(() => navigate('/student', { replace: true }), 300)
+        // Navigate — ProtectedRoute will now pass because user state is set
+        navigate('/student', { replace: true })
 
       } catch (err) {
         const msg =
@@ -76,7 +81,7 @@ const SSOLogin = () => {
     }
 
     exchange()
-  }, [searchParams, navigate])
+  }, [searchParams, navigate, setUser])
 
   // ── render ────────────────────────────────────────────────────────────────
 
