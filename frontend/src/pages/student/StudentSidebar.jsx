@@ -4,11 +4,14 @@ import {
   Home, Book, Calendar, BarChart2, PieChart, User, Menu, X, Bell, 
   ChevronLeft, ChevronRight, LogOut, Settings, HelpCircle, 
   FileText, BrainCircuit, Activity, Award, Clock, MessageSquare,
-  FolderOpen, Grid3X3, Power, LayoutDashboard, FilePlus, GraduationCap
+  FolderOpen, Grid3X3, Power, LayoutDashboard, FilePlus, GraduationCap,
+  ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFeatures } from '../../contexts/FeatureContext';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const SDMS_URL = 'https://sdms.pydah.edu.in';
 
 const StudentSidebar = () => {
     const location = useLocation();
@@ -55,6 +58,12 @@ const StudentSidebar = () => {
             console.error('StudentSidebar logout error:', error)
             navigate('/login');
         }
+    };
+
+    const handleBackToSDMS = () => {
+        // Just redirect to SDMS — keep the CRT session alive so when
+        // they come back via SSO they land straight on /student again.
+        window.location.href = SDMS_URL;
     };
 
     const isActive = (path) => {
@@ -212,7 +221,31 @@ const StudentSidebar = () => {
                 </div>
                     
                 {/* Logout Button at Bottom */}
-                <div className="p-2 sm:p-3 border-t border-gray-200/50 flex-shrink-0">
+                <div className="p-2 sm:p-3 border-t border-gray-200/50 flex-shrink-0 space-y-2">
+                    {/* Back to SDMS */}
+                    <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleBackToSDMS}
+                        className="w-full flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 font-medium px-3 py-2 rounded-lg hover:bg-blue-100 hover:shadow transition-all duration-300"
+                    >
+                        <ExternalLink className="w-4 h-4 flex-shrink-0" />
+                        <AnimatePresence>
+                            {!isCollapsed && (
+                                <motion.span
+                                    initial={{ opacity: 0, width: 0 }}
+                                    animate={{ opacity: 1, width: 'auto' }}
+                                    exit={{ opacity: 0, width: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="text-sm font-medium overflow-hidden whitespace-nowrap"
+                                >
+                                    Back to SDMS
+                                </motion.span>
+                            )}
+                        </AnimatePresence>
+                    </motion.button>
+
+                    {/* Sign Out */}
                     <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}

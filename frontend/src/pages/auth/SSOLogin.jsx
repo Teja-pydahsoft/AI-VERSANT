@@ -21,12 +21,15 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 const SSOLogin = () => {
   const [searchParams] = useSearchParams()
   const navigate        = useNavigate()
-  const { setUser }     = useContext(AuthContext)   // set React auth state directly
+  const { setUser, user, loading } = useContext(AuthContext)   // set React auth state directly
   const [error, setError]   = useState(null)
   const [status, setStatus] = useState('Verifying your session…')
   const attempted = useRef(false)       // guard against StrictMode double-invoke
 
   useEffect(() => {
+    // Wait for AuthContext to finish its own initialization before we act
+    if (loading) return
+
     if (attempted.current) return
     attempted.current = true
 
@@ -34,6 +37,14 @@ const SSOLogin = () => {
 
     if (!token) {
       setError('No SSO token found in the URL. Please log in again from SDMS.')
+      return
+    }
+
+    // If student already has a valid CRT session (logged in directly before),
+    // skip the exchange entirely and land them straight on the dashboard.
+    if (user && user.role === 'student') {
+      setStatus('Session found. Redirecting to dashboard…')
+      navigate('/student', { replace: true })
       return
     }
 
@@ -81,9 +92,26 @@ const SSOLogin = () => {
     }
 
     exchange()
-  }, [searchParams, navigate, setUser])
+  }, [searchParams, navigate, setUser, user, loading])
 
   // ── render ────────────────────────────────────────────────────────────────
+
+  // Still waiting for AuthContext to hydrate from localStorage
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F0F4FF] flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-10 max-w-sm w-full text-center">
+          <img
+            src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_203,h_111,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png"
+            alt="VERSANT Logo"
+            className="h-14 w-auto mx-auto mb-6"
+          />
+          <LoadingSpinner size="lg" />
+          <p className="mt-6 text-gray-600 text-sm font-medium">Checking session…</p>
+        </div>
+      </div>
+    )
+  }
 
   if (error) {
     return (
