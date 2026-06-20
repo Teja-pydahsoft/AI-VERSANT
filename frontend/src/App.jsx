@@ -11,6 +11,7 @@ import { PermissionProvider } from './contexts/PermissionContext'
 // Auth Pages
 import Login from './pages/auth/Login'
 import GetStarted from './pages/auth/GetStarted'
+import SSOLogin from './pages/auth/SSOLogin'
 
 // Super Admin Pages
 import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard'
@@ -118,6 +119,7 @@ function AppContent() {
         {/* Public Routes */}
         <Route path="/" element={<GetStarted />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/sso-login" element={<SSOLogin />} />
 
         {/* Admin Routes */}
           {/* Super Admin Routes */}

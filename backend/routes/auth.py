@@ -186,16 +186,98 @@ def login():
             }), 401
         
         # Verify password
-        if 'password_hash' not in user and 'mobile_number' not in user:
-            print(f"❌ CRITICAL: User document missing 'password_hash'. User object: {user}", file=sys.stderr)
+        password_hash = user.get('password_hash')
+        mobile_number = user.get('mobile_number') or ''
+
+        def _rds_repair_credentials(user_doc, lookup_ident):
+            """
+            Fetch the RDS student record and (re)set the password_hash to the
+            correct RDS-based credential (roll/pin number itself).
+            Returns the new password_hash string, or None if RDS lookup fails.
+            """
+            try:
+                from services.student_mapping_service import (
+                    find_rds_student,
+                    find_mongo_student_by_identifier,
+                    link_student_to_rds,
+                    generate_student_password,
+                )
+                from config.shared import bcrypt as _bcrypt
+
+                rds_student = find_rds_student(lookup_ident)
+                if not rds_student:
+                    print(f"❌ No RDS record found for '{lookup_ident}' — cannot repair credentials.", file=sys.stderr)
+                    return None
+
+                pin       = rds_student.get('pin_no') or ''
+                admission = rds_student.get('admission_number') or rds_student.get('roll_number') or ''
+                roll      = pin or admission or lookup_ident
+
+                # Password = roll/pin number (students log in with their number as password)
+                correct_password = generate_student_password(rds_student.get('name') or '', roll)
+                new_hash = _bcrypt.generate_password_hash(correct_password).decode('utf-8')
+
+                mongo_db.users.update_one(
+                    {'_id': user_doc['_id']},
+                    {'$set': {
+                        'password_hash': new_hash,
+                        'provisioned_from': 'rds',
+                        'username': roll if roll else user_doc.get('username'),
+                        'is_active': True,
+                    }}
+                )
+                print(f"✅ Repaired credentials for user {user_doc.get('_id')} (roll={roll}) from RDS.", file=sys.stderr)
+
+                # Link student profile to RDS if not already done
+                mongo_student = find_mongo_student_by_identifier(lookup_ident)
+                if not mongo_student:
+                    mongo_student = mongo_db.students.find_one({'user_id': user_doc['_id']})
+                if mongo_student and not mongo_student.get('rds_student_id'):
+                    link_student_to_rds(mongo_student, rds_student, update_profile=True)
+
+                return new_hash
+            except Exception as exc:
+                print(f"⚠️ RDS credential repair failed: {exc}", file=sys.stderr)
+                return None
+
+        # Case 1: no password_hash at all — stub user, must repair from RDS
+        if not password_hash:
+            print(f"⚠️ User {user.get('_id')} has no password_hash — attempting RDS repair.", file=sys.stderr)
+            rds_ident = user.get('username') or username
+            password_hash = _rds_repair_credentials(user, rds_ident)
+
+        if not password_hash:
+            print(f"❌ CRITICAL: User {user.get('_id')} has no credentials and RDS repair failed.", file=sys.stderr)
             return jsonify({
                 'success': False,
-                'message': 'Login failed: Critical server error - missing user credentials.'
+                'message': 'Account credentials are incomplete. Please contact your administrator.'
             }), 500
 
         print(f"🔍 Verifying password for user: {username}", file=sys.stderr)
-        
-        if not raw_bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')) and user['mobile_number'] != password:
+
+        # Primary: bcrypt hash check
+        try:
+            hash_ok = raw_bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+        except Exception as pw_exc:
+            print(f"⚠️ bcrypt checkpw error for user {username}: {pw_exc}", file=sys.stderr)
+            hash_ok = False
+
+        # Legacy fallback: mobile number used as password
+        mobile_ok = bool(mobile_number and mobile_number == password)
+
+        # Case 2: hash check failed — if this is an RDS-provisioned user, the stored hash
+        # may have been generated with the old name-based formula. Re-repair and retry once.
+        if not hash_ok and not mobile_ok and user.get('role') == 'student':
+            print(f"⚠️ Password mismatch for RDS student {user.get('_id')} — re-syncing credentials.", file=sys.stderr)
+            rds_ident = user.get('username') or username
+            repaired_hash = _rds_repair_credentials(user, rds_ident)
+            if repaired_hash:
+                try:
+                    hash_ok = raw_bcrypt.checkpw(password.encode('utf-8'), repaired_hash.encode('utf-8'))
+                except Exception:
+                    hash_ok = False
+
+        if not hash_ok and not mobile_ok:
             print(f"❌ Password verification failed for user: {username}", file=sys.stderr)
             return jsonify({
                 'success': False,

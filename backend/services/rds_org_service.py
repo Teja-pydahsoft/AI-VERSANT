@@ -527,7 +527,7 @@ class RDSOrgService:
             'current_year': r.get('current_year'),
             'current_semester': r.get('current_semester'),
             'father_name': r.get('father_name'),
-            'is_active': (r.get('student_status') or '').lower() in ('regular', 're-joined', 'rejoined', 'lateral'),
+            'is_active': (r.get('student_status') or '').lower() not in ('dropped', 'expelled', 'detained', 'cancelled', 'transfer_out', 'left'),
             'created_at': _serialize_dt(r.get('created_at')),
             'source': 'rds',
             'read_only': True,

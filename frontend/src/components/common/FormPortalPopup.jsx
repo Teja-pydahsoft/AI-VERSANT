@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, CheckCircle, AlertCircle, Clock, ArrowRight } from 'lucide-react';
+import { FileText, CheckCircle, AlertCircle, Clock, ArrowRight, X } from 'lucide-react';
 import { useFormPortal } from '../../contexts/FormPortalContext';
 import FormSubmission from '../../pages/student/FormSubmission';
 
@@ -20,6 +20,7 @@ const FormPortalPopup = () => {
   const [selectedForm, setSelectedForm] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
   // Initialize form queue when forms are loaded
   useEffect(() => {
@@ -53,8 +54,8 @@ const FormPortalPopup = () => {
     );
   }
 
-  // Don't show popup if no incomplete forms (required or optional)
-  if (!hasIncompleteForms() || formQueue.length === 0) {
+  // Don't show popup if no incomplete forms (required or optional) or user dismissed
+  if (dismissed || !hasIncompleteForms() || formQueue.length === 0) {
     return null;
   }
 
@@ -113,6 +114,12 @@ const FormPortalPopup = () => {
     return null;
   }
 
+  const handleDismiss = () => {
+    setShowFormModal(false);
+    setSelectedForm(null);
+    setDismissed(true);
+  };
+
   return (
     <>
       {/* Backdrop with Soft Blur */}
@@ -138,13 +145,24 @@ const FormPortalPopup = () => {
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-base font-bold text-blue-600">
-                    {progress.current} / {progress.total}
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <div className="text-base font-bold text-blue-600">
+                      {progress.current} / {progress.total}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {progress.percentage}% Complete
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500">
-                    {progress.percentage}% Complete
-                  </div>
+                  {/* Close button */}
+                  <button
+                    onClick={handleDismiss}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-600 text-gray-500 transition-colors duration-150"
+                    title="Close"
+                    aria-label="Close form popup"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
               

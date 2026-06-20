@@ -374,6 +374,7 @@ def create_app():
 
     # Register blueprints
     from routes.auth import auth_bp
+    from routes.sso import sso_bp
     from routes.superadmin import superadmin_bp
     from routes.campus_admin import campus_admin_bp
     from routes.course_admin import course_admin_bp
@@ -408,6 +409,7 @@ def create_app():
     # Removed non-existent route imports
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(sso_bp, url_prefix='/auth')   # POST /auth/sso-exchange
     app.register_blueprint(superadmin_bp, url_prefix='/superadmin')
     app.register_blueprint(campus_admin_bp, url_prefix='/campus-admin')
     app.register_blueprint(course_admin_bp, url_prefix='/course-admin')

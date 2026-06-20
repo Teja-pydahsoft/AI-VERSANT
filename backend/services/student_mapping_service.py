@@ -25,9 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 def generate_student_password(student_name: str, roll_number: str) -> str:
-    first = (student_name or 'student').split()[0][:4].lower()
-    roll = roll_number or '0000'
-    return f'{first}{roll[-4:]}'
+    """
+    Default password for RDS-provisioned students is their roll number / pin itself.
+    This lets students log in with their roll number as both username and password.
+    """
+    return roll_number or '0000'
 
 
 def _normalize_identifier(value: str) -> str:
@@ -103,7 +105,9 @@ def link_student_to_rds(
                 student_updates[field] = rds_student[field]
         if rds_student.get('parent_mobile'):
             student_updates['parent_mobile'] = rds_student['parent_mobile']
-        if 'is_active' in rds_student:
+        # Only update is_active when student_status is explicitly set in RDS;
+        # never deactivate a student due to a missing/empty status value.
+        if rds_student.get('student_status') and 'is_active' in rds_student:
             student_updates['is_active'] = rds_student['is_active']
 
     mongo_db.students.update_one({'_id': mongo_student['_id']}, {'$set': student_updates})
@@ -119,7 +123,8 @@ def link_student_to_rds(
             user_updates['email'] = rds_student['email']
         if rds_student.get('mobile_number'):
             user_updates['mobile_number'] = rds_student['mobile_number']
-        if 'is_active' in rds_student:
+        # Only update is_active when student_status is explicitly set in RDS.
+        if rds_student.get('student_status') and 'is_active' in rds_student:
             user_updates['is_active'] = rds_student['is_active']
 
     mongo_db.users.update_one({'_id': mongo_student['user_id']}, {'$set': user_updates})
@@ -153,7 +158,8 @@ def provision_from_rds(rds_student: dict) -> tuple[dict, dict]:
         'role': 'student',
         'name': name,
         'mobile_number': rds_student.get('mobile_number') or '',
-        'is_active': rds_student.get('is_active', True),
+        # Default to True if 'is_active' key is absent or student_status is unknown/unset
+        'is_active': rds_student.get('is_active', True) if rds_student.get('student_status') else True,
         'created_at': now,
         'provisioned_from': 'rds',
         'last_rds_sync_at': now,

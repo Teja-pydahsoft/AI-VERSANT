@@ -32,7 +32,7 @@ import {
 const StudentDashboard = () => {
   const { user } = useAuth()
   const { success, error } = useNotification()
-  const { hasIncompleteRequiredForms, hasIncompleteForms, loading: formLoading } = useFormPortal()
+  const { loading: formLoading } = useFormPortal()
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [progressData, setProgressData] = useState(null)
@@ -298,27 +298,10 @@ const StudentDashboard = () => {
     return <LoadingSpinner size="lg" />
   }
 
-  // Block dashboard content if there are any incomplete forms (required or optional)
-  const shouldBlockDashboard = hasIncompleteForms()
-
   return (
     <div className="w-full bg-[#fefefe]">
-      {/* Block dashboard content if forms are required */}
-      {shouldBlockDashboard && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 z-30 flex items-center justify-center">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl"
-          >
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Please Complete All Forms</h3>
-            <p className="text-gray-600">You need to complete all pending forms before accessing the dashboard.</p>
-          </motion.div>
-        </div>
-      )}
       
-      <div className={`w-full p-4 sm:p-6 lg:p-8 ${shouldBlockDashboard ? 'pointer-events-none opacity-50' : ''}`}>
+      <div className="w-full p-4 sm:p-6 lg:p-8">
         {/* Enhanced Header Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
