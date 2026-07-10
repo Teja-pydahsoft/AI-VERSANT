@@ -649,7 +649,7 @@ def get_all_tests():
                     'status': 1,
                     'created_at': 1,
                     'endDateTime': 1,
-                    'question_count': {'$size': '$questions'},
+                    'question_count': {'$size': {'$ifNull': ['$questions', []]}},
                     'module_id': 1,
                     'level_id': 1,
                     'subcategory': 1,
@@ -5999,23 +5999,15 @@ def get_levels():
         levels = []
         
         if module_id == 'GRAMMAR':
-            # Grammar has specific categories
-            grammar_categories = [
-                {'id': 'NOUN', 'name': 'Noun'},
-                {'id': 'PRONOUN', 'name': 'Pronoun'},
-                {'id': 'ADJECTIVE', 'name': 'Adjective'},
-                {'id': 'VERB', 'name': 'Verb'},
-                {'id': 'ADVERB', 'name': 'Adverb'},
-                {'id': 'CONJUNCTION', 'name': 'Conjunction'}
-            ]
-            
-            for category in grammar_categories:
+            # Grammar uses topic categories as levels (all entries from GRAMMAR_CATEGORIES)
+            for cat_id, cat_name in GRAMMAR_CATEGORIES.items():
                 count = mongo_db.question_bank.count_documents({
                     'module_id': module_id,
-                    'level_id': category['id']
+                    'level_id': {'$in': [cat_id, f'GRAMMAR_{cat_id}']}
                 })
                 levels.append({
-                    **category,
+                    'id': cat_id,
+                    'name': cat_name,
                     'question_count': count
                 })
         else:

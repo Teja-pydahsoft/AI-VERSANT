@@ -105,7 +105,7 @@ const QuestionBankUpload = () => {
         icon: BookOpen,
         name: 'Grammar',
         color: 'from-blue-500 to-blue-600',
-        description: 'Upload grammar questions with categories like Noun, Pronoun, etc.',
+        description: 'Upload grammar questions with categories like Noun, Pronoun, Tense, Preposition, etc.',
         uploadType: 'mcq'
       },
       'VOCABULARY': {
@@ -249,7 +249,7 @@ const QuestionBankUpload = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {levels.map((level) => (
           <motion.div
             key={level.id}
