@@ -61,7 +61,20 @@ export default function MCQUpload({ questions, setQuestions, onNext, onBack, mod
   };
 
   const processQuestionsForPreview = (parsedQuestions) => {
-    const existingQuestionTexts = new Set(existingQuestions.map(q => q.question.trim().toLowerCase()));
+    const existingKeys = new Set(
+      existingQuestions
+        .map((q) => {
+          const question = (q.question || '').trim().toLowerCase().replace(/\s+/g, ' ');
+          if (!question) return '';
+          const optionA = (q.optionA || '').trim().toLowerCase().replace(/\s+/g, ' ');
+          const optionB = (q.optionB || '').trim().toLowerCase().replace(/\s+/g, ' ');
+          const optionC = (q.optionC || '').trim().toLowerCase().replace(/\s+/g, ' ');
+          const optionD = (q.optionD || '').trim().toLowerCase().replace(/\s+/g, ' ');
+          const answer = (q.answer || '').trim().toUpperCase();
+          return `${question}|A:${optionA}|B:${optionB}|C:${optionC}|D:${optionD}|ANS:${answer}`;
+        })
+        .filter(Boolean)
+    );
     const questionsForPreview = [];
     let duplicateCount = 0;
     let newCount = 0;
@@ -69,14 +82,21 @@ export default function MCQUpload({ questions, setQuestions, onNext, onBack, mod
     parsedQuestions.forEach(q => {
       const questionText = q.question?.trim();
       if (!questionText) return;
-      
-      const questionTextLower = questionText.toLowerCase();
-      if (existingQuestionTexts.has(questionTextLower)) {
+
+      const question = questionText.toLowerCase().replace(/\s+/g, ' ');
+      const optionA = (q.optionA || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const optionB = (q.optionB || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const optionC = (q.optionC || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const optionD = (q.optionD || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const answer = (q.answer || '').trim().toUpperCase();
+      const key = `${question}|A:${optionA}|B:${optionB}|C:${optionC}|D:${optionD}|ANS:${answer}`;
+
+      if (existingKeys.has(key)) {
         questionsForPreview.push({ ...q, status: 'Duplicate' });
         duplicateCount++;
       } else {
         questionsForPreview.push({ ...q, status: 'New' });
-        existingQuestionTexts.add(questionTextLower);
+        existingKeys.add(key);
         newCount++;
       }
     });

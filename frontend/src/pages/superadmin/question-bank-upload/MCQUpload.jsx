@@ -12,7 +12,8 @@ import {
   removeFile, 
   withLoading,
   generateCSVTemplate,
-  PreviewModal
+  PreviewModal,
+  mcqDuplicateKey
 } from './CommonUploadUtils';
 
 const MCQUpload = ({ moduleName, levelId, onUploadSuccess }) => {
@@ -174,11 +175,18 @@ const MCQUpload = ({ moduleName, levelId, onUploadSuccess }) => {
         }));
       }
 
-      // Generate preview with validation
-      const existingQuestionTexts = new Set(existingQuestions.map(q => q.question.trim().toLowerCase()));
+      // Generate preview with validation — duplicate = same question + options + answer
+      const existingKeys = new Set(
+        existingQuestions.map((q) => mcqDuplicateKey(q)).filter(Boolean)
+      );
+      const seenInFile = new Set();
       const previewData = questions.map(q => {
         const validation = validateMCQQuestion(q);
-        const isDuplicate = existingQuestionTexts.has(q.question.trim().toLowerCase());
+        const key = mcqDuplicateKey(q);
+        const isDuplicate = Boolean(key && (existingKeys.has(key) || seenInFile.has(key)));
+        if (key && validation.valid && !isDuplicate) {
+          seenInFile.add(key);
+        }
         
         return {
           ...q,

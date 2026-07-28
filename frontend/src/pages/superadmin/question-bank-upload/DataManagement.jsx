@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import api, { getQuestions, updateQuestion, deleteQuestion, bulkDeleteQuestions } from '../../../services/api';
+import { bankDuplicateKey } from './CommonUploadUtils';
 
 const DataManagement = ({ moduleName, levelId }) => {
   const [data, setData] = useState([]);
@@ -45,19 +46,8 @@ const DataManagement = ({ moduleName, levelId }) => {
     }
   };
 
-  /** Match backend _normalized_question_bank_text so duplicate rows pair correctly. */
-  const normalizeBankTextKey = (item) => {
-    let t = (item.question || item.sentence || item.paragraph || '').trim();
-    if (!t) return '';
-    t = t.replace(/^\uFEFF/, '');
-    t = t
-      .replace(/\u2019/g, "'")
-      .replace(/\u2018/g, "'")
-      .replace(/\u201c/g, '"')
-      .replace(/\u201d/g, '"');
-    t = t.replace(/\s+/g, ' ').trim().toLowerCase();
-    return t;
-  };
+  /** Match backend bank_duplicate_key_from_doc (MCQ = Q+options+answer). */
+  const normalizeBankTextKey = (item) => bankDuplicateKey(item);
 
   const duplicateTextCounts = useMemo(() => {
     const counts = new Map();
@@ -85,7 +75,7 @@ const DataManagement = ({ moduleName, levelId }) => {
     if (used > 0 && dup) {
       if (
         !window.confirm(
-          'This row is used in tests, but another bank row has the same text (duplicate). Delete this copy and move test references to the kept row? This cannot be undone.'
+          'This row is used in tests, but another bank row has the same question, options, and answer (duplicate). Delete this copy and move test references to the kept row? This cannot be undone.'
         )
       ) {
         return;
@@ -109,7 +99,7 @@ const DataManagement = ({ moduleName, levelId }) => {
 
     if (used > 0) {
       toast.error(
-        'This question is used in tests. Remove it from those tests first, or ensure another row has the same text to delete as a duplicate.'
+        'This question is used in tests. Remove it from those tests first, or ensure another row has the same question, options, and answer to delete as a duplicate.'
       );
       return;
     }
@@ -416,7 +406,7 @@ const DataManagement = ({ moduleName, levelId }) => {
                      </td>
                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                        {usedCount(item) > 0 ? (
-                         <span title="Used in tests. If another row has the same text, Delete will remove this duplicate and reassign tests.">
+                         <span title="Used in tests. If another row has the same question, options, and answer, Delete will remove this duplicate and reassign tests.">
                            {usedCount(item)}
                          </span>
                        ) : (
@@ -444,8 +434,8 @@ const DataManagement = ({ moduleName, levelId }) => {
                           title={
                             usedCount(item) > 0
                               ? hasDuplicateSameText(item)
-                                ? 'Delete duplicate: tests will point to the other row with the same text'
-                                : 'Cannot delete: used in tests (no duplicate row with same text)'
+                                ? 'Delete duplicate: tests will point to the other row with the same question, options, and answer'
+                                : 'Cannot delete: used in tests (no duplicate row with same question, options, and answer)'
                               : 'Delete'
                           }
                           className={

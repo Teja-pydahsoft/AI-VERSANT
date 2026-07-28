@@ -49,7 +49,11 @@ import requests
 import pytz
 from routes.access_control import require_permission
 from models import Test
-from utils.question_bank_text import normalize_question_bank_text, bank_text_key_from_doc
+from utils.question_bank_text import (
+    normalize_question_bank_text,
+    bank_text_key_from_doc,
+    bank_duplicate_key_from_doc,
+)
 
 def safe_isoformat(date_obj):
     """Safely convert a date object to ISO format string, handling various types."""
@@ -1234,17 +1238,21 @@ def upload_module_questions():
             
         existing_questions = list(mongo_db.question_bank.find(
             query_filter,
-            {'question': 1, 'questionTitle': 1, 'sentence': 1, '_id': 0}
+            {
+                'question': 1, 'questionTitle': 1, 'sentence': 1,
+                'optionA': 1, 'optionB': 1, 'optionC': 1, 'optionD': 1,
+                'answer': 1, 'options': 1, '_id': 0,
+            }
         ))
         
-        # Create sets for duplicate checking based on question type
-        existing_question_texts = set()
+        # Create sets for duplicate checking (MCQ = full Q+options+answer)
+        existing_question_keys = set()
         existing_question_titles = set()
         
         for q in existing_questions:
-            key = bank_text_key_from_doc(q)
+            key = bank_duplicate_key_from_doc(q)
             if key:
-                existing_question_texts.add(key)
+                existing_question_keys.add(key)
             if 'questionTitle' in q and q['questionTitle']:
                 existing_question_titles.add(q['questionTitle'].strip().lower())
         
@@ -1294,15 +1302,13 @@ def upload_module_questions():
                 })
                 continue
             
-            # Check for duplicates within the file first (normalized; listening uses sentence/question)
-            norm_body = normalize_question_bank_text(
-                q.get('sentence') or q.get('question') or q.get('questionTitle') or ''
-            )
-            question_text = q.get('question', '').strip().lower()
+            # Duplicate key: full MCQ fingerprint when options present, else text
+            dup_key = bank_duplicate_key_from_doc(q)
             question_title = q.get('questionTitle', '').strip().lower()
 
-            dup_keys = {k for k in (norm_body, question_text) if k}
-            if dup_keys & seen_questions_in_file or question_title in seen_titles_in_file:
+            if (dup_key and dup_key in seen_questions_in_file) or (
+                question_title and question_title in seen_titles_in_file
+            ):
                 duplicate_questions.append({
                     'index': i + 1,
                     'question': q.get('question', q.get('sentence', q.get('questionTitle', ''))),
@@ -1311,7 +1317,9 @@ def upload_module_questions():
                 continue
 
             # Check for duplicates against database
-            if dup_keys & existing_question_texts or question_title in existing_question_titles:
+            if (dup_key and dup_key in existing_question_keys) or (
+                question_title and question_title in existing_question_titles
+            ):
                 duplicate_questions.append({
                     'index': i + 1,
                     'question': q.get('question', q.get('sentence', q.get('questionTitle', ''))),
@@ -1321,7 +1329,8 @@ def upload_module_questions():
 
             # Add to valid questions and mark as seen
             valid_questions.append(q)
-            seen_questions_in_file.update(dup_keys)
+            if dup_key:
+                seen_questions_in_file.add(dup_key)
             if question_title:
                 seen_titles_in_file.add(question_title)
         
@@ -3896,16 +3905,21 @@ def add_questions_to_topic(topic_id):
         # Get existing questions for duplicate checking within this topic
         existing_questions = list(mongo_db.question_bank.find(
             {'topic_id': ObjectId(topic_id)},
-            {'question': 1, 'questionTitle': 1, '_id': 0}
+            {
+                'question': 1, 'questionTitle': 1,
+                'optionA': 1, 'optionB': 1, 'optionC': 1, 'optionD': 1,
+                'answer': 1, 'options': 1, '_id': 0,
+            }
         ))
         
-        # Create sets for duplicate checking based on question type
-        existing_question_texts = set()
+        # Create sets for duplicate checking (MCQ = full Q+options+answer)
+        existing_question_keys = set()
         existing_question_titles = set()
         
         for q in existing_questions:
-            if 'question' in q and q['question']:
-                existing_question_texts.add(q['question'].strip().lower())
+            key = bank_duplicate_key_from_doc(q)
+            if key:
+                existing_question_keys.add(key)
             if 'questionTitle' in q and q['questionTitle']:
                 existing_question_titles.add(q['questionTitle'].strip().lower())
         
@@ -3946,11 +3960,13 @@ def add_questions_to_topic(topic_id):
                 })
                 continue
             
-            # Check for duplicates within the file first
-            question_text = question.get('question', '').strip().lower()
+            # Duplicate key: full MCQ fingerprint when options present
+            dup_key = bank_duplicate_key_from_doc(question)
             question_title = question.get('questionTitle', '').strip().lower()
             
-            if question_text in seen_questions_in_file or question_title in seen_titles_in_file:
+            if (dup_key and dup_key in seen_questions_in_file) or (
+                question_title and question_title in seen_titles_in_file
+            ):
                 duplicate_questions.append({
                     'index': i + 1,
                     'question': question.get('question', question.get('questionTitle', '')),
@@ -3959,7 +3975,9 @@ def add_questions_to_topic(topic_id):
                 continue
             
             # Check for duplicates against database
-            if question_text in existing_question_texts or question_title in existing_question_titles:
+            if (dup_key and dup_key in existing_question_keys) or (
+                question_title and question_title in existing_question_titles
+            ):
                 duplicate_questions.append({
                     'index': i + 1,
                     'question': question.get('question', question.get('questionTitle', '')),
@@ -3969,8 +3987,8 @@ def add_questions_to_topic(topic_id):
             
             # Add to valid questions and mark as seen
             valid_questions.append(question)
-            if question_text:
-                seen_questions_in_file.add(question_text)
+            if dup_key:
+                seen_questions_in_file.add(dup_key)
             if question_title:
                 seen_titles_in_file.add(question_title)
         
@@ -4755,20 +4773,8 @@ def update_question(question_id):
         }), 500
 
 def _normalized_question_bank_text(doc):
-    """Compare bank rows by primary text; collapse whitespace and smart quotes so duplicates match."""
-    text = (doc.get('question') or doc.get('sentence') or doc.get('paragraph') or '').strip()
-    if not text:
-        return ''
-    text = text.lstrip('\ufeff')
-    for smart, plain in (
-        ('\u2019', "'"),
-        ('\u2018', "'"),
-        ('\u201c', '"'),
-        ('\u201d', '"'),
-    ):
-        text = text.replace(smart, plain)
-    text = re.sub(r'\s+', ' ', text).strip().lower()
-    return text
+    """Compare bank rows for duplicate merge: MCQ uses Q+options+answer; others use primary text."""
+    return bank_duplicate_key_from_doc(doc)
 
 
 def _normalize_embedded_question_id(qid):
@@ -4830,7 +4836,11 @@ def delete_question(question_id):
             peers = list(
                 mongo_db.question_bank.find(
                     {'module_id': module_id, 'level_id': level_id},
-                    {'question': 1, 'sentence': 1, 'created_at': 1, 'used_in_tests': 1},
+                    {
+                        'question': 1, 'sentence': 1, 'paragraph': 1, 'created_at': 1, 'used_in_tests': 1,
+                        'optionA': 1, 'optionB': 1, 'optionC': 1, 'optionD': 1,
+                        'answer': 1, 'options': 1,
+                    },
                 )
             )
             bucket = [p for p in peers if _normalized_question_bank_text(p) == norm_text]
@@ -4838,7 +4848,7 @@ def delete_question(question_id):
                 return jsonify({
                     'success': False,
                     'message': (
-                        'No other question bank row has the same text for this module/level. '
+                        'No other question bank row has the same question, options, and answer for this module/level. '
                         'Remove the question from any tests first, or delete without merge when unused.'
                     ),
                 }), 400
@@ -5204,8 +5214,7 @@ def upload_questions():
             if current_question:
                 questions.append(current_question)
         
-        # Validate questions and check for duplicates within file only
-        # For manual test paper uploads, we don't check against database duplicates
+        # Validate questions and check for duplicates (full MCQ: question+options+answer)
         valid_questions = []
         duplicate_questions = []
         invalid_questions = []
@@ -5244,9 +5253,13 @@ def upload_questions():
                     })
                     continue
             
-            # Check for duplicates within the file only
-            question_text = q['question'].strip().lower()
-            if question_text in seen_questions_in_file:
+            # Check for duplicates within the file (full MCQ fingerprint)
+            dup_key = (
+                bank_duplicate_key_from_doc(q)
+                if not is_technical_compiler
+                else normalize_question_bank_text(q.get('question') or '')
+            )
+            if dup_key and dup_key in seen_questions_in_file:
                 duplicate_questions.append({
                     'index': i + 1,
                     'question': q['question'],
@@ -5256,7 +5269,8 @@ def upload_questions():
             
             # Add to valid questions and mark as seen
             valid_questions.append(q)
-            seen_questions_in_file.add(question_text)
+            if dup_key:
+                seen_questions_in_file.add(dup_key)
         
         if not valid_questions:
             return jsonify({
@@ -5273,15 +5287,28 @@ def upload_questions():
             }), 400
         
         # Check for existing questions in database and prepare questions for test creation
-        # This allows the same questions to be used even if they exist in the question bank
+        # MCQ duplicates require matching question + options + answer
         
         # Get existing questions for status checking
         existing_questions = list(mongo_db.question_bank.find(
             {'module_id': module_id, 'level_id': level_id, 'question_type': question_type},
-            {'question': 1, '_id': 1, 'used_count': 1}
+            {
+                'question': 1, '_id': 1, 'used_count': 1,
+                'optionA': 1, 'optionB': 1, 'optionC': 1, 'optionD': 1,
+                'answer': 1, 'options': 1,
+            }
         ))
-        existing_question_texts = {q['question'].strip().lower(): str(q['_id']) for q in existing_questions}
-        existing_question_objects = {q['question'].strip().lower(): q['_id'] for q in existing_questions}
+        existing_question_keys = {}
+        existing_question_objects = {}
+        for eq in existing_questions:
+            key = (
+                bank_duplicate_key_from_doc(eq)
+                if not is_technical_compiler
+                else bank_text_key_from_doc(eq)
+            )
+            if key:
+                existing_question_keys[key] = str(eq['_id'])
+                existing_question_objects[key] = eq['_id']
         
         # Prepare questions for test creation with status information
         formatted_questions = []
@@ -5289,8 +5316,12 @@ def upload_questions():
         
         # First, prepare new questions for storage
         for q in valid_questions:
-            question_text_lower = q['question'].strip().lower()
-            is_existing = question_text_lower in existing_question_texts
+            dup_key = (
+                bank_duplicate_key_from_doc(q)
+                if not is_technical_compiler
+                else normalize_question_bank_text(q.get('question') or '')
+            )
+            is_existing = bool(dup_key and dup_key in existing_question_keys)
             
             # If it's a new question, prepare it for storage
             if not is_existing:
@@ -5325,30 +5356,34 @@ def upload_questions():
                         'instructions': q.get('instructions', '')
                     })
                 
-                new_questions_to_store.append(new_question_doc)
+                new_questions_to_store.append((dup_key, new_question_doc))
         
         # Store new questions in database and get their ObjectIds
         stored_question_ids = {}
         if new_questions_to_store:
-            result = mongo_db.question_bank.insert_many(new_questions_to_store)
-            # Map question text to ObjectId for new questions
-            for i, question_doc in enumerate(new_questions_to_store):
-                question_text_lower = question_doc['question'].strip().lower()
-                stored_question_ids[question_text_lower] = result.inserted_ids[i]
+            docs_only = [doc for _, doc in new_questions_to_store]
+            result = mongo_db.question_bank.insert_many(docs_only)
+            for i, (dup_key, question_doc) in enumerate(new_questions_to_store):
+                if dup_key:
+                    stored_question_ids[dup_key] = result.inserted_ids[i]
         
         # Now create formatted questions with correct ObjectIds
         questions_to_update_usage = []  # Track questions that need usage count update
         
         for q in valid_questions:
-            question_text_lower = q['question'].strip().lower()
-            is_existing = question_text_lower in existing_question_texts
+            dup_key = (
+                bank_duplicate_key_from_doc(q)
+                if not is_technical_compiler
+                else normalize_question_bank_text(q.get('question') or '')
+            )
+            is_existing = bool(dup_key and dup_key in existing_question_keys)
             
             # Get the correct ObjectId - either from existing questions or newly stored questions
             if is_existing:
-                question_id = existing_question_objects.get(question_text_lower)
+                question_id = existing_question_objects.get(dup_key)
                 questions_to_update_usage.append(question_id)  # Track for usage update
             else:
-                question_id = stored_question_ids.get(question_text_lower)
+                question_id = stored_question_ids.get(dup_key)
             
             formatted_question = {
                 '_id': question_id if question_id else ObjectId(),  # Use actual database ObjectId
@@ -5356,7 +5391,7 @@ def upload_questions():
                 'question_type': question_type,
                 'source': 'manual_upload',
                 'status': 'existing' if is_existing else 'new',
-                'existing_id': existing_question_texts.get(question_text_lower) if is_existing else None
+                'existing_id': existing_question_keys.get(dup_key) if is_existing else None
             }
             
             # Add format-specific fields

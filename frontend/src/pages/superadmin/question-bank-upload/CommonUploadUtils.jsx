@@ -2,6 +2,49 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { toast } from 'react-hot-toast';
 
+/** Normalize text the same way as backend question_bank_text.normalize_question_bank_text */
+export const normalizeBankText = (value) => {
+  if (value == null) return '';
+  let t = String(value).trim();
+  if (!t || t.toLowerCase() === 'nan') return '';
+  t = t.replace(/^\uFEFF/, '');
+  t = t
+    .replace(/\u2019/g, "'")
+    .replace(/\u2018/g, "'")
+    .replace(/\u201c/g, '"')
+    .replace(/\u201d/g, '"');
+  t = t.replace(/\s+/g, ' ').trim().toLowerCase();
+  return t;
+};
+
+/**
+ * Full MCQ duplicate key: question + options A–D + answer.
+ * Same question text with different options/answer is treated as a new question.
+ */
+export const mcqDuplicateKey = (q) => {
+  if (!q) return '';
+  const question = normalizeBankText(q.question);
+  if (!question) return '';
+  const optionA = normalizeBankText(q.optionA ?? q.options?.[0] ?? q.options?.A);
+  const optionB = normalizeBankText(q.optionB ?? q.options?.[1] ?? q.options?.B);
+  const optionC = normalizeBankText(q.optionC ?? q.options?.[2] ?? q.options?.C);
+  const optionD = normalizeBankText(q.optionD ?? q.options?.[3] ?? q.options?.D);
+  const answer = normalizeBankText(q.answer).toUpperCase();
+  return `${question}|A:${optionA}|B:${optionB}|C:${optionC}|D:${optionD}|ANS:${answer}`;
+};
+
+/** Duplicate key for any bank row (MCQ uses full fingerprint; others use primary text). */
+export const bankDuplicateKey = (item) => {
+  if (!item) return '';
+  const hasMcqFields = Boolean(
+    item.optionA || item.optionB || item.optionC || item.optionD || item.answer || item.options
+  );
+  if (hasMcqFields) {
+    return mcqDuplicateKey(item);
+  }
+  return normalizeBankText(item.question || item.sentence || item.paragraph || '');
+};
+
 // Common file validation
 export const validateFile = (file, allowedExtensions = ['csv', 'xlsx', 'xls', 'txt']) => {
   const fileExtension = file.name.toLowerCase().split('.').pop();
@@ -30,6 +73,7 @@ export const validateFile = (file, allowedExtensions = ['csv', 'xlsx', 'xls', 't
 export const parseFile = (file, fileExtension) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    const isExcel = fileExtension === 'xlsx' || fileExtension === 'xls';
     
     reader.onload = (e) => {
       try {
@@ -42,11 +86,16 @@ export const parseFile = (file, fileExtension) => {
             transform: (value) => value.trim()
           });
           parsedData = result.data;
-        } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-          const workbook = XLSX.read(e.target.result, { type: 'binary' });
+        } else if (isExcel) {
+          // XLSX is a ZIP archive — must read as ArrayBuffer, not text
+          const workbook = XLSX.read(e.target.result, { type: 'array' });
+          if (!workbook.SheetNames.length) {
+            throw new Error('No sheets found in Excel file.');
+          }
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          parsedData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          // Default sheet_to_json uses first row as object keys (matches CSV header: true)
+          parsedData = XLSX.utils.sheet_to_json(worksheet);
         } else if (fileExtension === 'txt') {
           const text = e.target.result;
           parsedData = text.split('\n').filter(line => line.trim());
@@ -59,7 +108,11 @@ export const parseFile = (file, fileExtension) => {
     };
     
     reader.onerror = () => reject(new Error('Error reading file'));
-    reader.readAsText(file);
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   });
 };
 
