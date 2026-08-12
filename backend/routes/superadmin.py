@@ -3037,9 +3037,12 @@ def get_test_attempts(test_id):
                 '$project': {
                     'student_id': {'$toString': '$_id'},
                     'student_name': '$name',
-                    'student_email': '$user_details.email',
+                    'student_email': {'$ifNull': ['$email', '$user_details.email']},
                     'roll_number': 1,
                     'mobile_number': 1,
+                    'campus_id': 1,
+                    'course_id': 1,
+                    'batch_id': 1,
                     'campus_name': {'$arrayElemAt': ['$campus_details.name', 0]},
                     'course_name': {'$arrayElemAt': ['$course_details.name', 0]},
                     'batch_name': {'$arrayElemAt': ['$batch_details.name', 0]},
@@ -3073,6 +3076,13 @@ def get_test_attempts(test_id):
         # Execute aggregation
         students_data = list(mongo_db.students.aggregate(pipeline))
         
+        # Build maps for organization data (handles RDS fallback)
+        from services.org_data_source import build_org_name_maps
+        dummy_tests = [{'campus_ids': [s.get('campus_id') for s in students_data if s.get('campus_id')],
+                        'course_ids': [s.get('course_id') for s in students_data if s.get('course_id')],
+                        'batch_ids': [s.get('batch_id') for s in students_data if s.get('batch_id')]}]
+        name_maps = build_org_name_maps(dummy_tests)
+        
         # Format the response
         attempts_list = []
         for student in students_data:
@@ -3081,15 +3091,23 @@ def get_test_attempts(test_id):
             average_score = student.get('average_score')
             percentage = student.get('percentage')  # Get percentage for technical tests
             
+            c_id = str(student.get('campus_id') or '')
+            co_id = str(student.get('course_id') or '')
+            b_id = str(student.get('batch_id') or '')
+            
+            campus_name = name_maps['campus'].get(c_id) or student.get('campus_name') or 'Unknown Campus'
+            course_name = name_maps['course'].get(co_id) or student.get('course_name') or 'Unknown Course'
+            batch_name = name_maps['batch'].get(b_id) or student.get('batch_name') or 'Unknown Batch'
+            
             attempts_list.append({
                 'student_id': student.get('student_id', ''),
                 'student_name': student.get('student_name', 'Unknown'),
-                'student_email': student.get('student_email', ''),
+                'student_email': student.get('student_email') or '',
                 'roll_number': student.get('roll_number', ''),
                 'mobile_number': student.get('mobile_number', ''),
-                'campus_name': student.get('campus_name', 'Unknown Campus'),
-                'course_name': student.get('course_name', 'Unknown Course'),
-                'batch_name': student.get('batch_name', 'Unknown Batch'),
+                'campus_name': campus_name,
+                'course_name': course_name,
+                'batch_name': batch_name,
                 'total_questions': student.get('total_questions', 0) or 0,
                 'correct_answers': student.get('correct_answers', 0) or 0,
                 'highest_score': round(highest_score, 2) if highest_score is not None else 0,
@@ -3276,9 +3294,12 @@ def export_test_attempts_complete(test_id):
                 '$project': {
                     'student_id': {'$toString': '$_id'},
                     'student_name': '$name',
-                    'student_email': '$user_details.email',
+                    'student_email': {'$ifNull': ['$email', '$user_details.email']},
                     'roll_number': 1,
                     'mobile_number': 1,
+                    'campus_id': 1,
+                    'course_id': 1,
+                    'batch_id': 1,
                     'campus_name': {'$arrayElemAt': ['$campus_details.name', 0]},
                     'course_name': {'$arrayElemAt': ['$course_details.name', 0]},
                     'batch_name': {'$arrayElemAt': ['$batch_details.name', 0]},
@@ -3319,6 +3340,13 @@ def export_test_attempts_complete(test_id):
                 'message': 'No students found for this test'
             }), 404
         
+        # Build maps for organization data (handles RDS fallback)
+        from services.org_data_source import build_org_name_maps
+        dummy_tests = [{'campus_ids': [s.get('campus_id') for s in students_data if s.get('campus_id')],
+                        'course_ids': [s.get('course_id') for s in students_data if s.get('course_id')],
+                        'batch_ids': [s.get('batch_id') for s in students_data if s.get('batch_id')]}]
+        name_maps = build_org_name_maps(dummy_tests)
+        
         # Process data for Excel
         excel_data = []
         for student in students_data:
@@ -3342,14 +3370,22 @@ def export_test_attempts_complete(test_id):
             highest_score = student.get('highest_score')
             average_score = student.get('average_score')
             
+            c_id = str(student.get('campus_id') or '')
+            co_id = str(student.get('course_id') or '')
+            b_id = str(student.get('batch_id') or '')
+            
+            campus_name = name_maps['campus'].get(c_id) or student.get('campus_name') or 'Unknown Campus'
+            course_name = name_maps['course'].get(co_id) or student.get('course_name') or 'Unknown Course'
+            batch_name = name_maps['batch'].get(b_id) or student.get('batch_name') or 'Unknown Batch'
+            
             excel_data.append({
                 'Student Name': str(student.get('student_name', 'Unknown')),
-                'Student Email': str(student.get('student_email', '')),
+                'Student Email': str(student.get('student_email') or ''),
                 'Roll Number': str(student.get('roll_number', '')),
                 'Mobile Number': str(student.get('mobile_number', '')),
-                'Campus': str(student.get('campus_name', 'Unknown Campus')),
-                'Course': str(student.get('course_name', 'Unknown Course')),
-                'Batch': str(student.get('batch_name', 'Unknown Batch')),
+                'Campus': str(campus_name),
+                'Course': str(course_name),
+                'Batch': str(batch_name),
                 'Status': 'Attempted' if student.get('has_attempted', False) else 'Not Attempted',
                 'Total Questions': int(student.get('total_questions', 0) or 0) if student.get('has_attempted') else 0,
                 'Correct Answers': int(student.get('correct_answers', 0) or 0) if student.get('has_attempted') else 0,
