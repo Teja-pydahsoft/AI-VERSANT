@@ -61,6 +61,10 @@ def create_audio_test():
         question_texts = []
         duplicate_questions = []
         for i, question in enumerate(questions):
+            # Skip validity check for questions selected from the question bank
+            if question.get('source') == 'question_bank' or question.get('status') == 'existing':
+                continue
+
             # Handle both question formats: from question bank ('question') and from manual upload ('question_text')
             # Also handle 'sentence' field for audio questions
             raw_display = (question.get('question_text') or

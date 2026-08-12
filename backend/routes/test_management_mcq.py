@@ -58,6 +58,10 @@ def create_mcq_test():
         question_texts = []
         duplicate_questions = []
         for i, question in enumerate(questions):
+            # Skip validity check for questions selected from the question bank
+            if question.get('source') == 'question_bank' or question.get('status') == 'existing':
+                continue
+                
             # Handle both question formats: from question bank ('question') and from manual upload ('question_text')
             question_text = question.get('question_text', question.get('question', '')).strip().lower()
             if question_text in question_texts:

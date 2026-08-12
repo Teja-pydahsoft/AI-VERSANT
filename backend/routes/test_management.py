@@ -6543,11 +6543,11 @@ def submit_online_listening_test():
             test_object_id = test.get('_id') if isinstance(test.get('_id'), ObjectId) else ObjectId(str(test.get('_id')))
         test_custom_id = test_result.get('test_id') or test.get('test_id')
         
-        # Check if this is a listening test
-        if test.get('module_id') != 'LISTENING':
+        # Check if this is an audio test (Listening or Speaking)
+        if test.get('module_id') not in ['LISTENING', 'SPEAKING']:
             return jsonify({
                 'success': False,
-                'message': 'This endpoint is only for listening tests'
+                'message': 'This endpoint is only for audio (Listening/Speaking) tests'
             }), 400
         
         # Find student profile
