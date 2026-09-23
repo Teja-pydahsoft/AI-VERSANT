@@ -111,7 +111,7 @@ def run_load_test(base_url, endpoint, concurrent_users=10, total_requests=100):
 def main():
     """Main function to run performance tests"""
     # Use external IP to avoid Windows localhost loopback issues
-    base_url = "https://crt-backend.raviburaga.shop"
+    base_url = "https://13.234.114.196"
     
     print("🚀 VERSANT Backend Performance Test (External IP)")
     print("=" * 60)

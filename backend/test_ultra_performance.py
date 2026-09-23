@@ -235,7 +235,7 @@ class UltraPerformanceTester:
 async def main():
     """Main function to run the ultra performance test"""
     # Test your Render.com URL
-    base_url = "https://crt-backend.raviburaga.shop"
+    base_url = "https://13.234.114.196"
     
     tester = UltraPerformanceTester(base_url)
     results = await tester.run_comprehensive_test()

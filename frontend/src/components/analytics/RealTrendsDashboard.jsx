@@ -36,13 +36,13 @@ const RealTrendsDashboard = () => {
       
       // Fetch both overview and time patterns data
       const [overviewResponse, timePatternsResponse] = await Promise.all([
-        fetch(`https://crt-backend.raviburaga.shop/real-analytics/analytics/overview?period=${selectedTimePeriod}`, {
+        fetch(`https://13.234.114.196/real-analytics/analytics/overview?period=${selectedTimePeriod}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           },
         }),
-        fetch(`https://crt-backend.raviburaga.shop/real-analytics/analytics/time-patterns?period=${selectedTimePeriod}`, {
+        fetch(`https://13.234.114.196/real-analytics/analytics/time-patterns?period=${selectedTimePeriod}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
