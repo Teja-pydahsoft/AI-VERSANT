@@ -1485,9 +1485,27 @@ const OnlineExamTaking = () => {
                     >
                       <div className="text-center">
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">Instructions for Listening Module:</h4>
+                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">
+                            Instructions for {
+                              (exam?.module_id === 'SPEAKING' || 
+                               exam?.module_name?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.title?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.test_name?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.name?.toUpperCase()?.includes('SPEAKING') ||
+                               currentQuestion?.module_id === 'SPEAKING') ? 'Speaking Module' : 'Listening Module'
+                            }:
+                          </h4>
                           <p className="text-yellow-700">
-                            1. Listen to the audio above carefully<br />
+                            {
+                              (exam?.module_id === 'SPEAKING' || 
+                               exam?.module_name?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.title?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.test_name?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.name?.toUpperCase()?.includes('SPEAKING') ||
+                               currentQuestion?.module_id === 'SPEAKING') && !(currentQuestion.audio_url || currentQuestion.audio_presigned_url)
+                                ? '1. Read the prompt/question carefully'
+                                : '1. Listen to the audio above carefully'
+                            }<br />
                             2. Click "Start Recording" to record your response<br />
                             3. Speak clearly into your microphone<br />
                             4. Click "Stop Recording" when finished<br />
@@ -1580,9 +1598,27 @@ const OnlineExamTaking = () => {
                     >
                       <div className="text-center">
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">Instructions for Listening Module:</h4>
+                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">
+                            Instructions for {
+                              (exam?.module_id === 'SPEAKING' || 
+                               exam?.module_name?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.title?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.test_name?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.name?.toUpperCase()?.includes('SPEAKING') ||
+                               currentQuestion?.module_id === 'SPEAKING') ? 'Speaking Module' : 'Listening Module'
+                            }:
+                          </h4>
                           <p className="text-yellow-700">
-                            1. Listen to the audio above carefully<br />
+                            {
+                              (exam?.module_id === 'SPEAKING' || 
+                               exam?.module_name?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.title?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.test_name?.toUpperCase()?.includes('SPEAKING') || 
+                               exam?.name?.toUpperCase()?.includes('SPEAKING') ||
+                               currentQuestion?.module_id === 'SPEAKING') && !(currentQuestion.audio_url || currentQuestion.audio_presigned_url)
+                                ? '1. Read the prompt/question carefully'
+                                : '1. Listen to the audio above carefully'
+                            }<br />
                             2. Click "Start Recording" to record your response<br />
                             3. Speak clearly into your microphone<br />
                             4. Click "Stop Recording" when finished<br />
