@@ -6500,10 +6500,12 @@ def fix_audio_urls_in_test(test):
         current_app.logger.error(f"Error fixing audio URLs in test: {e}")
         return test
 
-@test_management_bp.route('/submit-online-listening-test', methods=['POST'])
-@jwt_required()
+@test_management_bp.route('/submit-online-listening-test', methods=['POST', 'OPTIONS'])
+@jwt_required(optional=True)
 def submit_online_listening_test():
     """Submit online listening test with student audio recordings"""
+    if request.method == 'OPTIONS':
+        return jsonify({'message': 'CORS preflight OK'}), 200
     try:
         current_app.logger.info("=== ONLINE LISTENING TEST SUBMISSION ENDPOINT HIT ===")
         current_user_id = get_jwt_identity()

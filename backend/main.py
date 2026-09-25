@@ -1,7 +1,7 @@
 import os
 import gc
 import psutil
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, make_response, current_app
 from datetime import datetime
 from socketio_instance import socketio
 from flask_socketio import join_room
@@ -194,69 +194,67 @@ def create_app():
 
     # CORS configuration
     # IMPORTANT: Frontend uses withCredentials: true, so we MUST use supports_credentials=True
-    # This means we CANNOT use origins="*" - we must specify exact origins
+    # We use regex r".*" to dynamically match and reflect any requesting origin (including crt.pydahsoft.in, localhost, etc.)
 
     default_origins = 'http://localhost:3000,http://localhost:5173,https://crt.pydahsoft.in,https://52.66.128.80'
     cors_origins = os.getenv('CORS_ORIGINS', default_origins)
-
-    # Parse origins list
     origins_list = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
-    
-    # Always use specific origins with credentials support (required for withCredentials: true)
-    # Note: We cannot use origins="*" when supports_credentials=True
+
     print(f"🔧 CORS Configuration:")
-    print(f"   CORS origins: {origins_list}")
-    print(f"   Supports credentials: True (required for frontend withCredentials)")
-    
+    print(f"   Configured CORS origins: {origins_list}")
+    print(f"   Supports credentials: True")
+
     CORS(app, 
-         origins=origins_list, 
-         supports_credentials=True,  # REQUIRED: Frontend uses withCredentials: true
+         origins=r".*", 
+         supports_credentials=True,
          allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
          expose_headers=["Content-Type", "Authorization"],
          max_age=3600)
 
-    # CORS after_request handler (removed - Flask-CORS handles it automatically)
-    # @app.after_request
-    # def after_request(response):
-    #     """Add CORS headers to all responses"""
-    #     from flask import request
-    #
-    #     # Get the origin from the request
-    #     origin = request.headers.get('Origin')
-    #
-    #     # Check if origin is allowed
-    #     if allow_all_origins or (origin and origin in cors_origins.split(',')):
-    #         response.headers.add('Access-Control-Allow-Origin', origin if origin else '*')
-    #         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers')
-    #         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
-    #         response.headers.add('Access-Control-Allow-Credentials', 'true')
-    #         response.headers.add('Access-Control-Max-Age', '3600')
-    #
-    #     return response
+    # Intercept OPTIONS preflight requests globally
+    @app.before_request
+    def handle_options_preflight():
+        if request.method == 'OPTIONS':
+            origin = request.headers.get('Origin', '*')
+            response = make_response('', 204)
+            response.headers['Access-Control-Allow-Origin'] = origin if origin else '*'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers'
+            response.headers['Access-Control-Max-Age'] = '3600'
+            return response
 
-    # CORS preflight handler (removed - Flask-CORS handles it automatically)
-    # @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
-    # @app.route('/<path:path>', methods=['OPTIONS'])
-    # def handle_options(path):
-    #     """Handle CORS preflight requests"""
-    #     from flask import request
-    #
-    #     # Get the origin from the request
-    #     origin = request.headers.get('Origin')
-    #
-    #     # Check if origin is allowed
-    #     if allow_all_origins or (origin and origin in cors_origins.split(',')):
-    #         response = jsonify({'message': 'CORS preflight handled'})
-    #         response.headers.add('Access-Control-Allow-Origin', origin if origin else '*')
-    #         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers')
-    #         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
-    #         response.headers.add('Access-Control-Allow-Credentials', 'true')
-    #         response.headers.add('Access-Control-Max-Age', '3600')
-    #         return response
-    #     else:
-    #         # Return 403 for disallowed origins
-    #         return jsonify({'error': 'CORS policy violation'}), 403
+    # Ensure CORS headers are present on all responses (including errors, 404s, 500s)
+    @app.after_request
+    def add_cors_headers(response):
+        origin = request.headers.get('Origin')
+        if origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Max-Age'] = '3600'
+        return response
+
+    # Global Exception Error Handler to return JSON + CORS headers on 500 Internal Server Error
+    @app.errorhandler(Exception)
+    def handle_global_exception(e):
+        current_app.logger.error(f"Unhandled Exception: {str(e)}", exc_info=True)
+        response = jsonify({
+            'success': False,
+            'message': 'An internal server error occurred',
+            'error': str(e)
+        })
+        response.status_code = 500
+        origin = request.headers.get('Origin')
+        if origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers'
+        return response
 
     # Root route for API status
     @app.route('/')
