@@ -91,7 +91,9 @@ print_status "Setting up Nginx configuration..."
 sudo tee /etc/nginx/conf.d/study-edge.conf > /dev/null << EOF
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name _;
+
+    client_max_body_size 100M;
 
     location / {
         proxy_pass http://127.0.0.1:8000;
@@ -106,10 +108,10 @@ server {
         proxy_buffers 4 256k;
         proxy_busy_buffers_size 256k;
         
-        # Timeouts
-        proxy_connect_timeout 30s;
-        proxy_send_timeout 30s;
-        proxy_read_timeout 30s;
+        # Timeouts for large audio uploads
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
     }
 }
 EOF

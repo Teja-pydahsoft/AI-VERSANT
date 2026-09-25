@@ -6546,7 +6546,8 @@ def submit_online_listening_test():
         test_custom_id = test_result.get('test_id') or test.get('test_id')
         
         # Check if this is an audio test (Listening or Speaking)
-        if test.get('module_id') not in ['LISTENING', 'SPEAKING']:
+        mod_id = str(test.get('module_id') or test.get('module_name') or test.get('title') or test.get('test_type') or '').upper()
+        if not any(m in mod_id for m in ['LISTENING', 'SPEAKING', 'AUDIO', 'VOICE']):
             return jsonify({
                 'success': False,
                 'message': 'This endpoint is only for audio (Listening/Speaking) tests'
